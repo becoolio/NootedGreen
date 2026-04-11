@@ -208,49 +208,21 @@ bool NGreen::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
 		patcher.clearError();
 		SYSLOG("NGreen", "IOAccelF2 f2 (fixed): %s", f2ok ? "OK" : "FAILED");
 		
-		// ── V40: f1 diagnostic — dump 48 bytes around each 45 8b 8f anchor ──
-		// V39 showed the je is NOT at position -2 from the anchor.
-		// Need to find where the actual conditional jump is.
-		{
-			const uint8_t *bin = reinterpret_cast<const uint8_t *>(address);
-			int n = 0;
-			for (size_t i = 48; i + 16 < size && n < 3; i++) {
-				if (bin[i] == 0x45 && bin[i+1] == 0x8b && bin[i+2] == 0x8f) {
-					uint32_t off = (uint32_t)bin[i+3] | ((uint32_t)bin[i+4]<<8) |
-					               ((uint32_t)bin[i+5]<<16) | ((uint32_t)bin[i+6]<<24);
-					SYSLOG("NGreen", "f1 anchor#%d at +0x%lx: mov r9d,[r15+0x%x]", n, i, off);
-					SYSLOG("NGreen", "f1 hex[-48..-33]: %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x",
-						bin[i-48],bin[i-47],bin[i-46],bin[i-45], bin[i-44],bin[i-43],bin[i-42],bin[i-41],
-						bin[i-40],bin[i-39],bin[i-38],bin[i-37], bin[i-36],bin[i-35],bin[i-34],bin[i-33]);
-					SYSLOG("NGreen", "f1 hex[-32..-17]: %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x",
-						bin[i-32],bin[i-31],bin[i-30],bin[i-29], bin[i-28],bin[i-27],bin[i-26],bin[i-25],
-						bin[i-24],bin[i-23],bin[i-22],bin[i-21], bin[i-20],bin[i-19],bin[i-18],bin[i-17]);
-					SYSLOG("NGreen", "f1 hex[-16..-1]:  %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x",
-						bin[i-16],bin[i-15],bin[i-14],bin[i-13], bin[i-12],bin[i-11],bin[i-10],bin[i-9],
-						bin[i-8],bin[i-7],bin[i-6],bin[i-5], bin[i-4],bin[i-3],bin[i-2],bin[i-1]);
-					SYSLOG("NGreen", "f1 hex[0..+15]:   [458b8f]%02x%02x%02x%02x %02x%02x%02x%02x%02x%02x%02x%02x%02x",
-						bin[i+3],bin[i+4],bin[i+5],bin[i+6],
-						bin[i+7],bin[i+8],bin[i+9],bin[i+10],bin[i+11],bin[i+12],bin[i+13],bin[i+14],bin[i+15]);
-					
-					// Scan backward for je (74), jne (75), near je (0F 84), near jne (0F 85)
-					for (int back = 2; back <= 48; back++) {
-						uint8_t b = bin[i - back];
-						if (b == 0x74 || b == 0x75) {
-							SYSLOG("NGreen", "f1 anchor#%d: SHORT %s at -%d (0x%02x %02x)",
-								n, b == 0x74 ? "je" : "jne", back, b, bin[i - back + 1]);
-						}
-						if (back >= 2 && bin[i - back] == 0x0f &&
-						    (bin[i - back + 1] == 0x84 || bin[i - back + 1] == 0x85)) {
-							SYSLOG("NGreen", "f1 anchor#%d: NEAR %s at -%d (0f %02x %02x%02x%02x%02x)",
-								n, bin[i-back+1] == 0x84 ? "je" : "jne", back,
-								bin[i-back+1], bin[i-back+2], bin[i-back+3], bin[i-back+4], bin[i-back+5]);
-						}
-					}
-					n++;
-				}
-			}
-			if (!n) SYSLOG("NGreen", "f1: no 45_8b_8f anchors found in binary");
-		}
+		// ── V41: f1 FIXED based on V40 diagnostics ──
+		// V40 revealed: Sonoma has jne (0x75) at -16 from mov r9d,[r15+0x284],
+		// NOT je (0x74) at -2 as the original pattern assumed.
+		// Code structure: cmp eax,ebx; jne +0x39; <device-specific setup>; mov r9d,[r15+0x284]
+		// This is a device-ID capability check: vtable call returns ID, compared with expected.
+		// NOP the jne (75 XX → 90 90) so our device 0x9A49 always falls through.
+		// Pattern: jne XX; mov rax,[r15+disp32]; mov r8,[rax+disp32]; mov r9d,[r15+disp32]
+		static const uint8_t f1_f[]  = {0x75, 0x00, 0x49, 0x8b, 0x87, 0x00, 0x00, 0x00, 0x00, 0x4c, 0x8b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x45, 0x8b, 0x8f};
+		static const uint8_t f1_m[]  = {0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
+		static const uint8_t f1_r[]  = {0x90, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+		static const uint8_t f1_rm[] = {0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+		const LookupPatchPlus p1 {&kextIOAcceleratorFamily2, f1_f, f1_m, f1_r, f1_rm, 1};
+		bool f1ok = p1.apply(patcher, address, size);
+		patcher.clearError();
+		SYSLOG("NGreen", "IOAccelF2 f1 (fixed): %s", f1ok ? "OK" : "FAILED");
 		
 	}  else if (kextIOGraphics.loadIndex == index) {
 		/*
