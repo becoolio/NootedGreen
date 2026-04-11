@@ -2563,10 +2563,12 @@ uint8_t Gen11::hwRegsNeedUpdate
 		   void *param_2,void *param_3,void *param_4,
 		   void *param_5)
 {
-	// Return 0 to skip register reprogramming in hwSetMode — preserve boot display.
-	// The stock driver detects register differences (TRANS_DDI_FUNC_CTL lane count 4→2,
-	// TRANS_CONF, DP M/N values) and reprograms them without DP link retraining, which
-	// kills the boot display. Returning 0 keeps the GOP-configured display intact.
+	// Call the original so it sets internal flags/state that setDisplayMode checks
+	// to decide whether to run "Disabling black black" (lift black screen overlay).
+	// Without calling original, the flag is never set and the display stays black.
+	// But return 0 regardless to prevent register reprogramming (TRANS_DDI_FUNC_CTL
+	// lane count 4→2, TRANS_CONF, DP M/N) that kills the boot display.
+	FunctionCast(hwRegsNeedUpdate, callback->ohwRegsNeedUpdate)(that, param_1, param_2, param_3, param_4, param_5);
 	return 0;
 }
 
