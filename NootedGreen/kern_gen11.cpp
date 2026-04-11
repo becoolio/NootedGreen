@@ -1960,33 +1960,23 @@ void  Gen11::prepareToEnterWake(void *that)
 
 void Gen11::enableComboPhyEv(void *that)
 {
-	// TGL PORT_COMP_DW3 = combo_phy_base + 0x100 + 3*4
-	// PHY A base 0x162000, PHY B base 0x06C000
-	// Fields: PROCESS_INFO [27:26] (valid 0-1), VOLTAGE_INFO/vccIO [25:24] (valid 0-2)
-	// RPL-P silicon returns OOB values → TGL driver panics at AppleIntelPortHAL.cpp:2405.
-	// PORT_COMP_DW3 is read-only (silicon fuses) — writes have no effect.
-	// If values are OOB, skip the original entirely: firmware has already calibrated
-	// the combo PHY correctly for RPL-P. Calling original with OOB values → cold.1 panic
-	// or undefined behavior if cold.1 is routed to a no-op (cold functions don't return).
+	// RPL-P combo PHY is fully calibrated by firmware before macOS boots.
+	// The TGL driver's enableComboPhyEv reads PORT_COMP_DW3 fuse registers and
+	// validates vccIO / process fields against TGL-specific ranges. RPL-P silicon
+	// fuse values don't match TGL expectations → panic at AppleIntelPortHAL.cpp:2405
+	// ("Values for vccIO & process are invalid") via .cold.1.
+	// V32 tried conditional skip (check OOB first) but register reads returned
+	// misleading values before PHY power-up, letting the original run and panic.
+	// V33: skip unconditionally — firmware calibration is sufficient for RPL-P.
 	static const uint32_t dw3Regs[] = { 0x16210Cu, 0x06C10Cu };
-	bool oob = false;
-
 	for (int i = 0; i < 2; i++) {
 		uint32_t val = NGreen::callback->readReg32(dw3Regs[i]);
 		uint32_t vccIO   = (val >> 24) & 0x3u;
 		uint32_t process = (val >> 26) & 0x3u;
-		SYSLOG("ngreen", "enableComboPhyEv: PHY%c DW3=0x%x vccIO=%u process=%u",
+		SYSLOG("ngreen", "enableComboPhyEv: PHY%c DW3=0x%x vccIO=%u process=%u (skipped)",
 		       'A' + i, val, vccIO, process);
-		if (vccIO > 2 || process > 1)
-			oob = true;
 	}
-
-	if (oob) {
-		SYSLOG("ngreen", "enableComboPhyEv: RPL-P OOB values — skipping original (firmware calibrated)");
-		return;
-	}
-
-	FunctionCast(enableComboPhyEv, callback->oenableComboPhyEv)(that);
+	SYSLOG("ngreen", "enableComboPhyEv: RPL-P — skipping original unconditionally (firmware calibrated)");
 };
 
 void Gen11::setPanelPowerState(void *that,bool param_1)
@@ -2339,7 +2329,7 @@ void Gen11::hwSetPowerWellStateAux(void *that,bool param_1,uint param_2)
 
 void Gen11::hwInitializeCState(void *that)
 {
-	SYSLOG("ngreen", "NB-BUILD-V32-COMBOPHY-SKIP-OOB");
+	SYSLOG("ngreen", "NB-BUILD-V33-COMBOPHY-SKIP-UNCONDITIONAL");
 	int origB48 = getMember<int>(that, 0xB48);
 	int origCE4 = getMember<int>(that, 0xCE4);
 	SYSLOG("ngreen", "hwInitCState B48=%d CE4=%d", origB48, origCE4);
