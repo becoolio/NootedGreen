@@ -224,42 +224,122 @@ bool NGreen::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
 		patcher.clearError();
 		SYSLOG("NGreen", "IOAccelF2 f2 (masked): %s", f2ok ? "OK" : "FAILED");
 		
-		// ── Fallback: scan binary for anchors and log context ──
-		if (!f1ok || !f2ok) {
+		// ── V38: Broad diagnostic scan of IOAccelF2 binary ──
+		// Scan for multiple independent instruction anchors to find the real patterns.
+		{
 			const uint8_t *bin = reinterpret_cast<const uint8_t *>(address);
 			
-			if (!f1ok) {
+			// SCAN A: Find ALL "test edx, imm32" (f7 c2 xx xx xx xx) instructions
+			// This is the core of the capability-flag check we need to bypass.
+			{
 				int n = 0;
-				// Look for mov r9d,[r15+disp32] preceded by je or jne
-				for (size_t i = 2; i + 16 < size && n < 5; i++) {
-					if ((bin[i] == 0x45 || bin[i] == 0x44) &&
-					    bin[i+1] == 0x8b && bin[i+2] == 0x8f &&
-					    (bin[i-2] == 0x74 || bin[i-2] == 0x75)) {
-						SYSLOG("NGreen", "f1 SCAN +0x%lx: %02x%02x %02x%02x%02x%02x%02x%02x%02x %02x%02x%02x%02x",
-							i-2, bin[i-2], bin[i-1],
-							bin[i], bin[i+1], bin[i+2], bin[i+3], bin[i+4], bin[i+5], bin[i+6],
+				for (size_t i = 0; i + 20 < size && n < 10; i++) {
+					if (bin[i] == 0xf7 && bin[i+1] == 0xc2) {
+						// Dump 4 bytes before + 12 bytes from test instruction
+						SYSLOG("NGreen", "SCAN-A test_edx +0x%lx: %02x%02x%02x%02x [f7c2]%02x%02x%02x%02x %02x%02x%02x%02x%02x%02x",
+							i, bin[i-4], bin[i-3], bin[i-2], bin[i-1],
+							bin[i+2], bin[i+3], bin[i+4], bin[i+5],
+							bin[i+6], bin[i+7], bin[i+8], bin[i+9], bin[i+10], bin[i+11]);
+						n++;
+					}
+				}
+				SYSLOG("NGreen", "SCAN-A: found %d test_edx instances", n);
+			}
+			
+			// SCAN B: Find ALL "test esi, imm32" (f7 c6 xx xx xx xx) — alternate reg
+			{
+				int n = 0;
+				for (size_t i = 0; i + 20 < size && n < 10; i++) {
+					if (bin[i] == 0xf7 && bin[i+1] == 0xc6) {
+						SYSLOG("NGreen", "SCAN-B test_esi +0x%lx: %02x%02x%02x%02x [f7c6]%02x%02x%02x%02x %02x%02x%02x%02x%02x%02x",
+							i, bin[i-4], bin[i-3], bin[i-2], bin[i-1],
+							bin[i+2], bin[i+3], bin[i+4], bin[i+5],
+							bin[i+6], bin[i+7], bin[i+8], bin[i+9], bin[i+10], bin[i+11]);
+						n++;
+					}
+				}
+				SYSLOG("NGreen", "SCAN-B: found %d test_esi instances", n);
+			}
+			
+			// SCAN C: Find mov r9d,[r15+disp32] (45 8b 8f) — f1 original anchor
+			{
+				int n = 0;
+				for (size_t i = 4; i + 12 < size && n < 10; i++) {
+					if (bin[i] == 0x45 && bin[i+1] == 0x8b && bin[i+2] == 0x8f) {
+						SYSLOG("NGreen", "SCAN-C mov_r9d_r15 +0x%lx: %02x%02x%02x%02x [458b8f]%02x%02x%02x%02x %02x%02x%02x%02x",
+							i, bin[i-4], bin[i-3], bin[i-2], bin[i-1],
+							bin[i+3], bin[i+4], bin[i+5], bin[i+6],
 							bin[i+7], bin[i+8], bin[i+9], bin[i+10]);
 						n++;
 					}
 				}
-				if (!n) SYSLOG("NGreen", "f1 SCAN: no je/jne before mov r?d,[r15+disp32] found");
+				SYSLOG("NGreen", "SCAN-C: found %d mov_r9d_r15 instances", n);
 			}
 			
-			if (!f2ok) {
+			// SCAN D: Find mov r?d,[r?+disp32] with various REX (44 8b or 45 8b, ModRM with mod=10)
+			{
 				int n = 0;
-				// Look for sub rsp,XX; test edx,imm32; je/jne
-				for (size_t i = 0; i + 12 < size && n < 5; i++) {
-					if (bin[i] == 0x48 && bin[i+1] == 0x83 && bin[i+2] == 0xec &&
-					    bin[i+4] == 0xf7 && bin[i+5] == 0xc2 &&
-					    (bin[i+10] == 0x74 || bin[i+10] == 0x75)) {
-						SYSLOG("NGreen", "f2 SCAN +0x%lx: %02x%02x%02x%02x %02x%02x%02x%02x%02x%02x %02x%02x",
-							i, bin[i], bin[i+1], bin[i+2], bin[i+3],
-							bin[i+4], bin[i+5], bin[i+6], bin[i+7], bin[i+8], bin[i+9],
-							bin[i+10], bin[i+11]);
+				for (size_t i = 4; i + 12 < size && n < 10; i++) {
+					if ((bin[i] == 0x44 || bin[i] == 0x45) && bin[i+1] == 0x8b &&
+					    (bin[i+2] & 0xC0) == 0x80) { // mod=10 (disp32)
+						SYSLOG("NGreen", "SCAN-D mov_r32_disp32 +0x%lx: %02x%02x%02x%02x [%02x8b%02x]%02x%02x%02x%02x %02x%02x%02x",
+							i, bin[i-4], bin[i-3], bin[i-2], bin[i-1],
+							bin[i], bin[i+2],
+							bin[i+3], bin[i+4], bin[i+5], bin[i+6],
+							bin[i+7], bin[i+8], bin[i+9]);
 						n++;
 					}
 				}
-				if (!n) SYSLOG("NGreen", "f2 SCAN: no sub rsp; test edx; je/jne found");
+				SYSLOG("NGreen", "SCAN-D: found %d mov_r32_disp32 instances", n);
+			}
+			
+			// SCAN E: Find near-je (0F 84 rel32) — the conditional could be a near jump
+			// instead of short je (74 rel8). Look for ones preceded by test/cmp.
+			{
+				int n = 0;
+				for (size_t i = 6; i + 8 < size && n < 10; i++) {
+					if (bin[i] == 0x0f && bin[i+1] == 0x84) {
+						// Check if preceded by test or cmp within 8 bytes
+						bool hasPrior = false;
+						for (int j = 2; j <= 8 && i >= (size_t)j; j++) {
+							if (bin[i-j] == 0xf7 || bin[i-j] == 0x85 || bin[i-j] == 0x3d ||
+							    (bin[i-j] == 0x83 && (bin[i-j+1] & 0x38) == 0x38)) { // cmp r/m, imm8
+								hasPrior = true;
+								break;
+							}
+						}
+						if (hasPrior) {
+							SYSLOG("NGreen", "SCAN-E near_je +0x%lx: %02x%02x%02x%02x%02x%02x [0f84]%02x%02x%02x%02x",
+								i, bin[i-6], bin[i-5], bin[i-4], bin[i-3], bin[i-2], bin[i-1],
+								bin[i+2], bin[i+3], bin[i+4], bin[i+5]);
+							n++;
+						}
+					}
+				}
+				SYSLOG("NGreen", "SCAN-E: found %d near_je_after_test instances", n);
+			}
+			
+			// SCAN F: Search for "stamp" or "channel" related — look for the string
+			// "no channel" in the binary (xref to find the check function)
+			{
+				int n = 0;
+				const char *needle = "no channel";
+				size_t nlen = 10;
+				for (size_t i = 0; i + nlen < size && n < 3; i++) {
+					if (memcmp(bin + i, needle, nlen) == 0) {
+						SYSLOG("NGreen", "SCAN-F 'no channel' string at +0x%lx", i);
+						n++;
+					}
+				}
+				needle = "stamp";
+				nlen = 5;
+				for (size_t i = 0; i + nlen < size && n < 6; i++) {
+					if (memcmp(bin + i, needle, nlen) == 0) {
+						SYSLOG("NGreen", "SCAN-F 'stamp' string at +0x%lx (%.20s)", i, bin + i);
+						n++;
+					}
+				}
+				if (!n) SYSLOG("NGreen", "SCAN-F: no channel/stamp strings found");
 			}
 		}
 		
