@@ -1436,6 +1436,9 @@ bool Gen11::start(void *that,void  *param_1)
 	// Release Render ForceWake
 	NGreen::callback->writeReg32(FORCEWAKE_RENDER_GEN9, (1 << 16) | 0);
 	
+	// V42: Save accelerator instance for child enumeration in hangcheck
+	callback->accelInstance = that;
+	
 	auto ret= FunctionCast(start, callback->ostart)(that,param_1);
 	
 	// ── V29: Post-start diagnostics ──
@@ -1564,6 +1567,32 @@ bool Gen11::start(void *that,void  *param_1)
 	SYSLOG("ngreen", "IRQ: RCS0_RSVD_MASK=0x%x BCS_RSVD_MASK=0x%x",
 		NGreen::callback->readReg32(GEN11_RCS0_RSVD_INTR_MASK),
 		NGreen::callback->readReg32(GEN11_BCS_RSVD_INTR_MASK));
+	
+	// V42: Clear pending GT interrupts so we can detect fresh ones in hangcheck
+	uint32_t gt0 = NGreen::callback->readReg32(0x190018);
+	if (gt0) {
+		NGreen::callback->writeReg32(0x190018, gt0);  // W1C — write-1-to-clear
+		SYSLOG("ngreen", "V42: cleared GT_INTR_DW0=0x%x", gt0);
+	}
+	
+	// V42: Enumerate accelerator children to check if IOAccelDevice was created
+	{
+		auto *service = static_cast<IOService *>(that);
+		OSIterator *iter = service->getClientIterator();
+		int childCount = 0;
+		if (iter) {
+			OSObject *obj;
+			while ((obj = iter->getNextObject())) {
+				auto *child = OSDynamicCast(IOService, obj);
+				if (child) {
+					SYSLOG("ngreen", "V42: accel child[%d]: %s", childCount, child->getName());
+					childCount++;
+				}
+			}
+			iter->release();
+		}
+		SYSLOG("ngreen", "V42: accelerator has %d children after start()", childCount);
+	}
 	
 	// Release both ForceWake domains
 	NGreen::callback->writeReg32(FORCEWAKE_RENDER_GEN9, (1 << 16) | 0);
@@ -1763,6 +1792,47 @@ void Gen11::forceWake(void *that, bool set, uint32_t dom, uint8_t ctx) {
 		// Release ForceWake
 		NGreen::callback->writeReg32(FORCEWAKE_RENDER_GEN9, (1 << 16) | 0);
 		NGreen::callback->writeReg32(FORCEWAKE_BLITTER_GEN9, (1 << 16) | 0);
+		
+		// V42: Enumerate accelerator children at hangcheck time
+		if (callback->accelInstance) {
+			auto *service = static_cast<IOService *>(callback->accelInstance);
+			OSIterator *iter = service->getClientIterator();
+			int childCount = 0;
+			if (iter) {
+				OSObject *obj;
+				while ((obj = iter->getNextObject())) {
+					auto *child = OSDynamicCast(IOService, obj);
+					if (child) {
+						SYSLOG("ngreen", "HANGCHECK child[%d]: %s (busy=%d)", childCount,
+							child->getName(), child->getBusyState());
+						// Check if child has its own children (user clients)
+						OSIterator *iter2 = child->getClientIterator();
+						if (iter2) {
+							int ucCount = 0;
+							OSObject *obj2;
+							while ((obj2 = iter2->getNextObject())) {
+								auto *uc = OSDynamicCast(IOService, obj2);
+								if (uc) {
+									SYSLOG("ngreen", "HANGCHECK   child[%d].uc[%d]: %s", childCount, ucCount, uc->getName());
+									ucCount++;
+								}
+							}
+							iter2->release();
+						}
+						childCount++;
+					}
+				}
+				iter->release();
+			}
+			SYSLOG("ngreen", "HANGCHECK accelerator has %d children total", childCount);
+		}
+		
+		// V42: Check interrupt state — did GT_INTR_DW0 re-assert since we cleared it?
+		SYSLOG("ngreen", "HANGCHECK IRQ: RENDER_COPY_INTR_EN=0x%x RCS0_RSVD_MASK=0x%x",
+			NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
+			NGreen::callback->readReg32(GEN11_RCS0_RSVD_INTR_MASK));
+		SYSLOG("ngreen", "HANGCHECK IRQ: GFX_MSTR_IRQ=0x%x",
+			NGreen::callback->readReg32(GEN11_GFX_MSTR_IRQ));
 		
 		SYSLOG("ngreen", "=== HANGCHECK: dump complete ===");
 	}
@@ -2473,7 +2543,7 @@ void Gen11::hwSetPowerWellStateAux(void *that,bool param_1,uint param_2)
 
 void Gen11::hwInitializeCState(void *that)
 {
-	SYSLOG("ngreen", "NB-BUILD-V41-F1F2-FIXED");
+	SYSLOG("ngreen", "NB-BUILD-V42-CHILDREN-IRQ");
 	int origB48 = getMember<int>(that, 0xB48);
 	int origCE4 = getMember<int>(that, 0xCE4);
 	SYSLOG("ngreen", "hwInitCState B48=%d CE4=%d", origB48, origCE4);

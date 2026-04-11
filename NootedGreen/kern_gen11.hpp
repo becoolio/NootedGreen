@@ -1264,6 +1264,7 @@ private:
 	static void releaseDoorbell();     // stub: GuC doorbell release
 	
 	void *framecont;  // cached framebuffer controller pointer
+	void *accelInstance {nullptr};  // V42: saved IntelAccelerator instance for child enumeration
 	
 	// Saved original function pointers for accelerator
 	mach_vm_address_t orgSubmitExecList {};    // ExecList submission (command dispatch)
