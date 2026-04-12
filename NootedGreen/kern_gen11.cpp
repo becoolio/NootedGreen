@@ -1430,20 +1430,22 @@ static void v45ScheduleDelayedCheck(void *accelInstance, unsigned delayMs) {
 	}
 }
 
-// V56: Periodic GPU health monitor — logs ERROR_GEN6 + ring state every 2s for 60s.
-// Gives continuous visibility around the IGAccelDevice teardown event.
-void Gen11::v56GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t param1) {
-	static int v56MonitorCount = 0;
-	v56MonitorCount++;
+// V57: Periodic GPU health monitor — observe + suppress ERROR_GEN6 every 2s for 60s.
+// Continuously writes 0x0 to ERROR_GEN6 to test if periodic clearing keeps errors suppressed.
+// Also re-masks EMR every iteration in case Apple's driver unmasks errors.
+void Gen11::v57GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t param1) {
+	static int v57MonitorCount = 0;
+	v57MonitorCount++;
 	
 	auto *svc = static_cast<IOService *>(param0);
 	
-	// Read GPU error state
+	// Read GPU error state BEFORE any clearing
 	uint32_t errGen6 = NGreen::callback->readReg32(ERROR_GEN6);
 	uint32_t rcsHead = NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE));
 	uint32_t rcsTail = NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE));
 	uint32_t rcsCtl  = NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE));
 	uint32_t mstrIrq = NGreen::callback->readReg32(GEN11_GFX_MSTR_IRQ);
+	uint32_t emr     = NGreen::callback->readReg32(RING_EMR(RENDER_RING_BASE));
 	
 	// Count children and get IGAccelDevice state
 	int childCount = 0;
@@ -1467,30 +1469,36 @@ void Gen11::v56GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 		iter->release();
 	}
 	
-	SYSLOG("ngreen", "V56M[%d]: ERR=0x%x HEAD=0x%x TAIL=0x%x CTL=0x%x IRQ=0x%x ch=%d IGDev=0x%llx open=%d",
-		   v56MonitorCount, errGen6, rcsHead, rcsTail, rcsCtl, mstrIrq,
+	SYSLOG("ngreen", "V57M[%d]: ERR=0x%x HEAD=0x%x TAIL=0x%x CTL=0x%x IRQ=0x%x EMR=0x%x ch=%d IGDev=0x%llx open=%d",
+		   v57MonitorCount, errGen6, rcsHead, rcsTail, rcsCtl, mstrIrq, emr,
 		   childCount, (unsigned long long)accelDevState, anyOpen);
 	
-	// If ERROR_GEN6 is set, try to clear it
+	// V57: Actively suppress ERROR_GEN6 — write 0x0 (R/W clear attempt)
 	if (errGen6) {
-		NGreen::callback->writeReg32(ERROR_GEN6, errGen6);
-		IODelay(100);
+		NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
+		IODelay(50);
 		uint32_t errAfter = NGreen::callback->readReg32(ERROR_GEN6);
 		if (errAfter != errGen6) {
-			SYSLOG("ngreen", "V56M[%d]: ERROR_GEN6 clear 0x%x → 0x%x", v56MonitorCount, errGen6, errAfter);
+			SYSLOG("ngreen", "V57M[%d]: ERROR_GEN6 suppressed 0x%x → 0x%x", v57MonitorCount, errGen6, errAfter);
 		}
 	}
 	
+	// V57: Re-mask all error interrupts (in case Apple unmasked them)
+	if (emr != 0xFFFFFFFF) {
+		NGreen::callback->writeReg32(RING_EMR(RENDER_RING_BASE), 0xFFFFFFFF);
+		SYSLOG("ngreen", "V57M[%d]: EMR re-masked 0x%x → 0xFFFFFFFF", v57MonitorCount, emr);
+	}
+	
 	// Re-arm for up to 30 iterations (60s at 2s interval)
-	if (v56MonitorCount < 30) {
-		auto nextTimer = thread_call_allocate(v56GpuHealthMonitor, param0);
+	if (v57MonitorCount < 30) {
+		auto nextTimer = thread_call_allocate(v57GpuHealthMonitor, param0);
 		if (nextTimer) {
 			uint64_t deadline;
 			clock_interval_to_deadline(2, kSecondScale, &deadline);
 			thread_call_enter_delayed(nextTimer, deadline);
 		}
 	} else {
-		SYSLOG("ngreen", "V56M: health monitor complete after %d iterations", v56MonitorCount);
+		SYSLOG("ngreen", "V57M: health monitor complete after %d iterations", v57MonitorCount);
 	}
 }
 
@@ -2021,17 +2029,18 @@ bool Gen11::start(void *that,void  *param_1)
 		v45ScheduleDelayedCheck(that, 30000);
 		v45ScheduleDelayedCheck(that, 60000);
 		v45ScheduleDelayedCheck(that, 120000);
-		SYSLOG("ngreen", "V56: scheduled delayed child checks at T+3,10,15,20,30,60,120s");
+		SYSLOG("ngreen", "V57: scheduled delayed child checks at T+3,10,15,20,30,60,120s");
 		
-		// V56: Start periodic GPU health monitor (every 2s for 60s)
+		// V57: Start periodic GPU health monitor (every 2s for 60s)
+		// Actively suppresses ERROR_GEN6 by writing 0x0 and re-masks EMR each iteration.
 		{
-			auto monTimer = thread_call_allocate(v56GpuHealthMonitor,
+			auto monTimer = thread_call_allocate(v57GpuHealthMonitor,
 												 static_cast<thread_call_param_t>(static_cast<IOService *>(that)));
 			if (monTimer) {
 				uint64_t deadline;
 				clock_interval_to_deadline(2, kSecondScale, &deadline);
 				thread_call_enter_delayed(monTimer, deadline);
-				SYSLOG("ngreen", "V56: GPU health monitor armed — 2s interval, 30 iterations");
+				SYSLOG("ngreen", "V57: GPU health monitor armed — 2s interval, 30 iterations");
 			}
 		}
 	}
@@ -2182,81 +2191,72 @@ bool Gen11::start(void *that,void  *param_1)
 		uint32_t tlbInvDone = NGreen::callback->readReg32(0xceec);
 		SYSLOG("ngreen", "V55: TLB_INV done status = 0x%x", tlbInvDone);
 		
-		// ── V56: Per-engine reset via RING_RESET_CTL ──
-		// V55 showed ERROR_GEN6=0x7b contains UNRECOVERABLE bit (bit 6).
-		// W1C clearing never works because error condition is continuously reasserted.
-		// A per-engine reset should clear the hardware error state.
+		// ── V57: ERROR_GEN6 R/W clear + error masking ──
+		// V56 DISCOVERY: Writing 0xFFFFFFFF to ERROR_GEN6 SET reserved bits (0x7b→0x7ffff).
+		//   This proves ERROR_GEN6 is R/W (not W1C) on RPL-P Gen12.5!
+		// V56 DISCOVERY: GDRST killed the ring permanently (CTL→0x0, HEAD→0x0).
+		// V56 DISCOVERY: RING_RESET_CTL always reads 0x0 — not functional on RPL-P.
+		// V57 approach: Write 0x0 to ERROR_GEN6 (R/W clear), mask all error interrupts.
+		//   NO engine resets, NO GDRST — those are destructive.
 		{
-			// Read pre-reset state 
-			uint32_t preErr = NGreen::callback->readReg32(ERROR_GEN6);
-			uint32_t preResetCtl = NGreen::callback->readReg32(RING_RESET_CTL(RENDER_RING_BASE));
-			SYSLOG("ngreen", "V56: Pre-reset RCS RESET_CTL=0x%x ERROR_GEN6=0x%x", preResetCtl, preErr);
+			uint32_t preErr57 = NGreen::callback->readReg32(ERROR_GEN6);
+			uint32_t preEMR = NGreen::callback->readReg32(RING_EMR(RENDER_RING_BASE));
+			uint32_t preEIR = NGreen::callback->readReg32(RING_EIR(RENDER_RING_BASE));
+			uint32_t preESR = NGreen::callback->readReg32(RING_ESR(RENDER_RING_BASE));
+			SYSLOG("ngreen", "V57: Pre-clear ERROR_GEN6=0x%x EMR=0x%x EIR=0x%x ESR=0x%x",
+				   preErr57, preEMR, preEIR, preESR);
 			
-			// 1. Request RCS engine reset
-			NGreen::callback->writeReg32(RING_RESET_CTL(RENDER_RING_BASE), RESET_CTL_REQUEST_RESET);
-			IODelay(500);
+			// 1. Write 0x0 to ERROR_GEN6 — test R/W clear hypothesis
+			//    If register is R/W (as V56 proved), writing 0 should clear all bits.
+			//    If register is truly W1C, writing 0 has no effect (harmless test).
+			NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
+			IODelay(100);
+			uint32_t afterZero = NGreen::callback->readReg32(ERROR_GEN6);
+			SYSLOG("ngreen", "V57: ERROR_GEN6 after 0x0 write = 0x%x (was 0x%x)", afterZero, preErr57);
 			
-			// 2. Poll for READY_TO_RESET (bit 1) — up to 50ms
-			bool resetReady = false;
-			for (int i = 0; i < 50; i++) {
-				uint32_t ctl = NGreen::callback->readReg32(RING_RESET_CTL(RENDER_RING_BASE));
-				if (ctl & RESET_CTL_READY_TO_RESET) {
-					resetReady = true;
-					SYSLOG("ngreen", "V56: RCS reset ready after %d polls (RESET_CTL=0x%x)", i, ctl);
-					break;
-				}
-				IODelay(1000);
+			// 2. If 0x0 didn't work, try writing just the set bits (proper W1C)
+			if (afterZero == preErr57 && preErr57 != 0) {
+				NGreen::callback->writeReg32(ERROR_GEN6, preErr57);
+				IODelay(100);
+				uint32_t afterW1C = NGreen::callback->readReg32(ERROR_GEN6);
+				SYSLOG("ngreen", "V57: ERROR_GEN6 after W1C(0x%x) = 0x%x", preErr57, afterW1C);
 			}
 			
-			if (!resetReady) {
-				uint32_t ctl = NGreen::callback->readReg32(RING_RESET_CTL(RENDER_RING_BASE));
-				SYSLOG("ngreen", "V56: RCS reset NOT ready after 50 polls (RESET_CTL=0x%x)", ctl);
+			// 3. Mask ALL per-ring error interrupts via EMR
+			//    EMR bits: 0 = error enabled, 1 = error masked
+			//    V56 showed EMR=0xfffffffa (bits 0,2 unmasked). Mask everything.
+			NGreen::callback->writeReg32(RING_EMR(RENDER_RING_BASE), 0xFFFFFFFF);
+			NGreen::callback->writeReg32(RING_EMR(BLT_RING_BASE), 0xFFFFFFFF);
+			IODelay(100);
+			uint32_t postEMR_rcs = NGreen::callback->readReg32(RING_EMR(RENDER_RING_BASE));
+			uint32_t postEMR_bcs = NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE));
+			SYSLOG("ngreen", "V57: EMR after mask-all: RCS=0x%x BCS=0x%x", postEMR_rcs, postEMR_bcs);
+			
+			// 4. Clear per-ring EIR if set
+			uint32_t rcsEir = NGreen::callback->readReg32(RING_EIR(RENDER_RING_BASE));
+			if (rcsEir) {
+				NGreen::callback->writeReg32(RING_EIR(RENDER_RING_BASE), rcsEir);
+				IODelay(50);
+				uint32_t eir2 = NGreen::callback->readReg32(RING_EIR(RENDER_RING_BASE));
+				SYSLOG("ngreen", "V57: RCS EIR cleared 0x%x → 0x%x", rcsEir, eir2);
 			}
 			
-			// 3. Clear reset request
-			NGreen::callback->writeReg32(RING_RESET_CTL(RENDER_RING_BASE), 0);
-			IODelay(200);
+			// 5. Log ring state to confirm it's still alive (V56 GDRST killed it!)
+			uint32_t rcsHead = NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE));
+			uint32_t rcsTail = NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE));
+			uint32_t rcsCtl = NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE));
+			SYSLOG("ngreen", "V57: Ring preserved — HEAD=0x%x TAIL=0x%x CTL=0x%x (alive=%d)",
+				   rcsHead, rcsTail, rcsCtl, !!(rcsCtl & 0x1000));
 			
-			// 4. Check ERROR_GEN6 after engine reset
-			uint32_t postErr = NGreen::callback->readReg32(ERROR_GEN6);
-			uint32_t postResetCtl = NGreen::callback->readReg32(RING_RESET_CTL(RENDER_RING_BASE));
-			SYSLOG("ngreen", "V56: Post-reset RCS RESET_CTL=0x%x ERROR_GEN6=0x%x", postResetCtl, postErr);
+			// 6. Error forensics: IPEIR/IPEHR show which instruction caused the error
+			SYSLOG("ngreen", "V57: IPEIR=0x%x IPEHR=0x%x INSTDONE=0x%x",
+				   NGreen::callback->readReg32(RING_IPEIR(RENDER_RING_BASE)),
+				   NGreen::callback->readReg32(RING_IPEHR(RENDER_RING_BASE)),
+				   NGreen::callback->readReg32(RING_INSTDONE(RENDER_RING_BASE)));
 			
-			// 5. Try W1C clear after reset
-			if (postErr) {
-				NGreen::callback->writeReg32(ERROR_GEN6, 0xFFFFFFFF);
-				IODelay(200);
-				uint32_t finalErr = NGreen::callback->readReg32(ERROR_GEN6);
-				SYSLOG("ngreen", "V56: ERROR_GEN6 after 0xFFFFFFFF W1C = 0x%x", finalErr);
-			}
-			
-			// 6. Also try GEN6_GDRST (legacy global device reset target)
-			uint32_t preGdrst = NGreen::callback->readReg32(GEN6_GDRST);
-			SYSLOG("ngreen", "V56: GEN6_GDRST pre-write = 0x%x", preGdrst);
-			NGreen::callback->writeReg32(GEN6_GDRST, GEN6_GRDOM_RENDER);
-			IODelay(1000);
-			// Poll for bit to self-clear
-			bool gdrDone = false;
-			for (int i = 0; i < 50; i++) {
-				uint32_t g = NGreen::callback->readReg32(GEN6_GDRST);
-				if (!(g & GEN6_GRDOM_RENDER)) {
-					gdrDone = true;
-					SYSLOG("ngreen", "V56: GDRST render reset done after %d polls (0x%x)", i, g);
-					break;
-				}
-				IODelay(1000);
-			}
-			if (!gdrDone) {
-				SYSLOG("ngreen", "V56: GDRST render reset timeout (0x%x)", NGreen::callback->readReg32(GEN6_GDRST));
-			}
-			
-			// 7. Final ERROR_GEN6 read after both resets
-			uint32_t err56 = NGreen::callback->readReg32(ERROR_GEN6);
-			uint32_t head56 = NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE));
-			uint32_t tail56 = NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE));
-			uint32_t ctl56 = NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE));
-			SYSLOG("ngreen", "V56: Final state — ERROR_GEN6=0x%x RCS HEAD=0x%x TAIL=0x%x CTL=0x%x",
-				   err56, head56, tail56, ctl56);
+			// 7. Final ERROR_GEN6 snapshot
+			uint32_t finalErr57 = NGreen::callback->readReg32(ERROR_GEN6);
+			SYSLOG("ngreen", "V57: Final ERROR_GEN6=0x%x (goal: 0x0)", finalErr57);
 		}
 	}
 	
