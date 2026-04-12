@@ -1888,10 +1888,10 @@ bool Gen11::start(void *that,void  *param_1)
 		NGreen::callback->readReg32(RENDER_RING_BASE + 0x358),
 		NGreen::callback->readReg32(BLT_RING_BASE + 0x358));
 	
-	// ── V49: Log Metal-readiness summary ──
-	SYSLOG("ngreen", "V49: start() ret=%d — DYLD path redirect /System/Library/Extensions/ → /Library/Extensions/", ret);
-	SYSLOG("ngreen", "V49: Metal ON. ICL f2 mask-based. Use -ngreenNoMetal for display-only.");
-	SYSLOG("ngreen", "V49: TGL Metal driver must exist at /Library/Extensions/AppleIntelTGLGraphicsMTLDriver.bundle/");
+	// ── V50: Log Metal-readiness summary ──
+	SYSLOG("ngreen", "V50: start() ret=%d — gpu_bundle_find_trusted path: /Library/GPUBundles -> /Library/Extensions", ret);
+	SYSLOG("ngreen", "V50: Metal ON. ICL f2 mask-based (fallback). Use -ngreenNoMetal for display-only.");
+	SYSLOG("ngreen", "V50: TGL Metal driver must exist at /Library/Extensions/AppleIntelTGLGraphicsMTLDriver.bundle/");
 	
 	// Release both ForceWake domains
 	NGreen::callback->writeReg32(FORCEWAKE_RENDER_GEN9, (1 << 16) | 0);
@@ -2924,7 +2924,7 @@ void Gen11::hwSetPowerWellStateAux(void *that,bool param_1,uint param_2)
 
 void Gen11::hwInitializeCState(void *that)
 {
-	SYSLOG("ngreen", "NB-BUILD-V47-ALLOW-METAL");
+	SYSLOG("ngreen", "NB-BUILD-V50-ALLOW-METAL");
 	int origB48 = getMember<int>(that, 0xB48);
 	int origCE4 = getMember<int>(that, 0xCE4);
 	SYSLOG("ngreen", "hwInitCState B48=%d CE4=%d", origB48, origCE4);

@@ -56,53 +56,45 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
     };
     DYLDPatch::applyAll(patches, const_cast<void *>(data), PAGE_SIZE);
 	
-	// ── V49: Metal plugin path redirect (opt-in) ──
-	// Apple never made a Mac with Tiger Lake — no TGL Metal driver in /System/Library/Extensions/.
-	// The TGL driver exists at /Library/Extensions/ (user-installed), but Metal.framework
-	// constructs plugin paths with "/System/Library/Extensions/%@" and never looks elsewhere.
+	// ── V50: GPU bundle search path redirect ──
+	// Metal calls gpu_bundle_find_trusted() in libsystem_sandbox.dylib to locate
+	// GPU plugin bundles. This function searches exactly two directories:
+	//   1. /Library/GPUBundles      (checked first)
+	//   2. /System/Library/Extensions  (checked second)
+	// using format "%s/%s.bundle" to construct paths.
 	//
-	// With -ngreenLibExt: redirect to /Library/Extensions/ so Metal finds the TGL driver.
-	// Without (default): keep /System/Library/Extensions/ — preserves ICL/KBL compatibility
-	// since their shared cache install names use the /System/ prefix.
+	// Apple never made a Mac with Tiger Lake — no TGL Metal driver exists in either
+	// of those directories. The TGL driver is at /Library/Extensions/ (user-installed).
 	//
-	// Alternative: copy TGL bundle to /System/Library/Extensions/ (requires SIP off).
-	static bool libExtChecked = false;
-	static bool useLibExt = false;
-	if (!libExtChecked) {
-		useLibExt = checkKernelArgument("-ngreenLibExt");
-		libExtChecked = true;
-		if (useLibExt) {
-			SYSLOG("DYLD", "V49: -ngreenLibExt active, will redirect Metal plugin path to /Library/Extensions/");
-		}
-	}
-	if (useLibExt) {
-		static const uint8_t fmtFind[] = {
-			0x2F, 0x53, 0x79, 0x73, 0x74, 0x65, 0x6D, 0x2F, // /System/
-			0x4C, 0x69, 0x62, 0x72, 0x61, 0x72, 0x79, 0x2F, // Library/
-			0x45, 0x78, 0x74, 0x65, 0x6E, 0x73, 0x69, 0x6F, // Extensio
-			0x6E, 0x73, 0x2F, 0x25, 0x40, 0x00,              // ns/%@\0
-		};
-		static const uint8_t fmtRepl[] = {
-			0x2F, 0x4C, 0x69, 0x62, 0x72, 0x61, 0x72, 0x79, // /Library
-			0x2F, 0x45, 0x78, 0x74, 0x65, 0x6E, 0x73, 0x69, // /Extensi
-			0x6F, 0x6E, 0x73, 0x2F, 0x25, 0x40, 0x00,        // ons/%@\0
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,         // padding
-		};
-		if (UNLIKELY(KernelPatcher::findAndReplace(const_cast<void *>(data), PAGE_SIZE,
-				fmtFind, arrsize(fmtFind), fmtRepl, arrsize(fmtRepl)))) {
-			DBGLOG("DYLD", "V49: Redirected Metal plugin path to /Library/Extensions/");
-		}
+	// Fix: patch the first search path in libsystem_sandbox's __cstring:
+	//   "/Library/GPUBundles\0"  (20 bytes) → "/Library/Extensions\0" (20 bytes)
+	// This makes gpu_bundle_find_trusted search /Library/Extensions/ first,
+	// where the TGL driver bundle actually exists.
+	// /System/Library/Extensions stays as the fallback for system GPU bundles.
+	//
+	// Alternative: manually copy the TGL bundle:
+	//   sudo mkdir -p /Library/GPUBundles
+	//   sudo cp -R /Library/Extensions/AppleIntelTGLGraphicsMTLDriver.bundle /Library/GPUBundles/
+	static const uint8_t gpuPathFind[] = {
+		0x2F, 0x4C, 0x69, 0x62, 0x72, 0x61, 0x72, 0x79, // /Library
+		0x2F, 0x47, 0x50, 0x55, 0x42, 0x75, 0x6E, 0x64, // /GPUBund
+		0x6C, 0x65, 0x73, 0x00,                           // les\0
+	};
+	static const uint8_t gpuPathRepl[] = {
+		0x2F, 0x4C, 0x69, 0x62, 0x72, 0x61, 0x72, 0x79, // /Library
+		0x2F, 0x45, 0x78, 0x74, 0x65, 0x6E, 0x73, 0x69, // /Extensi
+		0x6F, 0x6E, 0x73, 0x00,                           // ons\0
+	};
+	if (UNLIKELY(KernelPatcher::findAndReplace(const_cast<void *>(data), PAGE_SIZE,
+			gpuPathFind, arrsize(gpuPathFind), gpuPathRepl, arrsize(gpuPathRepl)))) {
+		SYSLOG("DYLD", "V50: Patched gpu_bundle_find_trusted: /Library/GPUBundles -> /Library/Extensions");
 	}
 	
-	// V49: ICL Metal driver device-ID bypass (mask-based, build-portable).
-	// The ICL driver (AppleIntelICLGraphicsMTLDriver) checks device_id:vendor_id
-	// against 0x8A5C8086/0x8A5D8086, then calls a hw-cap fallback check.
-	// If the hw-cap check returns 0, it rejects the device (jne → to accept).
+	// V50: ICL Metal driver device-ID bypass (mask-based, build-portable).
+	// The ICL driver (in shared cache) checks device_id:vendor_id against
+	// 0x8A5C8086/0x8A5D8086, then calls a hw-cap fallback check.
 	// Patch: change jne to jmp so the hw-cap check always succeeds.
-	// Using masks so relative call offsets (build-specific) are wildcarded.
-	//
-	// Pattern: cmp edi,0x8A5C8086; je XX; cmp edi,0x8A5D8086; je XX;
-	//          call XXXX; test al,al; jne XX → jmp XX
+	// This is a fallback — if the TGL driver loads, this won't be needed.
 	static const uint8_t f2find[] = {
 		0x81, 0xFF, 0x86, 0x80, 0x5C, 0x8A,  // cmp edi, 0x8A5C8086
 		0x74, 0x00,                            // je +XX (wildcard offset)
@@ -141,7 +133,7 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
 	};
 	if (UNLIKELY(KernelPatcher::findAndReplaceWithMask(const_cast<void *>(data), PAGE_SIZE,
 			f2find, f2mask, f2repl, f2rmask, 1, 0))) {
-		DBGLOG("DYLD", "V49: Applied ICL Metal device-ID bypass (f2, mask-based)");
+		SYSLOG("DYLD", "V50: Applied ICL Metal device-ID bypass (f2, mask-based)");
 	}
 	
 	//disp
@@ -196,19 +188,18 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
 	
 	
     if (getKernelVersion() >= KernelVersion::Ventura) {
-        // V49: Metal is ON by default. The path redirect (-ngreenLibExt) and
-        // mask-based ICL f2 bypass handle driver loading and device-ID checks.
-        // Use -ngreenNoMetal to disable Metal and apply CoreDisplay stubs
-        // (for debugging display-only mode without GPU acceleration).
+        // V50: Metal is ON by default. gpu_bundle_find_trusted path patch
+        // redirects /Library/GPUBundles → /Library/Extensions so Metal finds
+        // the TGL driver. ICL f2 bypass handles device-ID checks as fallback.
+        // Use -ngreenNoMetal to disable Metal and apply CoreDisplay stubs.
         static bool noMetalChecked = false;
         static bool noMetal = false;
         if (!noMetalChecked) {
             noMetal = checkKernelArgument("-ngreenNoMetal");
-            // Legacy flag: if -ngreenAllowMetal is set, Metal is also ON (backward compat)
             bool legacyAllow = checkKernelArgument("-ngreenAllowMetal");
             if (legacyAllow) noMetal = false;
             noMetalChecked = true;
-            SYSLOG("DYLD", "V49: Metal=%s (-ngreenNoMetal=%d)", noMetal ? "OFF" : "ON", noMetal);
+            SYSLOG("DYLD", "V50: Metal=%s (-ngreenNoMetal=%d)", noMetal ? "OFF" : "ON", noMetal);
         }
         
         if (!noMetal) {
