@@ -20,13 +20,13 @@ Patches Apple's Tiger Lake (Gen12) graphics drivers to work with newer Intel iGP
 ## Boot args
 
 ```
--v keepsyms=1 debug=0x100 -liludbg liludump=60 -NGreenDebug -ngreenAllowMetal
+-v keepsyms=1 debug=0x100 -liludbg liludump=60 -NGreenDebug -disablegfxfirmware -ngreenAllowMetal
 ```
 
 | Arg | Purpose |
 |---|---|
 | `-NGreenDebug` | Enable NootedGreen debug logging |
-| `-disablegfxfirmware` | Disable GuC/HuC firmware loading (legacy, prefer `ngreenSched`) |
+| `-disablegfxfirmware` | Disable GuC/HuC firmware loading — required because scheduler selection (`ngreenSched`) happens after the HW-branch `processKext`, so the driver attempts firmware init before NootedGreen can override the scheduler type |
 | `ngreenSched=N` | Select GPU scheduler type: `3` = GuC firmware, `4` = IGScheduler4, `5` = host preemptive (default: `5`) |
 | `ngreen-dmc=skip` | Skip DMC firmware |
 | `-allow3d` | Force 3D acceleration |
