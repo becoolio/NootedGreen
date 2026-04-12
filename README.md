@@ -103,11 +103,13 @@ NootedBlue legacy support (fully preserved):
 
 NootedGreen (Gen11/Gen12 — TGL driver spoofing):
 
-- **Tiger Lake** (macOS Sonoma 14.x) — cross-platform safe (V52: RPL-specific patches auto-skipped via CPUID)
-- **Raptor Lake-P** (macOS Sonoma 14.x) — work in progress (primary dev platform: i7-13700H)
-- **Ice Lake** — untested, may work
-- **Rocket Lake** — untested, may work
-- **Alder Lake** — untested, may work
+| Platform | Status | Est. | Notes |
+|----------|--------|------|-------|
+| **Tiger Lake** | ~90% | V52 | RPL-specific patches auto-skipped via CPUID. GuC, topology, ForceWake, BCS all use native Apple paths. Remaining risk: SKU bypass hook + DYLD patches still in the path. No real TGL hardware tested yet. |
+| **Raptor Lake-P** | ~40% | V52 | Primary dev platform (i7-13700H). Display pipeline fully working, WindowServer connected, 12 user clients. Metal plugin loads but GPU command submission fails (ERROR_GEN6, dead BCS). |
+| **Alder Lake** | ~35% | — | Same Gen12 arch as RPL, should behave similarly. Untested. |
+| **Rocket Lake** | ~25% | — | Gen12 LP but different display engine. Untested. |
+| **Ice Lake** | ~50% | V52 | Dedicated ICL path exists (ICL FB + ICL HW kextInfos, ICL-specific object offsets in `getGPUInfoICL`, SKU gate×3, platform remap, PAVP hook, DYLD ICL Metal device-ID bypass). Topology hardcoded to ICL GT2 LP (1×8×8=64EU). IRQ init disabled (V37 boot hang). ICL path only activates when TGL kexts are absent. Untested on real ICL hardware. |
 
 ## Building
 
