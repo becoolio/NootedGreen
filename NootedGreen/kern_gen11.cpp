@@ -739,6 +739,30 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			0xc7, 0x83, 0x48, 0x11, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x8b, 0x83, 0x58, 0x11, 0x00, 0x00, 0x90, 0x90, 0xba, 0x01, 0x00, 0x00, 0x00, 0xbe, 0x05, 0x00, 0x00, 0x00
 		};
 
+		// V46: IGAccelDevice::deviceStart bypass — NOP the BCS failure gate
+		// IGAccelDevice::deviceStart() makes one vtable check (at vtable+0x970); if it
+		// returns 0, the whole device start aborts → IOServiceOpen fails → MTLDevice=nil.
+		// Root cause: IGHardwareCommandStreamer5::init for BCS fails (BCS CTL=0x0, ring
+		// not running), sets encodeFailureStack[1]=1, and the readiness check reads that.
+		// The RCS ring IS operational (CTL=0x7000, HWS_PGA valid, 5 CSB events confirmed).
+		// NOPing the je lets deviceStart always take the success path so IOServiceOpen
+		// succeeds, MTLDevice is non-nil, and WindowServer stops hanging.
+		//
+		// Pattern (unique @ 0x9c82 in LE binary):
+		//   ff 90 70 09 00 00  callq *0x970(%rax)   ← readiness vtable call
+		//   84 c0              testb %al,%al
+		//   74 1d              je failure_path       ← PATCH: 74 1d → 90 90
+		//   48 8d 05           leaq ...              ← success path
+		static const uint8_t f_devstart[] = {
+			0xff, 0x90, 0x70, 0x09, 0x00, 0x00,
+			0x84, 0xc0, 0x74, 0x1d, 0x48, 0x8d, 0x05
+		};
+		static const uint8_t r_devstart[] = {
+			0xff, 0x90, 0x70, 0x09, 0x00, 0x00,
+			0x84, 0xc0, 0x90, 0x90, 0x48, 0x8d, 0x05
+		};
+		
+
 		
 
 		{
@@ -752,6 +776,8 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{activeKext, f3bb, r3bb, arrsize(f3bb),	1},
 				 {activeKext, f3bbb, r3bbb, arrsize(f3bbb),	1},
 				 
+				 {activeKext, f_devstart, r_devstart, arrsize(f_devstart), 1},
+				 
 				// {activeKext, f4, r4, arrsize(f4),	1},
 				
 			};
@@ -759,7 +785,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			
 			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patches , address, size), "ngreen", "kextG11HWT Failed to apply patches!");
 		}
-		
+
 		SYSLOG("ngreen", "Loaded AppleIntelTGLGraphics! slices=1 subslices=12(6DSS) maxEU/SS=8 totalEU=96 L3=8");
 
 		return true;
@@ -2856,7 +2882,7 @@ void Gen11::hwSetPowerWellStateAux(void *that,bool param_1,uint param_2)
 
 void Gen11::hwInitializeCState(void *that)
 {
-	SYSLOG("ngreen", "NB-BUILD-V45B-FW-DONE-LOG");
+	SYSLOG("ngreen", "NB-BUILD-V46-DEVSTART-BYPASS");
 	int origB48 = getMember<int>(that, 0xB48);
 	int origCE4 = getMember<int>(that, 0xCE4);
 	SYSLOG("ngreen", "hwInitCState B48=%d CE4=%d", origB48, origCE4);
