@@ -118,20 +118,22 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
 	
 	
     if (getKernelVersion() >= KernelVersion::Ventura) {
-        // V47: Check boot-arg to control CoreDisplay Metal patches.
-        // With -ngreenAllowMetal, skip the 5 CoreDisplay patches that block Metal rendering.
-        // Without it, apply them as before (safe fallback — Metal blocked, no GPU commands submitted).
-        bool allowMetal = checkKernelArgument("-ngreenAllowMetal");
+        // V47: Check boot-arg once to control CoreDisplay Metal patches.
+        static bool allowMetalChecked = false;
+        static bool allowMetal = false;
+        if (!allowMetalChecked) {
+            allowMetal = checkKernelArgument("-ngreenAllowMetal");
+            allowMetalChecked = true;
+            SYSLOG("DYLD", "V47: -ngreenAllowMetal=%d", allowMetal);
+        }
         
         if (allowMetal) {
-            SYSLOG("DYLD", "V47: -ngreenAllowMetal set — skipping CoreDisplay Metal-blocking patches");
             // Only apply the assertion bypass — still needed to prevent assert crash
             const DYLDPatch patches[] = {
                 {f3b_sonoma, r3b_sonoma, "CoreDisplay assertion bypass (Sonoma)"},
             };
             DYLDPatch::applyAll(patches, const_cast<void *>(data), PAGE_SIZE);
         } else {
-            DBGLOG("DYLD", "V47: Metal blocked (no -ngreenAllowMetal) — applying all CoreDisplay patches");
             const DYLDPatch patches[] = {
                 {f3b_sonoma, r3b_sonoma, "CoreDisplay assertion bypass (Sonoma)"},
                 {f_skipfdp_sonoma, r_skipfdp_sonoma, "RunFullDisplayPipe skip entire function (Sonoma)"},
