@@ -2393,7 +2393,8 @@ void Gen11::wrapSafeForceWake(void *that, bool set, uint32_t dom) {
 }
 
 void Gen11::forceWake(void *that, bool set, uint32_t dom, uint8_t ctx) {
-	SYSLOG("ngreen", "forceWake called: set=%d dom=0x%x ctx=%d", set, dom, ctx);
+	// V61: silenced per-call logging — was flooding Lilu circular buffer (384+ entries/boot)
+	// preventing V60M health monitor and delayed child check entries from surviving
 	
 	// ── Hangcheck: dump GPU state once after stamp-timeout restart ──
 	// During init, ~14 forceWake calls happen. After IOAcceleratorFamily2 submits
@@ -2569,7 +2570,7 @@ void Gen11::forceWake(void *that, bool set, uint32_t dom, uint8_t ctx) {
 				DBGLOG("ngreen", "ForceWake OK domain=%s set=%d ack=0x%x", strForDom(d), set, wrapReadRegister32(callback->framecont, fwAckReg(d)));
 		}
 	}
-	SYSLOG("ngreen", "forceWake done: set=%d dom=0x%x", set, dom);
+	// V61: silenced — see above
 }
 
 bool Gen11::pollRegister(uint32_t reg, uint32_t val, uint32_t mask, uint32_t timeout) {
