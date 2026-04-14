@@ -673,7 +673,10 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		
 			 //{"__Z31blit3d_initialize_scratch_spaceP16IGAccelSysMemory", blit3d_initialize_scratch_space, this->oblit3d_initialize_scratch_space},
 			 //{"__Z15blit3d_init_ctxP23IGHardwareBlit3DContext", blit3d_init_ctx, this->oblit3d_init_ctx},
-			 //{"__ZN23IGHardwareBlit3DContext10initializeEv", IGHardwareBlit3DContextinitialize, this->oIGHardwareBlit3DContextinitialize},
+			 // V69: ENABLED — original crashes at +0x4c memcpy'ing 68 bytes to unmapped GPU buffer
+			 // at VA 0xfffffff034136000 (page 0xD of context buffer). Our replacement skips the
+			 // dangerous memcpy and logs diagnostic info about the mapping.
+			 {"__ZN23IGHardwareBlit3DContext10initializeEv", IGHardwareBlit3DContextinitialize, this->oIGHardwareBlit3DContextinitialize},
 			// {"__ZNK14IGMappedBuffer9getMemoryEv", IGMappedBuffergetMemory, this->oIGMappedBuffergetMemory},
 			 
 		 };
@@ -4023,19 +4026,46 @@ void *  Gen11::IGHardwareBlit3DContextoperatornew(void *that,unsigned long param
 
 void Gen11::IGHardwareBlit3DContextinitialize(void *that)
 {
-	//FunctionCast(IGHardwareBlit3DContextinitialize, callback->oIGHardwareBlit3DContextinitialize)(that);
-	
-		*getMember<uint64_t *>(that, 0xe8)= 0;
-		*getMember<uint64_t *>(that, 0xf0)= 0;
-		*getMember<uint64_t *>(that, 0x100)= 0;
-		*getMember<uint64_t *>(that, 0xf8)= 0;
-		*getMember<uint64_t *>(that, 0x108)= 0;
-		*getMember<uint32_t *>(that, 0x110)= 0;
-		
-		void *pIVar1 = (void *)IGMappedBuffergetMemory(*getMember<void **>(that, 0xd8));
-		blit3d_initialize_scratch_space(pIVar1);
-		blit3d_init_ctx(that);
-	
+	// V69: Diagnostic hook — original crashes at +0x4c writing 0x44 bytes to buffer+0xD000.
+	// That page is unmapped (CPU page fault, type 14). We replace the entire function body
+	// to prevent the panic and log the buffer state for root-cause analysis.
+	SYSLOG("ngreen", "V69: IGHardwareBlit3DContext::initialize(%p)", that);
+
+	// Dump context object internals — look for the GPU buffer mapping info
+	void *mappedBufPtr = *getMember<void **>(that, 0xd8);
+	SYSLOG("ngreen", "V69: ctx->0xd8(IGMappedBuffer)=%p", mappedBufPtr);
+
+	// Probe IGMappedBuffer internals: vtable, size, IOMemoryDescriptor*, base VA, etc.
+	if (mappedBufPtr) {
+		for (int i = 0; i < 12; i++) {
+			uint64_t val = getMember<uint64_t>(mappedBufPtr, i * 8);
+			SYSLOG("ngreen", "V69: mappedBuf[0x%02x]=0x%016llx", i * 8, (unsigned long long)val);
+		}
+	}
+
+	// Dump context fields 0xb0-0x120 (includes buffer pointers, sizes, GPU addresses)
+	for (int i = 0; i < 16; i++) {
+		uint64_t val = getMember<uint64_t>(that, 0xb0 + i * 8);
+		if (val != 0) {
+			SYSLOG("ngreen", "V69: ctx[0x%03x]=0x%016llx", 0xb0 + i * 8, (unsigned long long)val);
+		}
+	}
+
+	// Zero internal fields — safe, these are C++ object members not GPU memory
+	*getMember<uint64_t *>(that, 0xe8) = 0;
+	*getMember<uint64_t *>(that, 0xf0) = 0;
+	*getMember<uint64_t *>(that, 0x100) = 0;
+	*getMember<uint64_t *>(that, 0xf8) = 0;
+	*getMember<uint64_t *>(that, 0x108) = 0;
+	*getMember<uint32_t *>(that, 0x110) = 0;
+
+	// DO NOT call original — crashes at initialize()+0x4c writing to unmapped page 0xD
+	// DO NOT call blit3d_initialize_scratch_space / blit3d_init_ctx — their hooks are not
+	// connected so oblit3d_init_ctx=0 → FunctionCast to addr 0 → instant crash
+	SYSLOG("ngreen", "V69: initialize complete (SKIPPED original — crash prevention)");
+	// Result: blit3D context partially initialized. Metal commands using it will fail
+	// but not kernel-panic. The GPU buffer mapping issue needs separate investigation.
+
 }
 
 int Gen11::blit3d_supported(void *param_1,void *param_2)
