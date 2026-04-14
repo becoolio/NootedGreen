@@ -267,6 +267,8 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			{"__ZN19AppleIntelPowerWell22hwSetPowerWellStateAuxEbj",hwSetPowerWellStateAux, this->ohwSetPowerWellStateAux},
 			{"__ZN19AppleIntelPowerWell22hwSetPowerWellStateDDIEbj",hwSetPowerWellStateDDI, this->ohwSetPowerWellStateDDI},
 			{"__ZN31AppleIntelRegisterAccessManager19FastWriteRegister32Emj",FastWriteRegister32, this->oFastWriteRegister32},
+			// V60: ReadRegister32 hooks DISABLED — V59 proved they cause 0-children regression
+			// (display driver loops in forceWake power-well cycling, never completes init)
 			/*{"__ZN31AppleIntelRegisterAccessManager14ReadRegister32Em",raReadRegister32, this->oraReadRegister32},
 			{"__ZN31AppleIntelRegisterAccessManager14ReadRegister32EPVvm",raReadRegister32b},*/
 			{"__ZN31AppleIntelRegisterAccessManager15WriteRegister32Emj",raWriteRegister32, this->oraWriteRegister32},
@@ -1430,72 +1432,83 @@ static void v45ScheduleDelayedCheck(void *accelInstance, unsigned delayMs) {
 	}
 }
 
-// V58: Aggressive ERROR_GEN6 suppression — 100ms interval for 180s.
-// V57 proved ERROR_GEN6 is R/W on RPL-P and writing 0x0 clears it.
-// V57 problem: 2s interval left gaps where Apple saw ERROR_GEN6=0x7b,
-// entered error recovery, and stopped submitting GPU commands (ring HEAD stuck at 0x98).
-// V58 fix: 100ms interval (20× faster) to minimize window. Also tracks ring HEAD movement.
-void Gen11::v58GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t param1) {
-	static int v58Count = 0;
-	static uint32_t v58LastHead = 0xDEAD;
-	static uint32_t v58LastTail = 0xDEAD;
-	static int v58SuppressCount = 0;
-	static int v58EmrFixCount = 0;
-	v58Count++;
+// V60: GPU health monitor — 2s interval with V57-proven R/W ERROR_GEN6 clear.
+// V59 ReadRegister32 intercept caused regression (0 children). Back to timer-based.
+// Also applies EMR mask-all every cycle to prevent Apple from unmasking errors.
+void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t param1) {
+	static int v60Count = 0;
+	static uint32_t v60LastHead = 0xDEAD;
+	static uint32_t v60LastTail = 0xDEAD;
+	v60Count++;
 	
-	// 1. Read and immediately clear ERROR_GEN6 (minimize window)
-	uint32_t errGen6 = NGreen::callback->readReg32(ERROR_GEN6);
-	if (errGen6) {
-		NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
-		v58SuppressCount++;
-	}
+	auto *svc = static_cast<IOService *>(param0);
 	
-	// 2. Re-mask EMR if Apple unmasked it
-	uint32_t emr = NGreen::callback->readReg32(RING_EMR(RENDER_RING_BASE));
-	if (emr != 0xFFFFFFFF) {
-		NGreen::callback->writeReg32(RING_EMR(RENDER_RING_BASE), 0xFFFFFFFF);
-		NGreen::callback->writeReg32(RING_EMR(BLT_RING_BASE), 0xFFFFFFFF);
-		v58EmrFixCount++;
-	}
-	
-	// 3. Also clear per-ring EIR each iteration (ERROR_GEN6 bit 0 reflects EIR state)
-	uint32_t rcsEir = NGreen::callback->readReg32(RING_EIR(RENDER_RING_BASE));
-	if (rcsEir) {
-		NGreen::callback->writeReg32(RING_EIR(RENDER_RING_BASE), 0x0);
-	}
-	
-	// 4. Read ring state for HEAD tracking
+	// 1. Read GPU state via direct MMIO
+	uint32_t realErr = NGreen::callback->readReg32(ERROR_GEN6);
 	uint32_t rcsHead = NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE));
 	uint32_t rcsTail = NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE));
 	uint32_t rcsCtl  = NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE));
+	uint32_t emr     = NGreen::callback->readReg32(RING_EMR(RENDER_RING_BASE));
 	
-	// 5. Log every 1s (every 10th iteration) or on state changes
-	bool headChanged = (rcsHead != v58LastHead);
-	bool tailChanged = (rcsTail != v58LastTail);
-	bool shouldLog = (v58Count % 10 == 0) || (v58Count <= 3) || headChanged || tailChanged;
+	// 2. ExecList state
+	uint32_t execStatus = NGreen::callback->readReg32(RING_EXECLIST_STATUS(RENDER_RING_BASE));
+	uint32_t csbPtr = NGreen::callback->readReg32(RING_CONTEXT_STATUS_PTR(RENDER_RING_BASE));
 	
-	if (shouldLog) {
-		SYSLOG("ngreen", "V58M[%d]: ERR=0x%x HEAD=0x%x TAIL=0x%x CTL=0x%x EMR=0x%x suppress=%d emrFix=%d %s%s",
-			   v58Count, errGen6, rcsHead, rcsTail, rcsCtl, emr,
-			   v58SuppressCount, v58EmrFixCount,
-			   headChanged ? "HEAD_MOVED! " : "",
-			   tailChanged ? "TAIL_MOVED! " : "");
+	// 3. Track ring HEAD/TAIL movement
+	bool headChanged = (rcsHead != v60LastHead);
+	bool tailChanged = (rcsTail != v60LastTail);
+	
+	// 4. Count children + find IGAccelDevice state
+	int childCount = 0;
+	uint64_t accelDevState = 0xDEAD;
+	OSIterator *iter = svc->getClientIterator();
+	if (iter) {
+		OSObject *obj;
+		while ((obj = iter->getNextObject())) {
+			auto *child = OSDynamicCast(IOService, obj);
+			if (child) {
+				const char *cn = child->getName();
+				if (cn && strcmp(cn, "IGAccelDevice") == 0) {
+					accelDevState = child->getState();
+				}
+				childCount++;
+			}
+		}
+		iter->release();
 	}
 	
-	v58LastHead = rcsHead;
-	v58LastTail = rcsTail;
+	// 5. V60: ACTIVE error suppression (V57 proven approach)
+	//    Clear ERROR_GEN6 by writing 0x0, re-mask EMR every cycle
+	if (realErr) {
+		NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
+	}
+	// Re-mask EMR every cycle — Apple may unmask during error recovery attempts
+	if (emr != 0xFFFFFFFF) {
+		NGreen::callback->writeReg32(RING_EMR(RENDER_RING_BASE), 0xFFFFFFFF);
+	}
 	
-	// Re-arm: 1800 iterations × 100ms = 180s coverage
-	if (v58Count < 1800) {
-		auto nextTimer = thread_call_allocate(v58GpuHealthMonitor, param0);
+	// 6. Log with ring + CSB focus
+	uint32_t postErr = NGreen::callback->readReg32(ERROR_GEN6);
+	SYSLOG("ngreen", "V60M[%d]: ERR=0x%x->0x%x HEAD=0x%x TAIL=0x%x CTL=0x%x EMR=0x%x EXEC=0x%x CSB=0x%x ch=%d dev=0x%llx%s%s",
+		   v60Count, realErr, postErr, rcsHead, rcsTail, rcsCtl, emr,
+		   execStatus, csbPtr, childCount, (unsigned long long)accelDevState,
+		   headChanged ? " HEAD_MOVED!" : "",
+		   tailChanged ? " TAIL_MOVED!" : "");
+	
+	v60LastHead = rcsHead;
+	v60LastTail = rcsTail;
+	
+	// Re-arm: 60 iterations x 2s = 120s
+	if (v60Count < 60) {
+		auto nextTimer = thread_call_allocate(v60GpuHealthMonitor, param0);
 		if (nextTimer) {
 			uint64_t deadline;
-			clock_interval_to_deadline(100, kMillisecondScale, &deadline);
+			clock_interval_to_deadline(2, kSecondScale, &deadline);
 			thread_call_enter_delayed(nextTimer, deadline);
 		}
 	} else {
-		SYSLOG("ngreen", "V58M: complete — %d iterations, %d suppressions, %d EMR fixes, final HEAD=0x%x",
-			   v58Count, v58SuppressCount, v58EmrFixCount, rcsHead);
+		SYSLOG("ngreen", "V60M: complete — %d iterations, final HEAD=0x%x EXEC=0x%x ch=%d",
+			   v60Count, rcsHead, execStatus, childCount);
 	}
 }
 
@@ -2026,19 +2039,18 @@ bool Gen11::start(void *that,void  *param_1)
 		v45ScheduleDelayedCheck(that, 30000);
 		v45ScheduleDelayedCheck(that, 60000);
 		v45ScheduleDelayedCheck(that, 120000);
-		SYSLOG("ngreen", "V58: scheduled delayed child checks at T+3,10,15,20,30,60,120s");
+		SYSLOG("ngreen", "V59: scheduled delayed child checks at T+3,10,15,20,30,60,120s");
 		
-		// V58: Start aggressive ERROR_GEN6 suppression (100ms interval, 180s)
-		// V57 proved 2s was too slow — Apple sees ERROR_GEN6=0x7b in the gaps.
-		// V58 uses 100ms (20× faster) to keep ERROR_GEN6 at 0x0 continuously.
+		// V60: Start health monitor (2s interval, 120s) — active ERROR_GEN6 suppression.
+		// V57 timer-based R/W clear proven for IGAccelDevice stability (10 children).
 		{
-			auto monTimer = thread_call_allocate(v58GpuHealthMonitor,
+			auto monTimer = thread_call_allocate(v60GpuHealthMonitor,
 												 static_cast<thread_call_param_t>(static_cast<IOService *>(that)));
 			if (monTimer) {
 				uint64_t deadline;
-				clock_interval_to_deadline(100, kMillisecondScale, &deadline);
+				clock_interval_to_deadline(2, kSecondScale, &deadline);
 				thread_call_enter_delayed(monTimer, deadline);
-				SYSLOG("ngreen", "V58: GPU health monitor armed — 100ms interval, 1800 iterations (180s)");
+				SYSLOG("ngreen", "V60: GPU health monitor armed — 2s interval, 60 iterations (120s)");
 			}
 		}
 	}
@@ -2739,10 +2751,11 @@ uint32_t Gen11::wdepthFromAttribute(void *that,uint param_1)
 uint32_t Gen11::raReadRegister32(void *that,unsigned long param_1)
 {
 	if (reinterpret_cast<volatile uint64_t*>(that)==nullptr) return NGreen::callback->readReg32(param_1);
-	//PANIC_COND(reinterpret_cast<volatile uint64_t*>(that)==nullptr, "ngreen", "raReadRegister32 Failed 0x%lx",param_1);
-	if (reinterpret_cast<volatile uint64_t*>(that)==nullptr) return 0;
 	
-	//if (param_1 >=0x2000 && NGreen::callback->readReg32(param_1)) return NGreen::callback->readReg32(param_1);
+	// V60: ReadRegister32 intercept REMOVED — V59 proved hooking all register reads
+	// causes display driver to loop in power-well cycling, producing 0 children.
+	// Error suppression done via timer-based R/W clear (V57 approach).
+	
 	auto ret=FunctionCast(raReadRegister32, callback->oraReadRegister32)(that,param_1);
 	return ret;
 };
