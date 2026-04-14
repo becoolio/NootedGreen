@@ -1880,6 +1880,46 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 	}
 }
 
+// V71: High-frequency EMR enforcer — runs every 50ms for 600 iterations (30s).
+// Prevents Apple's error handler from seeing ERROR_GEN6 by keeping EMR fully masked
+// and clearing any pending errors before the interrupt handler can process them.
+// No logging (too fast), purely defensive.
+void Gen11::v71EmrEnforcer(thread_call_param_t param0, thread_call_param_t param1) {
+	static int v71Count = 0;
+	v71Count++;
+
+	// 1. Mask ALL errors on RCS and BCS — prevent interrupt generation
+	uint32_t emrRcs = NGreen::callback->readReg32(RING_EMR(RENDER_RING_BASE));
+	uint32_t emrBcs = NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE));
+	if (emrRcs != 0xFFFFFFFF)
+		NGreen::callback->writeReg32(RING_EMR(RENDER_RING_BASE), 0xFFFFFFFF);
+	if (emrBcs != 0xFFFFFFFF)
+		NGreen::callback->writeReg32(RING_EMR(BLT_RING_BASE), 0xFFFFFFFF);
+
+	// 2. Clear any pending ERROR_GEN6 before Apple's handler can read it
+	uint32_t err = NGreen::callback->readReg32(ERROR_GEN6);
+	if (err)
+		NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
+
+	// 3. Log only on first few and when EMR was unmasked (keep it quiet)
+	if (v71Count <= 3 || (emrRcs != 0xFFFFFFFF && v71Count <= 100)) {
+		SYSLOG("ngreen", "V71E[%d]: EMR_RCS=0x%x EMR_BCS=0x%x ERR=0x%x",
+			   v71Count, emrRcs, emrBcs, err);
+	}
+
+	// Re-arm: 600 iterations x 50ms = 30s
+	if (v71Count < 600) {
+		auto nextTimer = thread_call_allocate(v71EmrEnforcer, param0);
+		if (nextTimer) {
+			uint64_t deadline;
+			clock_interval_to_deadline(50, kMillisecondScale, &deadline);
+			thread_call_enter_delayed(nextTimer, deadline);
+		}
+	} else {
+		SYSLOG("ngreen", "V71E: complete — %d iterations", v71Count);
+	}
+}
+
 // V54: IRQ watchdog — re-enables Master IRQ if the driver disables it during init.
 // Fires every 2s, up to 5 times (10s total), then stops.
 void Gen11::v54IrqWatchdog(thread_call_param_t param0, thread_call_param_t) {
@@ -2492,6 +2532,19 @@ bool Gen11::start(void *that,void  *param_1)
 				clock_interval_to_deadline(2, kSecondScale, &deadline);
 				thread_call_enter_delayed(monTimer, deadline);
 				SYSLOG("ngreen", "V60: GPU health monitor armed — 2s interval, 60 iterations (120s)");
+			}
+		}
+		// V71: Start high-frequency EMR enforcer — 50ms interval, 30s total.
+		// Keeps EMR fully masked and clears ERROR_GEN6 before Apple's interrupt handler
+		// can see it. V70 proved ERROR_GEN6=0x7b causes IGAccelDevice crash loop.
+		{
+			auto emrTimer = thread_call_allocate(v71EmrEnforcer,
+												 static_cast<thread_call_param_t>(static_cast<IOService *>(that)));
+			if (emrTimer) {
+				uint64_t deadline;
+				clock_interval_to_deadline(50, kMillisecondScale, &deadline);
+				thread_call_enter_delayed(emrTimer, deadline);
+				SYSLOG("ngreen", "V71: EMR enforcer armed — 50ms interval, 600 iterations (30s)");
 			}
 		}
 	}
@@ -4596,7 +4649,19 @@ unsigned long Gen11::resetGraphicsEngine(void *that,void *param_1)
 			GEN9_FFSC_PERCTX_PREEMPT_CTRL);
 	
 	SYSLOG("ngreen", "resetGraphicsEngine: GT workarounds applied (with ForceWake)");
-	
+
+	// V71: Pre-reset error suppression — clear ERROR_GEN6 and mask EMR before
+	// calling original, so the reset handler starts from a clean error state.
+	{
+		uint32_t preErr = NGreen::callback->readReg32(ERROR_GEN6);
+		if (preErr) {
+			NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
+			SYSLOG("ngreen", "V71: resetGfxEng pre-clear ERR=0x%x", preErr);
+		}
+		NGreen::callback->writeReg32(RING_EMR(RENDER_RING_BASE), 0xFFFFFFFF);
+		NGreen::callback->writeReg32(RING_EMR(BLT_RING_BASE), 0xFFFFFFFF);
+	}
+
 	// V53: Snapshot engine state BEFORE original resetGraphicsEngine
 	SYSLOG("ngreen", "V53 resetGfxEng PRE: RCS CTL=0x%x HEAD=0x%x TAIL=0x%x",
 		NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE)),
@@ -4622,6 +4687,18 @@ unsigned long Gen11::resetGraphicsEngine(void *that,void *param_1)
 	SYSLOG("ngreen", "V53 resetGfxEng POST: BCS CTL=0x%x ERROR_GEN6=0x%x",
 		NGreen::callback->readReg32(RING_CTL(BLT_RING_BASE)),
 		NGreen::callback->readReg32(ERROR_GEN6));
+	
+	// V71: Post-reset error suppression — Apple's resetGraphicsEngine may unmask EMR
+	// or generate new errors during reset. Re-mask and clear immediately after.
+	{
+		uint32_t postErr = NGreen::callback->readReg32(ERROR_GEN6);
+		if (postErr)
+			NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
+		NGreen::callback->writeReg32(RING_EMR(RENDER_RING_BASE), 0xFFFFFFFF);
+		NGreen::callback->writeReg32(RING_EMR(BLT_RING_BASE), 0xFFFFFFFF);
+		if (postErr)
+			SYSLOG("ngreen", "V71: resetGfxEng post-clear ERR=0x%x", postErr);
+	}
 	
 	return ret;
 }
