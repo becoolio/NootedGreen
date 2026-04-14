@@ -1503,6 +1503,55 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 		iter->release();
 	}
 	
+	// V70: Track child transitions — dump all children when count or accelDev state changes
+	{
+		static int lastChildCount = -1;
+		static uint64_t lastAccelDevState = 0xBEEF;
+		if (childCount != lastChildCount || accelDevState != lastAccelDevState) {
+			SYSLOG("ngreen", "V70: TRANSITION ch %d->%d dev 0x%llx->0x%llx [iter %d]",
+				   lastChildCount, childCount,
+				   (unsigned long long)lastAccelDevState, (unsigned long long)accelDevState,
+				   v60Count);
+			// Dump ALL children at the transition point
+			OSIterator *iter2 = svc->getClientIterator();
+			if (iter2) {
+				int idx = 0;
+				OSObject *obj2;
+				while ((obj2 = iter2->getNextObject())) {
+					auto *child2 = OSDynamicCast(IOService, obj2);
+					if (child2) {
+						SYSLOG("ngreen", "V70: ch[%d]: %s cls=%s st=0x%llx",
+							   idx, child2->getName(),
+							   child2->getMetaClass()->getClassName(),
+							   (unsigned long long)child2->getState());
+						idx++;
+					}
+				}
+				iter2->release();
+			}
+			// If IGAccelDevice just disappeared, dump GPU error state at that moment
+			if (accelDevState == 0xDEAD && lastAccelDevState != 0xDEAD && lastAccelDevState != 0xBEEF) {
+				SYSLOG("ngreen", "V70: *** IGAccelDevice LOST! Was dev=0x%llx ***",
+					   (unsigned long long)lastAccelDevState);
+				uint32_t errAtLoss = NGreen::callback->readReg32(ERROR_GEN6);
+				uint32_t tlb0Loss  = NGreen::callback->readReg32(GEN8_FAULT_TLB_DATA0);
+				uint32_t tlb1Loss  = NGreen::callback->readReg32(GEN8_FAULT_TLB_DATA1);
+				uint32_t faultLoss = NGreen::callback->readReg32(GEN12_RING_FAULT_REG);
+				SYSLOG("ngreen", "V70: at loss: ERR=0x%x TLB0=0x%x TLB1=0x%x FAULT=0x%x",
+					   errAtLoss, tlb0Loss, tlb1Loss, faultLoss);
+				// Dump GGTT PTEs 0-3 to check general GGTT health at this moment
+				for (int pg = 0; pg < 4; pg++) {
+					uint32_t pteLo = NGreen::callback->readReg32(GGTT_PTE_LO(pg));
+					uint32_t pteHi = NGreen::callback->readReg32(GGTT_PTE_HI(pg));
+					SYSLOG("ngreen", "V70: loss GGTT[%d]=0x%08x:%08x %s",
+						   pg, pteHi, pteLo, (pteLo & 1) ? "V" : "INV");
+				}
+			}
+			lastChildCount = childCount;
+			lastAccelDevState = accelDevState;
+		}
+	}
+	
 	// 5. V60: ACTIVE error suppression (V57 proven approach)
 	//    Clear ERROR_GEN6 by writing 0x0, re-mask EMR every cycle
 	if (realErr) {
@@ -1663,6 +1712,29 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 				uint64_t val = getMember<uint64_t>(svc, 0xe00 + i * 8);
 				SYSLOG("ngreen", "V67: accel[0x%03x]=0x%016llx", 0xe00 + i * 8, (unsigned long long)val);
 			}
+			
+			// V70: Read ACTUAL GGTT PTEs from correct base (0x800000, not the 0x100000
+			// fence registers that V68 used). Each PTE is 8 bytes (64-bit).
+			// PTE format: phys_addr[47:12] | flags[11:0], bit 0 = VALID/PRESENT.
+			SYSLOG("ngreen", "V70: GGTT PTE dump (base=0x%x):", GEN8_GGTT_PTE_BASE);
+			for (int pg = 0; pg < 16; pg++) {
+				uint32_t pteLo = NGreen::callback->readReg32(GGTT_PTE_LO(pg));
+				uint32_t pteHi = NGreen::callback->readReg32(GGTT_PTE_HI(pg));
+				SYSLOG("ngreen", "V70: GGTT[%2d] = 0x%08x:%08x %s",
+					   pg, pteHi, pteLo, (pteLo & 1) ? "VALID" : "INVALID");
+			}
+			// Check pages around stolen memory boundary (128MB = 0x8000 pages)
+			for (int i = 0; i < 4; i++) {
+				int pg = 0x7FFE + i;
+				uint32_t pteLo = NGreen::callback->readReg32(GGTT_PTE_LO(pg));
+				uint32_t pteHi = NGreen::callback->readReg32(GGTT_PTE_HI(pg));
+				SYSLOG("ngreen", "V70: GGTT[0x%x] = 0x%08x:%08x %s",
+					   pg, pteHi, pteLo, (pteLo & 1) ? "VALID" : "INVALID");
+			}
+			// MMIO BAR length — tells us if GGTT PTE access is direct or indirect
+			SYSLOG("ngreen", "V70: rmmio length=0x%llx (GGTT direct=%s)",
+				   (unsigned long long)NGreen::callback->rmmio->getLength(),
+				   (GEN8_GGTT_PTE_BASE + 16*8 <= NGreen::callback->rmmio->getLength()) ? "yes" : "no(indirect)");
 		}
 	}
 	
