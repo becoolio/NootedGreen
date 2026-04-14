@@ -1896,10 +1896,10 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 	}
 }
 
-// V71: High-frequency EMR enforcer — runs every 50ms for 600 iterations (30s).
-// Prevents Apple's error handler from seeing ERROR_GEN6 by keeping EMR fully masked
-// and clearing any pending errors before the interrupt handler can process them.
-// No logging (too fast), purely defensive.
+// V74: Permanent EMR enforcer — runs every 50ms INDEFINITELY.
+// V71 proved this works during its 30s window but device dies the moment it stops.
+// V72 proved Apple writes EMR via direct MMIO, not through hookable WriteRegister32.
+// Solution: never stop the timer. Log rate-limited to avoid filling buffer.
 void Gen11::v71EmrEnforcer(thread_call_param_t param0, thread_call_param_t param1) {
 	static int v71Count = 0;
 	v71Count++;
@@ -1917,22 +1917,19 @@ void Gen11::v71EmrEnforcer(thread_call_param_t param0, thread_call_param_t param
 	if (err)
 		NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
 
-	// 3. Log only on first few and when EMR was unmasked (keep it quiet)
-	if (v71Count <= 3 || (emrRcs != 0xFFFFFFFF && v71Count <= 100)) {
-		SYSLOG("ngreen", "V71E[%d]: EMR_RCS=0x%x EMR_BCS=0x%x ERR=0x%x",
+	// 3. Log first 3 + unmask events (rate-limited: first 200 only)
+	if (v71Count <= 3 || (emrRcs != 0xFFFFFFFF && v71Count <= 200)) {
+		SYSLOG("ngreen", "V74E[%d]: EMR_RCS=0x%x EMR_BCS=0x%x ERR=0x%x",
 			   v71Count, emrRcs, emrBcs, err);
 	}
 
-	// Re-arm: 600 iterations x 50ms = 30s
-	if (v71Count < 600) {
-		auto nextTimer = thread_call_allocate(v71EmrEnforcer, param0);
-		if (nextTimer) {
-			uint64_t deadline;
-			clock_interval_to_deadline(50, kMillisecondScale, &deadline);
-			thread_call_enter_delayed(nextTimer, deadline);
-		}
-	} else {
-		SYSLOG("ngreen", "V71E: complete — %d iterations", v71Count);
+	// V74: Re-arm FOREVER — never stop. 50ms interval.
+	// Thread_call_allocate is lightweight; each timer fires once and is freed.
+	auto nextTimer = thread_call_allocate(v71EmrEnforcer, param0);
+	if (nextTimer) {
+		uint64_t deadline;
+		clock_interval_to_deadline(50, kMillisecondScale, &deadline);
+		thread_call_enter_delayed(nextTimer, deadline);
 	}
 }
 
@@ -2550,9 +2547,9 @@ bool Gen11::start(void *that,void  *param_1)
 				SYSLOG("ngreen", "V60: GPU health monitor armed — 2s interval, 60 iterations (120s)");
 			}
 		}
-		// V71: Start high-frequency EMR enforcer — 50ms interval, 30s total.
-		// Keeps EMR fully masked and clears ERROR_GEN6 before Apple's interrupt handler
-		// can see it. V70 proved ERROR_GEN6=0x7b causes IGAccelDevice crash loop.
+		// V74: Start PERMANENT EMR enforcer — 50ms interval, runs forever.
+		// V71 proved 30s window works; V72 proved Apple uses direct MMIO for EMR.
+		// Device dies the moment timer stops → never stop it.
 		{
 			auto emrTimer = thread_call_allocate(v71EmrEnforcer,
 												 static_cast<thread_call_param_t>(static_cast<IOService *>(that)));
@@ -2560,7 +2557,7 @@ bool Gen11::start(void *that,void  *param_1)
 				uint64_t deadline;
 				clock_interval_to_deadline(50, kMillisecondScale, &deadline);
 				thread_call_enter_delayed(emrTimer, deadline);
-				SYSLOG("ngreen", "V71: EMR enforcer armed — 50ms interval, 600 iterations (30s)");
+				SYSLOG("ngreen", "V74: EMR enforcer armed — 50ms interval, PERMANENT");
 			}
 		}
 	}
