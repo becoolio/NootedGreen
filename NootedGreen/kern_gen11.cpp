@@ -1521,6 +1521,12 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 		   tailChanged ? " TAIL_MOVED!" : "");
 	SYSLOG("ngreen", "V66M[%d]: ACTHD=0x%x CCID=0x%x FAULT=0x%x GT_DW0=0x%x RC_EN=0x%x",
 		   v60Count, acthd, ccid, ringFault, gtDw0, rcIntr);
+	// V68: Log TLB fault data when ERROR_GEN6 fires — shows faulting address
+	if (realErr) {
+		uint32_t tlb0 = NGreen::callback->readReg32(GEN8_FAULT_TLB_DATA0);
+		uint32_t tlb1 = NGreen::callback->readReg32(GEN8_FAULT_TLB_DATA1);
+		SYSLOG("ngreen", "V68F[%d]: ERR=0x%x TLB0=0x%x TLB1=0x%x", v60Count, realErr, tlb0, tlb1);
+	}
 	
 	// ── V64: CSB buffer dump + interrupt mask diagnostics + CSB read pointer advance ──
 	if (v60Count == 1) {
@@ -1543,7 +1549,16 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 		SYSLOG("ngreen", "V64: INTR_IDENT0=0x%x INTR_IDENT1=0x%x", ident0, ident1);
 		
 		// ── V67: Enhanced scheduler + workloop + event source diagnostics ──
+		// ── V68: + fault TLB data, e08obj class, early sched clear ──
 		{
+			// V68: Read fault detail registers (TLB data gives faulting address)
+			uint32_t tlbData0 = NGreen::callback->readReg32(GEN8_FAULT_TLB_DATA0);
+			uint32_t tlbData1 = NGreen::callback->readReg32(GEN8_FAULT_TLB_DATA1);
+			uint32_t gucStatus = NGreen::callback->readReg32(0xC000); // GUC_STATUS
+			uint32_t rcsEir = NGreen::callback->readReg32(RENDER_RING_BASE + 0xB0); // RING_EIR
+			SYSLOG("ngreen", "V68: TLB_DATA0=0x%x TLB_DATA1=0x%x GUC=0x%x EIR=0x%x",
+				tlbData0, tlbData1, gucStatus, rcsEir);
+
 			uint64_t schedPtr = getMember<uint64_t>(svc, 0xe00);
 			if (schedPtr) {
 				SYSLOG("ngreen", "V67: scheduler ptr=0x%llx", (unsigned long long)schedPtr);
@@ -1555,6 +1570,15 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 						SYSLOG("ngreen", "V67: sched[0x%03x]=0x%016llx", i * 8, (unsigned long long)val);
 					}
 				}
+				
+				// V68: Clear sched error EARLY (don't wait for iteration 5)
+				uint32_t schedErr = *reinterpret_cast<uint32_t *>(schedBase + 0x0C);
+				if (schedErr) {
+					*reinterpret_cast<uint32_t *>(schedBase + 0x0C) = 0;
+					*reinterpret_cast<uint32_t *>(schedBase + 0x00) = 0;
+					SYSLOG("ngreen", "V68: early sched clear err=0x%x->0x%x flag=0x0",
+						schedErr, *reinterpret_cast<uint32_t *>(schedBase + 0x0C));
+				}
 			} else {
 				SYSLOG("ngreen", "V67: scheduler ptr is NULL!");
 			}
@@ -1565,13 +1589,19 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 				auto *objBase = reinterpret_cast<uint8_t *>(schedObj);
 				// First 8 bytes should be vtable pointer for a C++ object
 				uint64_t vtable = *reinterpret_cast<uint64_t *>(objBase);
-				SYSLOG("ngreen", "V67: accel[0xe08] obj=0x%llx vtable=0x%llx",
-					(unsigned long long)schedObj, (unsigned long long)vtable);
+				// V68: Identify class via getMetaClass()
+				auto *e08Obj = reinterpret_cast<OSObject *>(schedObj);
+				const char *e08Class = "?";
+				if (e08Obj->getMetaClass()) {
+					e08Class = e08Obj->getMetaClass()->getClassName();
+				}
+				SYSLOG("ngreen", "V68: accel[0xe08] obj=0x%llx vtable=0x%llx class=%s",
+					(unsigned long long)schedObj, (unsigned long long)vtable, e08Class);
 				// Dump first 256 bytes, non-zero only
 				for (int i = 0; i < 32; i++) {
 					uint64_t val = *reinterpret_cast<uint64_t *>(objBase + i * 8);
 					if (val != 0) {
-						SYSLOG("ngreen", "V67: e08obj[0x%03x]=0x%016llx", i * 8, (unsigned long long)val);
+						SYSLOG("ngreen", "V68: e08obj[0x%03x]=0x%016llx", i * 8, (unsigned long long)val);
 					}
 				}
 			}
@@ -1681,60 +1711,78 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 		}
 	}
 	
-	// ── V67: Iteration 5 — clear scheduler error field + monitor effect ──
-	// V66 proved sched[0x008] = 0x0000007b00000060 (upper 32 = ERROR_GEN6 code).
-	// V66 also showed Apple's error handler resets RC_INTR_EN every ~10s in exact
-	// correlation with ERROR_GEN6=0x7b. Try clearing the scheduler's cached error.
+	// ── V68: Iteration 5 — deep probe e08obj + GGTT PTE check ──
+	// V67 proved: sched error clear sticks, but hardware ERROR_GEN6=0x7b recurs
+	// every ~10s independently. Need to find WHAT generates the error.
 	if (v60Count == 5) {
+		uint64_t schedObj = getMember<uint64_t>(svc, 0xe08);
+		if (schedObj) {
+			auto *objBase = reinterpret_cast<uint8_t *>(schedObj);
+			// V68: Dump e08obj bytes 0x100-0x200 — look for engine dead/reset flags
+			for (int i = 0; i < 32; i++) {
+				uint64_t val = *reinterpret_cast<uint64_t *>(objBase + 0x100 + i * 8);
+				if (val != 0) {
+					SYSLOG("ngreen", "V68: e08deep[0x%03x]=0x%016llx", 0x100 + i * 8, (unsigned long long)val);
+				}
+			}
+			// V68: Check e08obj+0x200-0x300 — possible per-engine state arrays
+			for (int i = 0; i < 32; i++) {
+				uint64_t val = *reinterpret_cast<uint64_t *>(objBase + 0x200 + i * 8);
+				if (val != 0) {
+					SYSLOG("ngreen", "V68: e08deep[0x%03x]=0x%016llx", 0x200 + i * 8, (unsigned long long)val);
+				}
+			}
+		}
+		// V68: Re-check scheduler error after V68 early clear at iter 1
 		uint64_t schedPtr = getMember<uint64_t>(svc, 0xe00);
 		if (schedPtr) {
 			auto *schedBase = reinterpret_cast<uint8_t *>(schedPtr);
-			// Read current values
-			uint32_t schedErr = *reinterpret_cast<uint32_t *>(schedBase + 0x0C);
-			uint32_t schedCfg = *reinterpret_cast<uint32_t *>(schedBase + 0x08);
 			uint32_t schedFlag = *reinterpret_cast<uint32_t *>(schedBase + 0x00);
-			SYSLOG("ngreen", "V67: pre-clear sched[0x00]=0x%x sched[0x08]=0x%x sched[0x0C]=0x%x",
-				schedFlag, schedCfg, schedErr);
-			
-			// Clear the error field (0x7b → 0x0)
-			*reinterpret_cast<uint32_t *>(schedBase + 0x0C) = 0;
-			// Also try clearing sched[0x00] flag (1→0, might be "error state" flag)
-			*reinterpret_cast<uint32_t *>(schedBase + 0x00) = 0;
-			
-			uint32_t afterErr = *reinterpret_cast<uint32_t *>(schedBase + 0x0C);
-			uint32_t afterFlag = *reinterpret_cast<uint32_t *>(schedBase + 0x00);
-			SYSLOG("ngreen", "V67: post-clear sched[0x00]=0x%x sched[0x0C]=0x%x",
-				afterFlag, afterErr);
-			
-			// Also clear ERROR_GEN6 and fully mask EMR at the same time
-			NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
-			NGreen::callback->writeReg32(RING_EMR(RENDER_RING_BASE), 0xFFFFFFFF);
-			// Re-enable interrupts
-			uint32_t wantBits = (1 << GEN11_RCS0) | (1 << GEN11_BCS);
-			NGreen::callback->writeReg32(GEN11_RENDER_COPY_INTR_ENABLE,
-				NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE) | wantBits);
-			SYSLOG("ngreen", "V67: cleared ERROR_GEN6, masked EMR, re-enabled RCS0 interrupts");
+			uint32_t schedErr = *reinterpret_cast<uint32_t *>(schedBase + 0x0C);
+			SYSLOG("ngreen", "V68: iter5 sched[0x00]=0x%x sched[0x0C]=0x%x (cleared at iter1)",
+				schedFlag, schedErr);
 		}
+		// V68: Read GGTT PTE for ring buffer page (ring base = acthd area)
+		// GGTT is accessed via aperture at BAR offset or via registers
+		// Read the first few GGTT PTEs to check format
+		uint32_t ringBase44k = 0x98 >> 12; // ring HEAD offset → page 0
+		// Read fence regs to check for GGTT format clues
+		uint32_t fence0 = NGreen::callback->readReg32(0x100000); // First GGTT PTE
+		uint32_t fence1 = NGreen::callback->readReg32(0x100004);
+		uint32_t fence2 = NGreen::callback->readReg32(0x100008);
+		uint32_t fence3 = NGreen::callback->readReg32(0x10000C);
+		SYSLOG("ngreen", "V68: GGTT[0]=0x%x:%x GGTT[1]=0x%x:%x", fence1, fence0, fence3, fence2);
+		// Read TLB data again
+		uint32_t tlb0 = NGreen::callback->readReg32(GEN8_FAULT_TLB_DATA0);
+		uint32_t tlb1 = NGreen::callback->readReg32(GEN8_FAULT_TLB_DATA1);
+		uint32_t faultReg = NGreen::callback->readReg32(GEN12_RING_FAULT_REG);
+		SYSLOG("ngreen", "V68: FAULT=0x%x TLB0=0x%x TLB1=0x%x", faultReg, tlb0, tlb1);
 		// Check encodeFailureStack
 		uint32_t failCount = getMember<uint32_t>(svc, 0x1c50);
-		SYSLOG("ngreen", "V67: encodeFailureStack count=%u", failCount);
+		SYSLOG("ngreen", "V68: encodeFailureStack count=%u", failCount);
 	}
 	
-	// V67: Iteration 10 — check if scheduler error clear had any effect
+	// V68: Iteration 10 — re-check e08obj + scheduler after error suppression
 	if (v60Count == 10) {
+		uint64_t schedObj = getMember<uint64_t>(svc, 0xe08);
+		if (schedObj) {
+			auto *objBase = reinterpret_cast<uint8_t *>(schedObj);
+			// Re-dump first 256 bytes to see if any state shifted
+			for (int i = 0; i < 32; i++) {
+				uint64_t val = *reinterpret_cast<uint64_t *>(objBase + i * 8);
+				if (val != 0) {
+					SYSLOG("ngreen", "V68B: e08obj[0x%03x]=0x%016llx", i * 8, (unsigned long long)val);
+				}
+			}
+		}
 		uint64_t schedPtr = getMember<uint64_t>(svc, 0xe00);
 		if (schedPtr) {
 			auto *schedBase = reinterpret_cast<uint8_t *>(schedPtr);
-			uint32_t schedFlag = *reinterpret_cast<uint32_t *>(schedBase + 0x00);
-			uint32_t schedCfg = *reinterpret_cast<uint32_t *>(schedBase + 0x08);
-			uint32_t schedErr = *reinterpret_cast<uint32_t *>(schedBase + 0x0C);
-			SYSLOG("ngreen", "V67B: T+20s sched[0x00]=0x%x sched[0x08]=0x%x sched[0x0C]=0x%x",
-				schedFlag, schedCfg, schedErr);
-			// Dump non-zero fields in 0x000-0x400 to see if anything changed
+			// Dump non-zero fields in 0x000-0x400
 			for (int i = 0; i < 128; i++) {
 				uint64_t val = *reinterpret_cast<uint64_t *>(schedBase + i * 8);
 				if (val != 0) {
-					SYSLOG("ngreen", "V67B: sched[0x%03x]=0x%016llx", i * 8, (unsigned long long)val);
+					SYSLOG("ngreen", "V68B: sched[0x%03x]=0x%016llx", i * 8, (unsigned long long)val);
 				}
 			}
 		}
