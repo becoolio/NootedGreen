@@ -1983,72 +1983,56 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 	// V82 proved: display engine reads from PLANE_SURF via GGTT (magenta visible).
 	// V83 bug: SURF redirect to GGTT page 0 → MCE at phys 0x3e800000 (stolen mem base).
 	// MC Bank 11 (GPU) uncorrected error on all 20 CPUs. NEVER touch stolen base.
-	// V86: Full plane diagnostic + overlay disable + full-screen fill + format fix
-	// V85 proved: PSR/FBC were NEVER enabled (PSR=0x80, FBC=0x40000000 — bit 31 NOT set).
-	// Magenta fill persists (px0=0xffff00ff at iter 10,20). GPU render engine active
-	// (HEAD/TAIL moving). But user sees BARS. Hypothesis: another plane (2-7)
-	// on top of plane 1, OR format mismatch in PLANE_CTL.
+	// V87: SURFLIVE diagnostic + fill LIVE buffer + revert format change
+	// V86 REGRESSION: format=4 IS XRGB 8888 (not 2:10:10:10). Changing it to 2
+	// caused cyan instead of magenta. Reverted.
+	// NEW THEORY: PLANE_SURF is double-buffered. We fill the PENDING buffer but
+	// the display reads from PLANE_SURFLIVE (0x701AC). If our SURF write never
+	// latches (no vblank flip acknowledged), display shows OLD SURFLIVE content.
 
 	if (v60Count >= 1 && v60Count <= 30) {
-		// 1. Scan ALL planes on Pipe A (planes 1-7) + cursor
-		// Plane N: CTL = 0x70080 + N*0x100, SURF = 0x7009C + N*0x100
-		// Higher plane number = rendered ON TOP of lower. Cursor at 0x70080.
+		// 1. Read SURFLIVE vs SURF — are they the same?
+		uint32_t surfAddr = NGreen::callback->readReg32(0x7019C);    // PLANE_SURF (pending)
+		uint32_t surfLive = NGreen::callback->readReg32(0x701AC);    // PLANE_SURFLIVE (active)
+		uint32_t surfPage = surfAddr >> 12;
+		uint32_t livePage = surfLive >> 12;
+
+		if (v60Count <= 5 || v60Count == 10 || v60Count == 20) {
+			SYSLOG("ngreen", "V87[%d]: SURF=0x%x SURFLIVE=0x%x %s",
+				   v60Count, surfAddr, surfLive,
+				   (surfAddr == surfLive) ? "MATCH" : "MISMATCH!");
+		}
+
+		// 2. Scan planes on Pipe A (diagnostic, first 3 iters only)
 		if (v60Count <= 3) {
-			uint32_t curCtl = NGreen::callback->readReg32(0x70080);  // CUR_CTL
-			uint32_t curSurf = NGreen::callback->readReg32(0x70084); // CUR_BASE (or CUR_SURF)
-			SYSLOG("ngreen", "V86[%d]: CUR_CTL=0x%x CUR_SURF=0x%x", v60Count, curCtl, curSurf);
+			// Also check Pipe B plane 1 in case eDP is on pipe B
+			uint32_t pipeAconf = NGreen::callback->readReg32(0x70008);
+			uint32_t pipeBconf = NGreen::callback->readReg32(0x71008);
+			uint32_t pipeBctl = NGreen::callback->readReg32(0x71180);
+			uint32_t pipeBsurf = NGreen::callback->readReg32(0x7119C);
+			uint32_t pipeBsurflive = NGreen::callback->readReg32(0x711AC);
+			SYSLOG("ngreen", "V87[%d]: PipeA_CONF=0x%x PipeB_CONF=0x%x",
+				   v60Count, pipeAconf, pipeBconf);
+			SYSLOG("ngreen", "V87[%d]: PipeB PL1_CTL=0x%x SURF=0x%x LIVE=0x%x",
+				   v60Count, pipeBctl, pipeBsurf, pipeBsurflive);
 
 			for (int pn = 1; pn <= 7; pn++) {
 				uint32_t plCtl = NGreen::callback->readReg32(0x70080 + pn * 0x100);
-				uint32_t plSurf = NGreen::callback->readReg32(0x7009C + pn * 0x100);
-				uint32_t plStride = NGreen::callback->readReg32(0x70088 + pn * 0x100);
-				uint32_t plSize = NGreen::callback->readReg32(0x70090 + pn * 0x100);
 				if (plCtl & 0x80000000u) {
-					SYSLOG("ngreen", "V86[%d]: PLANE%d ACTIVE CTL=0x%x SURF=0x%x STR=0x%x SZ=0x%x",
-						   v60Count, pn, plCtl, plSurf, plStride, plSize);
-				} else if (pn <= 3) {
-					SYSLOG("ngreen", "V86[%d]: PLANE%d off CTL=0x%x", v60Count, pn, plCtl);
+					uint32_t plSurf = NGreen::callback->readReg32(0x7009C + pn * 0x100);
+					SYSLOG("ngreen", "V87[%d]: PipeA PLANE%d ACTIVE CTL=0x%x SURF=0x%x",
+						   v60Count, pn, plCtl, plSurf);
 				}
 			}
 		}
 
-		// 2. DISABLE planes 2-7 if active — they render on top of plane 1
-		for (int pn = 2; pn <= 7; pn++) {
-			uint32_t plCtl = NGreen::callback->readReg32(0x70080 + pn * 0x100);
-			if (plCtl & 0x80000000u) {
-				NGreen::callback->writeReg32(0x70080 + pn * 0x100, plCtl & ~0x80000000u);
-				// Must write SURF to trigger the update (double-buffered)
-				uint32_t plSurf = NGreen::callback->readReg32(0x7009C + pn * 0x100);
-				NGreen::callback->writeReg32(0x7009C + pn * 0x100, plSurf);
-			}
-		}
-		// Disable cursor plane if active
-		uint32_t curCtl = NGreen::callback->readReg32(0x70080);
-		if (curCtl & 0x80000000u) {
-			// Don't disable cursor — it proves WS is alive. Just log it.
-			if (v60Count <= 3)
-				SYSLOG("ngreen", "V86[%d]: cursor ACTIVE (keeping)", v60Count);
-		}
-
-		// 3. Fix PLANE_CTL format: force XRGB 8888 (format=0x2) instead of
-		//    current format 0x4 (XRGB 2:10:10:10). Keep all other bits.
-		uint32_t planCtl = NGreen::callback->readReg32(0x70180);
-		uint32_t curFmt = (planCtl >> 24) & 0xF;
-		if (curFmt != 0x2) {
-			uint32_t newCtl = (planCtl & ~(0xFu << 24)) | (0x2u << 24);
-			NGreen::callback->writeReg32(0x70180, newCtl);
-			if (v60Count <= 5)
-				SYSLOG("ngreen", "V86[%d]: format fix 0x%x->0x%x (fmt %d->2)",
-					   v60Count, planCtl, newCtl, curFmt);
-		}
-
-		// 4. Fill framebuffer — ALL 4000 pages (covers full 2560x1600x4 = 16MB)
-		uint32_t surfAddr = NGreen::callback->readReg32(0x7019C);
-		uint32_t surfPage = surfAddr >> 12;
+		// 3. Fill BOTH SURF and SURFLIVE page ranges with magenta
+		//    (in case they point to different buffers)
 		int filled = 0, failed = 0, skipped = 0;
-		uint32_t firstPx = 0, midPx = 0;
+		uint32_t firstPx = 0;
 		uint64_t firstPhys = 0;
 
+		// Fill the SURF (pending) pages — 4000 pages
 		for (int p = 0; p < 4000; p++) {
 			uint32_t lo = NGreen::callback->readReg32(GGTT_PTE_LO(surfPage + p));
 			uint32_t hi = NGreen::callback->readReg32(GGTT_PTE_HI(surfPage + p));
@@ -2072,8 +2056,6 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 						v85SurfAddr = surfAddr;
 					}
 				}
-				if (p == 2000)
-					midPx = fb[0];
 				for (int px = 0; px < 1024; px++)
 					fb[px] = 0xFFFF00FF;
 				filled++;
@@ -2082,13 +2064,39 @@ void Gen11::v60GpuHealthMonitor(thread_call_param_t param0, thread_call_param_t 
 			desc->release();
 		}
 
-		// 5. Re-arm PLANE_SURF to commit updates
+		// 4. If SURFLIVE differs, fill THOSE pages too
+		int liveFilled = 0;
+		if (surfLive != surfAddr && livePage > 0) {
+			for (int p = 0; p < 4000; p++) {
+				uint32_t lo = NGreen::callback->readReg32(GGTT_PTE_LO(livePage + p));
+				uint32_t hi = NGreen::callback->readReg32(GGTT_PTE_HI(livePage + p));
+				uint64_t phys = (((uint64_t)hi << 32) | lo) & 0x0000FFFFFFFFF000ULL;
+				if (!(lo & 1) || phys == 0) continue;
+				if (phys < 0x40000000ULL) continue;
+
+				auto *desc = IOMemoryDescriptor::withPhysicalAddress(
+					(IOPhysicalAddress)phys, 4096, kIODirectionInOut);
+				if (!desc) continue;
+				auto *map = desc->createMappingInTask(kernel_task, 0,
+					kIOMapAnywhere | kIOMapInhibitCache, 0, 4096);
+				if (map) {
+					volatile uint32_t *fb = (volatile uint32_t *)map->getVirtualAddress();
+					for (int px = 0; px < 1024; px++)
+						fb[px] = 0xFFFF00FF;
+					liveFilled++;
+					map->release();
+				}
+				desc->release();
+			}
+		}
+
+		// 5. Re-arm PLANE_SURF
 		if (filled > 0)
 			NGreen::callback->writeReg32(0x7019C, surfAddr);
 
 		if (v60Count <= 5 || v60Count == 10 || v60Count == 20) {
-			SYSLOG("ngreen", "V86[%d]: SURF=0x%x filled=%d fail=%d skip=%d px0=0x%x mid=0x%x phys=0x%llx",
-				   v60Count, surfAddr, filled, failed, skipped, firstPx, midPx,
+			SYSLOG("ngreen", "V87[%d]: filled=%d liveFilled=%d fail=%d skip=%d px0=0x%x phys=0x%llx",
+				   v60Count, filled, liveFilled, failed, skipped, firstPx,
 				   (unsigned long long)firstPhys);
 		}
 	}
@@ -2248,32 +2256,37 @@ void Gen11::v71EmrEnforcer(thread_call_param_t param0, thread_call_param_t param
 				}
 			}
 
-			// V86: Fast persistent fill + overlay disable + format fix every 50ms
+			// V87: Fill page 0 + SURFLIVE page 0 every 50ms
 			{
-				// Disable overlay planes 2-7 continuously
-				for (int pn = 2; pn <= 7; pn++) {
-					uint32_t plCtl = NGreen::callback->readReg32(0x70080 + pn * 0x100);
-					if (plCtl & 0x80000000u) {
-						NGreen::callback->writeReg32(0x70080 + pn * 0x100, plCtl & ~0x80000000u);
-						uint32_t plSurf = NGreen::callback->readReg32(0x7009C + pn * 0x100);
-						NGreen::callback->writeReg32(0x7009C + pn * 0x100, plSurf);
-					}
-				}
-				// Fix PLANE_CTL format to XRGB 8888 (format=2)
-				uint32_t planCtl = NGreen::callback->readReg32(0x70180);
-				uint32_t curFmt = (planCtl >> 24) & 0xF;
-				if (curFmt != 0x2) {
-					uint32_t newCtl = (planCtl & ~(0xFu << 24)) | (0x2u << 24);
-					NGreen::callback->writeReg32(0x70180, newCtl);
-				}
-
-				// Fill page 0 from persistent mapping
+				// Fill SURF page 0 from persistent mapping
 				if (v85PersistMap) {
 					volatile uint32_t *fb = (volatile uint32_t *)v85PersistMap->getVirtualAddress();
 					for (int px = 0; px < 1024; px++)
 						fb[px] = 0xFFFF00FF;
-					// Re-arm SURF
 					NGreen::callback->writeReg32(0x7019C, v85SurfAddr);
+				}
+				// Also fill SURFLIVE page 0 if different
+				uint32_t surfLive = NGreen::callback->readReg32(0x701AC);
+				if (surfLive != v85SurfAddr && surfLive != 0) {
+					uint32_t lp = surfLive >> 12;
+					uint32_t lo = NGreen::callback->readReg32(GGTT_PTE_LO(lp));
+					uint32_t hi = NGreen::callback->readReg32(GGTT_PTE_HI(lp));
+					uint64_t phys = (((uint64_t)hi << 32) | lo) & 0x0000FFFFFFFFF000ULL;
+					if ((lo & 1) && phys >= 0x40000000ULL) {
+						auto *desc = IOMemoryDescriptor::withPhysicalAddress(
+							(IOPhysicalAddress)phys, 4096, kIODirectionInOut);
+						if (desc) {
+							auto *map = desc->createMappingInTask(kernel_task, 0,
+								kIOMapAnywhere | kIOMapInhibitCache, 0, 4096);
+							if (map) {
+								volatile uint32_t *fb = (volatile uint32_t *)map->getVirtualAddress();
+								for (int px = 0; px < 1024; px++)
+									fb[px] = 0xFFFF00FF;
+								map->release();
+							}
+							desc->release();
+						}
+					}
 				}
 			}
 		}
