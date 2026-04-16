@@ -2227,51 +2227,10 @@ void Gen11::v71EmrEnforcer(thread_call_param_t param0, thread_call_param_t param
 			   v71Count, emrRcs, emrBcs, err);
 	}
 
-	// ── V80: Force linear tiling on display plane — 50ms enforcement ──
-	// V79 proved the writeReg32 hooks fix tiling, but the framebuffer driver
-	// writes PLANE_STRIDE via direct MMIO (bypassing hooks), resetting stride
-	// to X-tiled units. The display then shows bars because the stride is
-	// wrong for linear mode. Fix both tiling and stride every 50ms.
-	{
-		uint32_t planCtl  = NGreen::callback->readReg32(0x70180); // PLANE_CTL
-		bool planeEnabled = (planCtl >> 31) & 1;
-		if (planeEnabled) {
-			uint32_t tilingBits = (planCtl >> 10) & 0x7;
-			uint32_t planStrd = NGreen::callback->readReg32(0x70188); // PLANE_STRIDE
-			// Compute expected linear stride from PIPE_SRC width
-			uint32_t pipeSrc = NGreen::callback->readReg32(0x6001C); // PIPE_SRCSZ_A
-			uint32_t width = ((pipeSrc >> 16) & 0xFFF) + 1;
-			uint32_t expectedStride = (width * 4) / 64; // XRGB8888, 64B cacheline units
-			bool needFix = false;
-			if (tilingBits != 0) {
-				NGreen::callback->writeReg32(0x70180, planCtl & ~(0x7u << 10));
-				needFix = true;
-			}
-			if (planStrd != expectedStride && expectedStride > 0) {
-				NGreen::callback->writeReg32(0x70188, expectedStride);
-				needFix = true;
-			}
-			if (needFix) {
-				// Re-arm PLANE_SURF to latch changes
-				uint32_t surf = NGreen::callback->readReg32(0x7019C);
-				NGreen::callback->writeReg32(0x7019C, surf);
-				if (v71Count <= 5) {
-					SYSLOG("ngreen", "V80[%d]: tiling=%d stride=0x%x->0x%x w=%d",
-						   v71Count, tilingBits, planStrd, expectedStride, width);
-				}
-			}
-
-			// V88: Fill page 0 with RED (band color) every 50ms
-			{
-				if (v85PersistMap) {
-					volatile uint32_t *fb = (volatile uint32_t *)v85PersistMap->getVirtualAddress();
-					for (int px = 0; px < 1024; px++)
-						fb[px] = 0xFFFF0000;  // RED (matches top band)
-					NGreen::callback->writeReg32(0x7019C, v85SurfAddr);
-				}
-			}
-		}
-	}
+	// Display-state forcing experiments (V80/V88/V89/V90) are disabled.
+	// They were useful for isolation while the system booted in headless mode,
+	// but now that OpenCore injects the framebuffer ID early, let the native
+	// Apple display pipeline own plane/scaler/cursor/PSR state.
 
 	// V74: Re-arm FOREVER — never stop. 50ms interval.
 	// Thread_call_allocate is lightweight; each timer fires once and is freed.
@@ -2913,30 +2872,35 @@ bool Gen11::start(void *that,void  *param_1)
 		v45ScheduleDelayedCheck(that, 120000);
 		SYSLOG("ngreen", "V59: scheduled delayed child checks at T+3,10,15,20,30,60,120s");
 		
-		// V60: Start health monitor (2s interval, 120s) — active ERROR_GEN6 suppression.
-		// V57 timer-based R/W clear proven for IGAccelDevice stability (10 children).
-		{
-			auto monTimer = thread_call_allocate(v60GpuHealthMonitor,
+		// V60/V74 are RPL/ADL stability workarounds. Keep native path on real TGL.
+		if (!NGreen::callback->isRealTGL) {
+			// V60: Start health monitor (2s interval, 120s) — active ERROR_GEN6 suppression.
+			// V57 timer-based R/W clear proven for IGAccelDevice stability (10 children).
+			{
+				auto monTimer = thread_call_allocate(v60GpuHealthMonitor,
 												 static_cast<thread_call_param_t>(static_cast<IOService *>(that)));
-			if (monTimer) {
-				uint64_t deadline;
-				clock_interval_to_deadline(2, kSecondScale, &deadline);
-				thread_call_enter_delayed(monTimer, deadline);
-				SYSLOG("ngreen", "V60: GPU health monitor armed — 2s interval, 60 iterations (120s)");
+				if (monTimer) {
+					uint64_t deadline;
+					clock_interval_to_deadline(2, kSecondScale, &deadline);
+					thread_call_enter_delayed(monTimer, deadline);
+					SYSLOG("ngreen", "V60: GPU health monitor armed — 2s interval, 60 iterations (120s)");
+				}
 			}
-		}
-		// V74: Start PERMANENT EMR enforcer — 50ms interval, runs forever.
-		// V71 proved 30s window works; V72 proved Apple uses direct MMIO for EMR.
-		// Device dies the moment timer stops → never stop it.
-		{
-			auto emrTimer = thread_call_allocate(v71EmrEnforcer,
+			// V74: Start PERMANENT EMR enforcer — 50ms interval, runs forever.
+			// V71 proved 30s window works; V72 proved Apple uses direct MMIO for EMR.
+			// Device dies the moment timer stops → never stop it.
+			{
+				auto emrTimer = thread_call_allocate(v71EmrEnforcer,
 												 static_cast<thread_call_param_t>(static_cast<IOService *>(that)));
-			if (emrTimer) {
-				uint64_t deadline;
-				clock_interval_to_deadline(50, kMillisecondScale, &deadline);
-				thread_call_enter_delayed(emrTimer, deadline);
-				SYSLOG("ngreen", "V74: EMR enforcer armed — 50ms interval, PERMANENT");
+				if (emrTimer) {
+					uint64_t deadline;
+					clock_interval_to_deadline(50, kMillisecondScale, &deadline);
+					thread_call_enter_delayed(emrTimer, deadline);
+					SYSLOG("ngreen", "V74: EMR enforcer armed — 50ms interval, PERMANENT");
+				}
 			}
+		} else {
+			SYSLOG("ngreen", "V60/V74 skipped on real TGL");
 		}
 	}
 	
@@ -3922,7 +3886,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 	// GT workarounds moved AFTER start (ForceWake must be held for GT regs 0x0-0x7FFF).
 	
 	SYSLOG("ngreen", "AppleIntelBaseControllerstart: applying display workarounds");
-	
+
 	// Disable DC states during init to prevent power domain conflicts
 	NGreen::callback->writeReg32(DC_STATE_EN, 0);
 	
@@ -4471,13 +4435,18 @@ uint8_t Gen11::hwRegsNeedUpdate
 
 void Gen11::computeLaneCount(void *that, const void *timing, unsigned int linkRate, unsigned int bpp, unsigned int *laneCount) {
 	FunctionCast(computeLaneCount, callback->ocomputeLaneCount)(that, timing, linkRate, bpp, laneCount);
-	// BIOS trains the eDP link at 4 lanes (HBR3 x4).  The driver correctly computes
-	// that 2 lanes suffice for 285.6 MHz @ 24 bpp, but writing 2 into DDI_FUNC_CTL
-	// without link retraining causes a PHY/transcoder lane count mismatch.
-	// Force 4 lanes to match the BIOS-trained link configuration.
-	if (laneCount && *laneCount < 4) {
-		DBGLOG("ngreen", "computeLaneCount: forcing lane count from %u to 4", *laneCount);
-		*laneCount = 4;
+	// V90: Stop forcing 4 lanes unconditionally. The moving "untuned TV" artifact
+	// suggests unstable link/refresh timing; preserve Apple's lane decision and log it.
+	if (laneCount) {
+		static int v90LaneCountLogs = 0;
+		if (v90LaneCountLogs < 20) {
+			v90LaneCountLogs++;
+			SYSLOG("ngreen", "V90L[%d]: linkRate=%u bpp=%u laneCount=%u",
+			       v90LaneCountLogs, linkRate, bpp, *laneCount);
+		}
+		// Keep a conservative fallback only for clearly invalid output.
+		if (*laneCount == 0)
+			*laneCount = 4;
 	}
 }
 

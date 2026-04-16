@@ -73,7 +73,7 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 	} else {
 		DBGLOG("ngreen", "DYLD patches disabled by boot argument -nbdyldoff");
 	}
-	
+
     auto *devInfo = DeviceInfo::create();
     if (devInfo) {
         devInfo->processSwitchOff();
@@ -91,9 +91,6 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
         static uint8_t builtin[] = {0x00};
 		//static uint8_t builtin2[] = {0x02, 0x00, 0x5c, 0x8A};
 		//static uint8_t builtin3[] = {0x5c, 0x8A,0x00,0x00};
-		
-		static uint8_t builtin2[] = {0x00, 0x00, 0x49, 0x9A};
-		static uint8_t builtin3[] = {0x49, 0x9A,0x00,0x00};
 
 		WIOKit::renameDevice(this->iGPU, "IGPU");
 		WIOKit::awaitPublishing(this->iGPU);
@@ -124,10 +121,6 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		auto *prop = OSDynamicCast(OSData, this->iGPU->getProperty("saved-config"));
 		if (!prop) this->iGPU->setProperty("saved-config", sconf, 0xea);
 			
-		this->iGPU->setProperty("AAPL,ig-platform-id", builtin2, arrsize(builtin2));
-		this->iGPU->setProperty("device-id", builtin3, arrsize(builtin3));
-
-
 		//auto x = OSDynamicCast(OSData, this->iGPU->getProperty("AAPL,ig-platform-id"));
 		//framebufferId = *(uint32_t*)x->getBytesNoCopy();
 		
