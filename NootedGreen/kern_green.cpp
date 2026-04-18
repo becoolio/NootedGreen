@@ -10,6 +10,7 @@
 #include "kern_patcherplus.hpp"
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_devinfo.hpp>
+#include <IOKit/IOCatalogue.h>
 
 
 static const char *pathIOAcceleratorFamily2= "/System/Library/Extensions/IOAcceleratorFamily2.kext/Contents/MacOS/IOAcceleratorFamily2";
@@ -96,6 +97,7 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		WIOKit::awaitPublishing(this->iGPU);
 		
 		static uint8_t sconf[] = {};
+		static uint8_t platformId[] = {0x00, 0x00, 0x49, 0x9A};
 		
 		static uint8_t panel[] = {0x01, 0x00, 0x00, 0x00};
 		/*static uint8_t panel1[] = {0x19, 0x01, 0x00, 0x00};
@@ -120,6 +122,7 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		
 		auto *prop = OSDynamicCast(OSData, this->iGPU->getProperty("saved-config"));
 		if (!prop) this->iGPU->setProperty("saved-config", sconf, 0xea);
+		this->iGPU->setProperty("AAPL,ig-platform-id", platformId, arrsize(platformId));
 			
 		//auto x = OSDynamicCast(OSData, this->iGPU->getProperty("AAPL,ig-platform-id"));
 		//framebufferId = *(uint32_t*)x->getBytesNoCopy();
@@ -166,6 +169,52 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		// Set framebuffer-unifiedmem = 1536 MB (0x60000000) for proper VRAM reporting
 		static uint8_t unifiedMem[] = {0x00, 0x00, 0x00, 0x60}; // 0x60000000 = 1536 MB
 		this->iGPU->setProperty("framebuffer-unifiedmem", unifiedMem, arrsize(unifiedMem));
+
+		// The installed TGL framebuffer kext uses a placeholder IOPCIPrimaryMatch, so
+		// publish a real personality for 0x9A49 to let IOKit load and match it.
+		auto *fbDict = OSDictionary::withCapacity(8);
+		if (fbDict) {
+			auto *bi = OSString::withCString("com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer");
+			auto *cls = OSString::withCString("AppleIntelFramebufferController");
+			auto *cat = OSString::withCString("IOFramebuffer");
+			auto *prov = OSString::withCString("IOPCIDevice");
+			auto *pciClass = OSString::withCString("0x03000000&0xff000000");
+			auto *pciMatch = OSString::withCString("0x9A498086");
+			auto *src = OSString::withCString("0.0.0.0.0");
+			auto *score = OSNumber::withNumber(static_cast<unsigned long long>(80000), 32);
+
+			fbDict->setObject("CFBundleIdentifier", bi);
+			fbDict->setObject("IOClass", cls);
+			fbDict->setObject("IOMatchCategory", cat);
+			fbDict->setObject("IOProviderClass", prov);
+			fbDict->setObject("IOPCIClassMatch", pciClass);
+			fbDict->setObject("IOPCIPrimaryMatch", pciMatch);
+			fbDict->setObject("IOSourceVersion", src);
+			fbDict->setObject("IOProbeScore", score);
+
+			OSSafeReleaseNULL(bi);
+			OSSafeReleaseNULL(cls);
+			OSSafeReleaseNULL(cat);
+			OSSafeReleaseNULL(prov);
+			OSSafeReleaseNULL(pciClass);
+			OSSafeReleaseNULL(pciMatch);
+			OSSafeReleaseNULL(src);
+			OSSafeReleaseNULL(score);
+
+			auto *array = OSArray::withCapacity(1);
+			if (array) {
+				array->setObject(fbDict);
+				if (gIOCatalogue) {
+					bool ok = gIOCatalogue->addDrivers(array, true);
+					SYSLOG("ngreen", "Published TGL framebuffer personality for 0x9A49: %d", ok);
+					this->iGPU->registerService();
+				} else {
+					SYSLOG("ngreen", "Failed to publish TGL framebuffer personality: gIOCatalogue is null");
+				}
+				array->release();
+			}
+			fbDict->release();
+		}
 		
 		KernelPatcher::routeVirtual(this->iGPU, WIOKit::PCIConfigOffset::ConfigRead16, configRead16, &orgConfigRead16);
 		KernelPatcher::routeVirtual(this->iGPU, WIOKit::PCIConfigOffset::ConfigRead32, configRead32, &orgConfigRead32);
@@ -387,4 +436,3 @@ bool NGreen::wrapApplePanelSetDisplay(IOService *that, IODisplay *display) {
 	bool ret = FunctionCast(wrapApplePanelSetDisplay, callback->orgApplePanelSetDisplay)(that, display);
 	return ret;
 }
-
