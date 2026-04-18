@@ -37,6 +37,20 @@ static Gen11 gen11;
 static DYLDPatches dyldpatches;
 static HDMI agfxhda;
 
+static uint8_t builtin2[] = {0x00, 0x00, 0x49, 0x9A};
+static uint8_t builtin3[] = {0x49, 0x9A, 0x00, 0x00};
+
+static bool shouldForceRPLBringupPlatform(IORegistryEntry *entry) {
+	auto *prop = OSDynamicCast(OSData, entry ? entry->getProperty("AAPL,ig-platform-id") : nullptr);
+	if (!prop || prop->getLength() < sizeof(uint32_t)) {
+		return true;
+	}
+
+	uint32_t platformId = *reinterpret_cast<const uint32_t *>(prop->getBytesNoCopy());
+	// 0x8A5C0002 is undefined for the currently used TGL framebuffer path on this setup.
+	return platformId == 0x8A5C0002U;
+}
+
 static bool isLegacyIGPUPropSeedingEnabled() {
 	int enabled = 0;
 	if (PE_parse_boot_argn("ngreenforceprops", &enabled, sizeof(enabled))) {
@@ -53,10 +67,14 @@ static bool seedIGPUPropertiesOnEntry(IORegistryEntry *entry) {
 
 	bool changed = false;
 
-	// Default fallback platform-id for TGL framebuffers. Only inject when missing.
+	// Default fallback platform-id for RPL/TGL spoof bring-up. Only inject when missing.
 	if (!entry->getProperty("AAPL,ig-platform-id")) {
-		static uint8_t platformId[] = {0x02, 0x00, 0x5C, 0x8A};
-		entry->setProperty("AAPL,ig-platform-id", platformId, arrsize(platformId));
+		entry->setProperty("AAPL,ig-platform-id", builtin2, arrsize(builtin2));
+		changed = true;
+	}
+
+	if (!entry->getProperty("device-id")) {
+		entry->setProperty("device-id", builtin3, arrsize(builtin3));
 		changed = true;
 	}
 
@@ -184,12 +202,16 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		this->iGPU->setMemoryEnable(true);
 		
 
-        static uint8_t builtin[] = {0x00};
-		//static uint8_t builtin2[] = {0x02, 0x00, 0x5c, 0x8A};
-		//static uint8_t builtin3[] = {0x5c, 0x8A,0x00,0x00};
+		static uint8_t builtin[] = {0x00};
 
 		WIOKit::renameDevice(this->iGPU, "IGPU");
 		WIOKit::awaitPublishing(this->iGPU);
+		if (shouldForceRPLBringupPlatform(this->iGPU)) {
+			this->iGPU->setProperty("AAPL,ig-platform-id", builtin2, arrsize(builtin2));
+			this->iGPU->setProperty("device-id", builtin3, arrsize(builtin3));
+			SYSLOG("ngreen", "applied RPL bring-up platform override (ig-platform-id=0x9A490000, device-id=0x00009A49)");
+		}
+
 		if (isLegacyIGPUPropSeedingEnabled()) {
 			seedIGPUPropertiesOnEntry(this->iGPU);
 		}
