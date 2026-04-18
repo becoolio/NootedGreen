@@ -3926,7 +3926,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 		if (service) {
 			SYSLOG("ngreen", "FBController: injecting IntelAccelerator personality into IOCatalogue");
 			
-			auto *dict = OSDictionary::withCapacity(24);
+			auto *dict = OSDictionary::withCapacity(25);
 			if (dict) {
 				// Basic matching properties
 				auto *bi  = OSString::withCString("com.xxxxx.driver.AppleIntelTGLGraphics");
@@ -3934,6 +3934,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 				auto *mc  = OSString::withCString("IOAccelerator");
 				auto *pv  = OSString::withCString("IOPCIDevice");
 				auto *pcm = OSString::withCString("0x03000000&0xff000000");
+				auto *ppm = OSString::withCString("0x9A498086");
 				auto *ps  = OSNumber::withNumber(static_cast<unsigned long long>(1000), 32);
 				
 				dict->setObject("CFBundleIdentifier", bi);
@@ -3941,6 +3942,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 				dict->setObject("IOMatchCategory", mc);
 				dict->setObject("IOProviderClass", pv);
 				dict->setObject("IOPCIClassMatch", pcm);
+				dict->setObject("IOPCIPrimaryMatch", ppm);
 				dict->setObject("IOProbeScore", ps);
 				
 				OSSafeReleaseNULL(bi);
@@ -3948,6 +3950,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 				OSSafeReleaseNULL(mc);
 				OSSafeReleaseNULL(pv);
 				OSSafeReleaseNULL(pcm);
+				OSSafeReleaseNULL(ppm);
 				OSSafeReleaseNULL(ps);
 				
 				// V44: GPU driver bundle names — required by IOAcceleratorFamily2 and WindowServer
