@@ -206,11 +206,6 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 
 		WIOKit::renameDevice(this->iGPU, "IGPU");
 		WIOKit::awaitPublishing(this->iGPU);
-		if (shouldForceRPLBringupPlatform(this->iGPU)) {
-			this->iGPU->setProperty("AAPL,ig-platform-id", builtin2, arrsize(builtin2));
-			this->iGPU->setProperty("device-id", builtin3, arrsize(builtin3));
-			SYSLOG("ngreen", "applied RPL bring-up platform override (ig-platform-id=0x9A490000, device-id=0x00009A49)");
-		}
 
 		if (isLegacyIGPUPropSeedingEnabled()) {
 			seedIGPUPropertiesOnEntry(this->iGPU);

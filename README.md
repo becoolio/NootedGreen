@@ -12,20 +12,21 @@ Patches Apple's Tiger Lake (Gen12) graphics drivers to work with newer Intel iGP
 
 ### Important (Current Test State)
 
-- Early IGPU identity detection is now fixed on the test RPL setup: Lilu reads `AAPL,ig-platform-id` (`9A490000`) during `DeviceInfo` scan.
-- The former early fallback (`"frame without connectors"`) is no longer the primary blocker on this setup.
-- **Visual output is still unstable/corrupted after driver takeover** (post-init display programming issue).
-- Current branch is experimental and tuned to active test hardware; cross-platform behavior is not fully validated yet.
+- **CRITICAL FIX (V75):** Removed post-`awaitPublishing` property override that was causing cursor corruption (TV static). Display now stable.
+- Early IGPU identity detection is confirmed working: Lilu reads `AAPL,ig-platform-id` (`9A490000`) via OpenCore DeviceProperties during `DeviceInfo` scan.
+- Platform-ID and device-ID injection now handled cleanly by config.plist only — NootedGreen no longer interferes mid-initialization.
+- System boots to login screen reliably with no visual corruption or kernel panics.
 
-### Recent Progress (V72–V74)
+### Recent Progress (V72–V75)
 
+- **V75:** **CRITICAL FIX** — Removed post-`awaitPublishing` property override race condition. NootedGreen was modifying `AAPL,ig-platform-id` and `device-id` AFTER publishing IGPU to the registry, causing the TGL framebuffer driver to read properties mid-initialization. This resulted in cursor corruption (TV static on ring buffer). Platform-ID and device-ID are now injected cleanly via OpenCore config.plist only. Display output now stable and corruption-free.
 - **V74:** Permanent EMR enforcer — 50ms timer runs indefinitely, keeping ERROR_GEN6 masked. System survives full boot without kernel panic. IGAccelDevice stays alive (dev=0x1e at V60M[60]).
 - **V73:** Fixed double-dereference crash in blit3D initialize hook. Three `IGHardwareBlit3DContext::initialize()` calls now complete successfully.
 - **V72:** EMR write interception on all MMIO write paths (discovered Apple uses direct MMIO, not WriteRegister32 — hooks don't fire, but timer approach works).
 
-### Current Blocker
+### Current Status (V75)
 
-Display output remains unstable/corrupted after driver takeover. The early headless fallback path was addressed on test hardware, but post-init display programming still needs investigation/validation.
+**RESOLVED:** Display output is now stable and corruption-free. Platform-ID and device-ID injection no longer race with framebuffer driver initialization. System boots to login screen without visual artifacts or kernel panics. Cursor rendering is correct. Next focus: GPU memory pressure testing and prolonged load stability.
 
 ## Requirements
 
@@ -37,13 +38,16 @@ Display output remains unstable/corrupted after driver takeover. The early headl
 For current RPL test configuration, OpenCore `DeviceProperties` IGPU injection is required:
 
 - `PciRoot(0x0)/Pci(0x2,0x0)`
-- `AAPL,ig-platform-id` = `0000499A`
-- `device-id` = `499A0000`
-- `built-in` = `00`
+- `AAPL,ig-platform-id` = `AABJmg==` (0x9A490000 in little-endian)
+- `device-id` = `SZoAAA==` (0x9A490000 in little-endian)
+- `force-online` = `AQAAAA==` (enable force-online WEG patch)
+- `complete-modeset` = `AQAAAA==` (enable complete-modeset WEG patch)
+- `rps-control` = `AQAAAA==` (enable rps-control WEG patch)
+- `built-in` = `AA==`
 - `AAPL,slot-name` = `built-in`
 - `hda-gfx` = `onboard-1`
 
-Without these properties on the active test setup, Lilu may not pick the intended framebuffer personality during early boot.
+These properties are essential for correct platform identification and WEG coexistence mode on RPL with TGL driver spoof.
 
 ## Boot args
 
