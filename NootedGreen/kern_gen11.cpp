@@ -162,7 +162,6 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		NGreen::callback->setRMMIOIfNecessary();
 		
 		const bool wegCoexist = isWEGCoexistMode();
-		const bool forceFullMTL = shouldForceFullMetalPath();
 		if (wegCoexist) {
 			SYSLOG("nblue", "WEG coexist mode enabled: skipping NootedBlue CDCLK route overlap");
 		}
@@ -768,6 +767,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		 */
 		
 		const bool wegCoexist = isWEGCoexistMode();
+		const bool forceFullMTL = shouldForceFullMetalPath();
 
 		RouteRequestPlus requests[] = {
 			
