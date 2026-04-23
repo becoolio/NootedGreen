@@ -117,6 +117,15 @@ static bool isReferenceF2ProbeEnabled() {
 	return checkKernelArgument("-ngreenRefProbeF2");
 }
 
+static bool shouldForceFullMetalPath() {
+	int enabled = 0;
+	if (PE_parse_boot_argn("ngreenfullmtl", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	return checkKernelArgument("-ngreenfullmtl");
+}
+
 static bool isV88ScanoutFillEnabled() {
 	int enabled = 0;
 	if (PE_parse_boot_argn("ngreenv88", &enabled, sizeof(enabled))) {
@@ -153,6 +162,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		NGreen::callback->setRMMIOIfNecessary();
 		
 		const bool wegCoexist = isWEGCoexistMode();
+		const bool forceFullMTL = shouldForceFullMetalPath();
 		if (wegCoexist) {
 			SYSLOG("nblue", "WEG coexist mode enabled: skipping NootedBlue CDCLK route overlap");
 		}
@@ -801,7 +811,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route loadGuCBinary");
 		}
 
-		if (!wegCoexist) {
+		if (!wegCoexist || forceFullMTL) {
 			RouteRequestPlus coexistOffRoutes[] = {
 				// ForceWake: replace Apple's SafeForceWakeMultithreaded with i915-ported version.
 				// Apple's code uses 90ms timeouts and no fallback; ours uses 50ms + reserve-bit fallback.
@@ -809,13 +819,19 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{"__ZN16IntelAccelerator26SafeForceWakeMultithreadedEbjj", forceWake, this->oforceWake},
 			};
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, coexistOffRoutes, address, size), "ngreen", "Failed to route coexist-off symbols");
+			if (forceFullMTL && wegCoexist) {
+				SYSLOG("ngreen", "FULL_MTL: forcing SafeForceWakeMultithreaded route despite coexist mode");
+			}
 		}
 
-		if (!wegCoexist) {
+		if (!wegCoexist || forceFullMTL) {
 			RouteRequestPlus gpuInfoRoute[] = {
 				{"__ZN16IntelAccelerator10getGPUInfoEv", getGPUInfo, this->ogetGPUInfo},
 			};
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, gpuInfoRoute, address, size), "ngreen", "Failed to route getGPUInfo");
+			if (forceFullMTL && wegCoexist) {
+				SYSLOG("ngreen", "FULL_MTL: forcing getGPUInfo route despite coexist mode");
+			}
 		}
 
 		// SKU/device-ID panic bypass (verified @ 0x23c1d in LE binary)
