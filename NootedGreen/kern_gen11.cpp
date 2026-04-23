@@ -905,18 +905,26 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		// NOPing the je lets deviceStart always take the success path so IOServiceOpen
 		// succeeds, MTLDevice is non-nil, and WindowServer stops hanging.
 		//
-		// Pattern (unique @ 0x9c82 in LE binary):
+		// Pattern (masked, Sonoma-variant tolerant):
 		//   ff 90 70 09 00 00  callq *0x970(%rax)   ← readiness vtable call
 		//   84 c0              testb %al,%al
-		//   74 1d              je failure_path       ← PATCH: 74 1d → 90 90
-		//   48 8d 05           leaq ...              ← success path
+		//   74 xx              je failure_path       ← PATCH: 74 xx → 90 90
+		//   48 8d xx           lea ...               ← allow minor compiler/reg variance
 		static const uint8_t f_devstart[] = {
 			0xff, 0x90, 0x70, 0x09, 0x00, 0x00,
-			0x84, 0xc0, 0x74, 0x1d, 0x48, 0x8d, 0x05
+			0x84, 0xc0, 0x74, 0x00, 0x48, 0x8d, 0x00
+		};
+		static const uint8_t m_devstart[] = {
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+			0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0x00
 		};
 		static const uint8_t r_devstart[] = {
 			0xff, 0x90, 0x70, 0x09, 0x00, 0x00,
-			0x84, 0xc0, 0x90, 0x90, 0x48, 0x8d, 0x05
+			0x84, 0xc0, 0x90, 0x90, 0x48, 0x8d, 0x00
+		};
+		static const uint8_t rm_devstart[] = {
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00
 		};
 		
 
@@ -939,7 +947,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 					{activeKext, f3b, r3b, arrsize(f3b),	1},      // L3BankCount=8
 					{activeKext, f3bb, r3bb, arrsize(f3bb),	1},    // MaxEU/SS=8
 					{activeKext, f3bbb, r3bbb, arrsize(f3bbb),	1},// NumSubSlices=12
-					{activeKext, f_devstart, r_devstart, arrsize(f_devstart), 1}, // BCS bypass
+					{activeKext, f_devstart, m_devstart, r_devstart, rm_devstart, arrsize(f_devstart), 1}, // BCS bypass
 				};
 				PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesRPL, address, size), "ngreen",
 					"kextG11HWT Failed to apply RPL-specific patches!");
