@@ -7,39 +7,35 @@
 #include <IOKit/IOCatalogue.h>
 #include <kern/thread_call.h>
 
-// ==== 4 kextInfos: LE priority (path[0]), SLE fallback (path[1]) ====
+// ==== 4 kextInfos: TGL from /Library/Extensions, ICL fallback from /System/Library/Extensions ====
 
-// ICL FB — com.apple (in kernel collection)
+// ICL FB — com.apple (fallback path)
 static const char *pathsICLFB[] = {
-    "/Library/Extensions/AppleIntelICLLPGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelICLLPGraphicsFramebuffer",
     "/System/Library/Extensions/AppleIntelICLLPGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelICLLPGraphicsFramebuffer",
 };
-static KernelPatcher::KextInfo kextG11FB {"com.apple.driver.AppleIntelICLLPGraphicsFramebuffer", pathsICLFB, 2, {}, {},
+static KernelPatcher::KextInfo kextG11FB {"com.apple.driver.AppleIntelICLLPGraphicsFramebuffer", pathsICLFB, 1, {}, {},
     KernelPatcher::KextInfo::Unloaded};
 
-// ICL HW — com.apple (in kernel collection)
+// ICL HW — com.apple (fallback path)
 static const char *pathsICLHW[] = {
-    "/Library/Extensions/AppleIntelICLGraphics.kext/Contents/MacOS/AppleIntelICLGraphics",
     "/System/Library/Extensions/AppleIntelICLGraphics.kext/Contents/MacOS/AppleIntelICLGraphics",
 };
-static KernelPatcher::KextInfo kextG11HW {"com.apple.driver.AppleIntelICLGraphics", pathsICLHW, 2, {}, {},
+static KernelPatcher::KextInfo kextG11HW {"com.apple.driver.AppleIntelICLGraphics", pathsICLHW, 1, {}, {},
     KernelPatcher::KextInfo::Unloaded};
 
 // TGL FB — com.xxxxx (loaded from /Library/Extensions/)
 static const char *pathsTGLFB[] = {
     "/Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelTGLGraphicsFramebuffer",
-    "/System/Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelTGLGraphicsFramebuffer",
 };
-static KernelPatcher::KextInfo kextG11FBT {"com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer", pathsTGLFB, 2,
+static KernelPatcher::KextInfo kextG11FBT {"com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer", pathsTGLFB, 1,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
 // TGL HW — com.xxxxx (loaded from /Library/Extensions/)
 static const char *pathsTGLHW[] = {
     "/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
-    "/System/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
 };
-static KernelPatcher::KextInfo kextG11HWT {"com.xxxxx.driver.AppleIntelTGLGraphics", pathsTGLHW, 2,
+static KernelPatcher::KextInfo kextG11HWT {"com.xxxxx.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
@@ -2966,10 +2962,15 @@ bool Gen11::start(void *that,void  *param_1)
 		// 5. If MetalPluginName is missing, set GPU properties directly on the service
 		//    (normally they come from the matched personality, but if IOKit didn't merge them...)
 		if (!hasMetal) {
-			SYSLOG("ngreen", "V45: MetalPluginName MISSING — injecting GPU props directly on service");
-			accelSvc->setProperty("MetalPluginName", "AppleIntelTGLGraphicsMTLDriver");
-			accelSvc->setProperty("IOGLBundleName", "AppleIntelTGLGraphicsGLDriver");
-			accelSvc->setProperty("IODVDBundleName", "AppleIntelTGLGraphicsVADriver");
+			const bool useTglNames = callback && callback->tglHWLoaded;
+			const char *mtlName = useTglNames ? "AppleIntelTGLGraphicsMTLDriver" : "AppleIntelICLGraphicsMTLDriver";
+			const char *glName = useTglNames ? "AppleIntelTGLGraphicsGLDriver" : "AppleIntelICLGraphicsGLDriver";
+			const char *vaName = useTglNames ? "AppleIntelTGLGraphicsVADriver" : "AppleIntelICLGraphicsVADriver";
+			SYSLOG("ngreen", "V45: MetalPluginName MISSING — injecting %s GPU props directly on service",
+			       useTglNames ? "TGL" : "ICL");
+			accelSvc->setProperty("MetalPluginName", mtlName);
+			accelSvc->setProperty("IOGLBundleName", glName);
+			accelSvc->setProperty("IODVDBundleName", vaName);
 			accelSvc->setProperty("IOGVACodec", "Gen10");
 			accelSvc->setProperty("IOGVAScaler", "Gen10");
 			accelSvc->setProperty("IOGVABGRAEnc", "Gen10");
@@ -3097,9 +3098,10 @@ bool Gen11::start(void *that,void  *param_1)
 		NGreen::callback->readReg32(BLT_RING_BASE + 0x358));
 	
 	// ── V50: Log Metal-readiness summary ──
-	SYSLOG("ngreen", "V50: start() ret=%d — gpu_bundle_find_trusted path: /Library/GPUBundles -> /Library/Extensions", ret);
+	SYSLOG("ngreen", "V50: start() ret=%d — policy: TGL from /Library/Extensions, fallback ICL from /System/Library/Extensions", ret);
 	SYSLOG("ngreen", "V50: Metal ON. ICL f2 mask-based (fallback). Use -ngreenNoMetal for display-only.");
-	SYSLOG("ngreen", "V50: TGL Metal driver must exist at /Library/Extensions/AppleIntelTGLGraphicsMTLDriver.bundle/");
+	SYSLOG("ngreen", "V50: active GPU plugin track = %s (TGL and ICL both supported)",
+	       (callback && callback->tglHWLoaded) ? "TGL" : "ICL");
 	
 	// ── V51: Clear GPU errors — give Metal a clean slate ──
 	// ERROR_GEN6 is W1C (write-1-to-clear). Stale errors from init may cause
@@ -4171,8 +4173,8 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 	SYSLOG("ngreen", "FBController::start() returned %d", ret);
 	
 	if (ret) {
-		// The original start succeeded but the accelerator (IntelAccelerator from TGL HW kext) never
-		// gets matched because the com.xxxxx kext's IOKitPersonality is NOT in the IOCatalogue.
+		// The original start succeeded but the accelerator may still need personality
+		// reinforcement in IOCatalogue for reliable IOAccelerator matching.
 		// Lilu loaded the binary and we patched its code, but IOKit doesn't know the personality exists.
 		// Fix: manually inject the personality into IOCatalogue so IOKit will match IntelAccelerator
 		// against the PCI device under the IOAccelerator match category.
@@ -4183,8 +4185,14 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 			
 			auto *dict = OSDictionary::withCapacity(24);
 			if (dict) {
+				const bool useTglNames = callback && callback->tglHWLoaded;
+				const char *bundleId = useTglNames ? "com.xxxxx.driver.AppleIntelTGLGraphics" : "com.apple.driver.AppleIntelICLGraphics";
+				const char *mtlName = useTglNames ? "AppleIntelTGLGraphicsMTLDriver" : "AppleIntelICLGraphicsMTLDriver";
+				const char *glName = useTglNames ? "AppleIntelTGLGraphicsGLDriver" : "AppleIntelICLGraphicsGLDriver";
+				const char *vaName = useTglNames ? "AppleIntelTGLGraphicsVADriver" : "AppleIntelICLGraphicsVADriver";
+
 				// Basic matching properties
-				auto *bi  = OSString::withCString("com.xxxxx.driver.AppleIntelTGLGraphics");
+				auto *bi  = OSString::withCString(bundleId);
 				auto *cls = OSString::withCString("IntelAccelerator");
 				auto *mc  = OSString::withCString("IOAccelerator");
 				auto *pv  = OSString::withCString("IOPCIDevice");
@@ -4206,9 +4214,9 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 				OSSafeReleaseNULL(ps);
 				
 				// V44: GPU driver bundle names — required by IOAcceleratorFamily2 and WindowServer
-				auto *mtl = OSString::withCString("AppleIntelTGLGraphicsMTLDriver");
-				auto *gl  = OSString::withCString("AppleIntelTGLGraphicsGLDriver");
-				auto *dvd = OSString::withCString("AppleIntelTGLGraphicsVADriver");
+				auto *mtl = OSString::withCString(mtlName);
+				auto *gl  = OSString::withCString(glName);
+				auto *dvd = OSString::withCString(vaName);
 				auto *src = OSString::withCString("0.0.0.0.0");
 				auto *vaCodec   = OSString::withCString("Gen10");
 				auto *vaScaler  = OSString::withCString("Gen10");

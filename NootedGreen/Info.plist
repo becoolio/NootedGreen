@@ -56,6 +56,45 @@
 			<integer>5</integer>
 		</dict>
 	</dict>
+	<key>NootedGreenDriverProfileDefault</key>
+	<string>Auto</string>
+	<key>NootedGreenDriverProfiles</key>
+	<dict>
+		<key>Auto</key>
+		<dict>
+			<key>PreferredOrder</key>
+			<array>
+				<string>TGL</string>
+				<string>ICL</string>
+			</array>
+		</dict>
+		<key>ICL</key>
+		<dict>
+			<key>AcceleratorBundleIdentifier</key>
+			<string>com.apple.driver.AppleIntelICLGraphics</string>
+			<key>FramebufferBundleIdentifier</key>
+			<string>com.apple.driver.AppleIntelICLLPGraphicsFramebuffer</string>
+			<key>IOGLBundleName</key>
+			<string>AppleIntelICLGraphicsGLDriver</string>
+			<key>IODVDBundleName</key>
+			<string>AppleIntelICLGraphicsVADriver</string>
+			<key>MetalPluginName</key>
+			<string>AppleIntelICLGraphicsMTLDriver</string>
+		</dict>
+		<key>TGL</key>
+		<dict>
+			<key>AcceleratorBundleIdentifier</key>
+			<string>com.xxxxx.driver.AppleIntelTGLGraphics</string>
+			<key>FramebufferBundleIdentifier</key>
+			<string>com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer</string>
+			<key>IOGLBundleName</key>
+			<string>AppleIntelTGLGraphicsGLDriver</string>
+			<key>IODVDBundleName</key>
+			<string>AppleIntelTGLGraphicsVADriver</string>
+			<key>MetalPluginName</key>
+			<string>AppleIntelTGLGraphicsMTLDriver</string>
+		</dict>
+	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2023 ChefKiss Inc. All rights reserved.</string>
 	<key>OSBundleCompatibleVersion</key>
