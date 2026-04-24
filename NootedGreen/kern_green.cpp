@@ -121,10 +121,21 @@ static void publishTglFramebufferPersonality(IOPCIDevice *gpu) {
 	auto *array = OSArray::withCapacity(1);
 	if (array) {
 		array->setObject(fbDict);
+		auto *pciPrimaryMatch = OSDynamicCast(OSString, fbDict->getObject("IOPCIPrimaryMatch"));
+		auto *providerClass = OSDynamicCast(OSString, fbDict->getObject("IOProviderClass"));
+		auto *ioClass = OSDynamicCast(OSString, fbDict->getObject("IOClass"));
+		SYSLOG("ngreen",
+				"Publishing TGL framebuffer personality IOClass=%s provider=%s pciMatch=%s count=%u",
+				ioClass ? ioClass->getCStringNoCopy() : "<null>",
+				providerClass ? providerClass->getCStringNoCopy() : "<null>",
+				pciPrimaryMatch ? pciPrimaryMatch->getCStringNoCopy() : "<null>",
+				fbDict->getCount());
 		if (gIOCatalogue) {
 			const bool ok = gIOCatalogue->addDrivers(array, true);
 			SYSLOG("ngreen", "Published TGL framebuffer personality for 0x9A49: %d", ok);
 			if (gpu) {
+				SYSLOG("ngreen", "Republishing IGPU after framebuffer personality: name=%s class=%s",
+					gpu->getName(), gpu->getMetaClass()->getClassName());
 				gpu->registerService();
 			}
 		} else {
@@ -281,8 +292,9 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		
 		
 
-        this->iGPU = OSDynamicCast(IOPCIDevice, devInfo->videoBuiltin);
-        PANIC_COND(!this->iGPU, "ngreen", "videoBuiltin is not IOPCIDevice");
+		this->iGPU = OSDynamicCast(IOPCIDevice, devInfo->videoBuiltin);
+		PANIC_COND(!this->iGPU, "ngreen", "videoBuiltin is not IOPCIDevice");
+		SYSLOG("ngreen", "processPatcher: IGPU provider resolved name=%s class=%s", this->iGPU->getName(), this->iGPU->getMetaClass()->getClassName());
 		
 		this->iGPU->enablePCIPowerManagement(kPCIPMCSPowerStateD0);
 		this->iGPU->setBusMasterEnable(true);
@@ -373,6 +385,7 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		}
 
 		publishTglFramebufferPersonality(this->iGPU);
+		SYSLOG("ngreen", "processPatcher: TGL framebuffer personality publication attempted");
 
 		if (shouldEnableLegacyPllBringup()) {
 			setRMMIOIfNecessary();

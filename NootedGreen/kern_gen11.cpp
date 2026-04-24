@@ -26,28 +26,77 @@ static KernelPatcher::KextInfo kextG11HW {"com.apple.driver.AppleIntelICLGraphic
 // TGL FB — com.xxxxx (loaded from /Library/Extensions/)
 static const char *pathsTGLFB[] = {
     "/Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelTGLGraphicsFramebuffer",
+    "/System/Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelTGLGraphicsFramebuffer",
 };
-static KernelPatcher::KextInfo kextG11FBT {"com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer", pathsTGLFB, 1,
+static KernelPatcher::KextInfo kextG11FBT {"com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer", pathsTGLFB, 2,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
 // TGL HW — com.xxxxx (loaded from /Library/Extensions/)
 static const char *pathsTGLHW[] = {
     "/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
+    "/System/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
 };
-static KernelPatcher::KextInfo kextG11HWT {"com.xxxxx.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
+static KernelPatcher::KextInfo kextG11HWT {"com.xxxxx.driver.AppleIntelTGLGraphics", pathsTGLHW, 2,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
 Gen11 *Gen11::callback = nullptr;
 
+static void logKextCandidatePaths(const char *tag, const char *const *paths, size_t count) {
+	for (size_t i = 0; i < count; i++) {
+		SYSLOG("ngreen", "%s path[%zu]=%s", tag, i, paths[i]);
+	}
+}
+
+static void logProviderMatchSnapshot(const char *reason, IOPCIDevice *gpu) {
+	if (!gpu) {
+		SYSLOG("ngreen", "%s: provider snapshot skipped (gpu=null)", reason);
+		return;
+	}
+
+	auto *deviceId = OSDynamicCast(OSData, gpu->getProperty("device-id"));
+	auto *platformId = OSDynamicCast(OSData, gpu->getProperty("AAPL,ig-platform-id"));
+	auto *vendorId = OSDynamicCast(OSData, gpu->getProperty("vendor-id"));
+	auto *classCode = OSDynamicCast(OSData, gpu->getProperty("class-code"));
+	auto *compatible = OSDynamicCast(OSArray, gpu->getProperty("compatible"));
+
+	uint32_t deviceIdVal = deviceId && deviceId->getLength() >= sizeof(uint32_t)
+		? *reinterpret_cast<const uint32_t *>(deviceId->getBytesNoCopy()) : 0;
+	uint32_t platformIdVal = platformId && platformId->getLength() >= sizeof(uint32_t)
+		? *reinterpret_cast<const uint32_t *>(platformId->getBytesNoCopy()) : 0;
+	uint32_t vendorIdVal = vendorId && vendorId->getLength() >= sizeof(uint32_t)
+		? *reinterpret_cast<const uint32_t *>(vendorId->getBytesNoCopy()) : 0;
+	uint32_t classCodeVal = classCode && classCode->getLength() >= sizeof(uint32_t)
+		? *reinterpret_cast<const uint32_t *>(classCode->getBytesNoCopy()) : 0;
+
+	SYSLOG("ngreen",
+			"%s: provider=%s class=%s pci=0x%x rev=0x%x device-id=0x%x platform-id=0x%x vendor-id=0x%x class-code=0x%x compatible-count=%u",
+			reason,
+			gpu->getName(),
+			gpu->getMetaClass()->getClassName(),
+			WIOKit::readPCIConfigValue(gpu, WIOKit::kIOPCIConfigDeviceID),
+			WIOKit::readPCIConfigValue(gpu, WIOKit::kIOPCIConfigRevisionID),
+			deviceIdVal,
+			platformIdVal,
+			vendorIdVal,
+			classCodeVal,
+			compatible ? compatible->getCount() : 0);
+}
+
 void Gen11::init() {
 	callback = this;
+	logKextCandidatePaths("ICL FB candidate", pathsICLFB, arrsize(pathsICLFB));
+	logKextCandidatePaths("ICL HW candidate", pathsICLHW, arrsize(pathsICLHW));
+	logKextCandidatePaths("TGL FB candidate", pathsTGLFB, arrsize(pathsTGLFB));
+	logKextCandidatePaths("TGL HW candidate", pathsTGLHW, arrsize(pathsTGLHW));
 	// 4 kextInfos: ICL FB, ICL HW, TGL FB, TGL HW
 	lilu.onKextLoadForce(&kextG11FB);
 	lilu.onKextLoadForce(&kextG11HW);
 	lilu.onKextLoadForce(&kextG11FBT);
 	lilu.onKextLoadForce(&kextG11HWT);
+	SYSLOG("ngreen", "Registered Gen11 kext watchers: ICL_FB=%u ICL_HW=%u TGL_FB=%u TGL_HW=%u",
+		kextG11FB.loadIndex, kextG11HW.loadIndex, kextG11FBT.loadIndex, kextG11HWT.loadIndex);
 }
 
 static bool isWEGCoexistMode() {
@@ -393,6 +442,18 @@ static bool publishTglAcceleratorPersonality(bool isRealTGL, IOPCIDevice *gpu, c
 	}
 
 	array->setObject(dict);
+	auto *pciPrimaryMatch = OSDynamicCast(OSString, dict->getObject("IOPCIPrimaryMatch"));
+	auto *providerClass = OSDynamicCast(OSString, dict->getObject("IOProviderClass"));
+	auto *ioClass = OSDynamicCast(OSString, dict->getObject("IOClass"));
+	auto *publisher = OSDynamicCast(OSString, dict->getObject("IOPersonalityPublisher"));
+	SYSLOG("ngreen",
+			"V105: publishing accelerator personality (%s) IOClass=%s provider=%s pciMatch=%s publisher=%s count=%u",
+			reason,
+			ioClass ? ioClass->getCStringNoCopy() : "<null>",
+			providerClass ? providerClass->getCStringNoCopy() : "<null>",
+			pciPrimaryMatch ? pciPrimaryMatch->getCStringNoCopy() : "<null>",
+			publisher ? publisher->getCStringNoCopy() : "<null>",
+			dict->getCount());
 	const bool ok = gIOCatalogue->addDrivers(array, true);
 	SYSLOG("ngreen", "V105: addDrivers accelerator personality (%s) -> %d count=%u",
 			reason, ok, dict->getCount());
@@ -402,15 +463,26 @@ static bool publishTglAcceleratorPersonality(bool isRealTGL, IOPCIDevice *gpu, c
 
 	gTglAccelPersonalityPublished = true;
 	if (gpu) {
+		logProviderMatchSnapshot("V105 pre-accelerator-registerService", gpu);
 		SYSLOG("ngreen", "V105: republishing IGPU after accelerator personality (%s)", reason);
 		gpu->registerService();
+		logProviderMatchSnapshot("V105 post-accelerator-registerService", gpu);
 	}
 	return true;
 }
 
 bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size) {
+	SYSLOG("ngreen", "processKext index=%zu address=0x%llx size=0x%zx ICL_FB=%u ICL_HW=%u TGL_FB=%u TGL_HW=%u",
+		index,
+		static_cast<unsigned long long>(address),
+		size,
+		kextG11FB.loadIndex,
+		kextG11HW.loadIndex,
+		kextG11FBT.loadIndex,
+		kextG11HWT.loadIndex);
 	
 	if (kextG11FB.loadIndex == index) {
+		SYSLOG("ngreen", "Matched processKext -> ICL framebuffer callback");
 		if (this->tglFBLoaded) {
 			DBGLOG("ngreen", "Skipping ICL FB — TGL FB already loaded");
 			return true;
@@ -555,10 +627,12 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		
 		
 	}	else if (kextG11FBT.loadIndex == index) {
+		SYSLOG("ngreen", "Matched processKext -> TGL framebuffer callback");
 		this->tglFBLoaded = true;
 		auto *activeKext = &kextG11FBT;
 		NGreen::callback->setRMMIOIfNecessary();
 		SYSLOG("ngreen", "init AppleIntelTGLGraphicsFramebuffer");
+		logProviderMatchSnapshot("TGL FB callback provider snapshot", NGreen::callback ? NGreen::callback->iGPU : nullptr);
 		
 		bool isprod=false;
 		auto prod=patcher.solveSymbol(index, "__ZN24AppleIntelBaseController5startEP9IOService", address, size);
@@ -908,6 +982,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		
 		
 	}     else if (kextG11HW.loadIndex == index) {
+		SYSLOG("ngreen", "Matched processKext -> ICL accelerator callback");
 		if (this->tglHWLoaded) {
 			DBGLOG("ngreen", "Skipping ICL HW — TGL HW already loaded");
 			return true;
@@ -1015,6 +1090,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		return true;
 
     } else if (kextG11HWT.loadIndex == index) {
+		SYSLOG("ngreen", "Matched processKext -> TGL accelerator callback");
 		this->tglHWLoaded = true;
 		auto *activeKext = &kextG11HWT;
 		SYSLOG("ngreen", "init AppleIntelTGLGraphics (HW accelerator)");
