@@ -791,13 +791,15 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 
 			// {"__ZN11IGAccelTask16getBlit3DContextEb", getBlit3DContext, this->ogetBlit3DContext},
 		
-			 //{"__Z31blit3d_initialize_scratch_spaceP16IGAccelSysMemory", blit3d_initialize_scratch_space, this->oblit3d_initialize_scratch_space},
-			 //{"__Z15blit3d_init_ctxP23IGHardwareBlit3DContext", blit3d_init_ctx, this->oblit3d_init_ctx},
+			 // V112: Resolve the NootedBlue Blit3D helpers so the fallback path can
+			 // initialize scratch/context state instead of leaving the blit object empty.
+			 {"__Z31blit3d_initialize_scratch_spaceP16IGAccelSysMemory", blit3d_initialize_scratch_space, this->oblit3d_initialize_scratch_space},
+			 {"__Z15blit3d_init_ctxP23IGHardwareBlit3DContext", blit3d_init_ctx, this->oblit3d_init_ctx},
 			 // V69: ENABLED — original crashes at +0x4c memcpy'ing 68 bytes to unmapped GPU buffer
 			 // at VA 0xfffffff034136000 (page 0xD of context buffer). Our replacement skips the
 			 // dangerous memcpy and logs diagnostic info about the mapping.
 			 {"__ZN23IGHardwareBlit3DContext10initializeEv", IGHardwareBlit3DContextinitialize, this->oIGHardwareBlit3DContextinitialize},
-			// {"__ZNK14IGMappedBuffer9getMemoryEv", IGMappedBuffergetMemory, this->oIGMappedBuffergetMemory},
+			 {"__ZNK14IGMappedBuffer9getMemoryEv", IGMappedBuffergetMemory, this->oIGMappedBuffergetMemory},
 			 
 		 };
 		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route symbols");
@@ -4426,7 +4428,9 @@ void Gen11::disableCDClock(void *that)
 
 bool Gen11::AppleIntelFramebufferinit(void *frame,void *cont,uint32_t param_2)
 {
-	
+	// Framebuffer live-cont fix disabled for boot-blocker isolation.
+	// getMember<void *>(frame, 0x4a40) = cont;
+	// getMember<void *>(frame, 0xc40) = cont;
 	auto ret=FunctionCast(AppleIntelFramebufferinit, callback->oAppleIntelFramebufferinit)(frame,cont,param_2 );
 	getMember<void *>(frame, 0x4a40) = ccont;
 	return ret;
@@ -4959,18 +4963,17 @@ void Gen11::IGHardwareBlit3DContextinitialize(void *that)
 
 	// V106: On spoofed paths, default to skip Apple's original init.
 	// The original still faults at +0x4c on some boots (page fault in SecurityAgent path).
-	// In full-MTL mode we now prefer original init to avoid null objects in CoreDisplay.
-	// Use -ngreenV69SkipOriginal to force old skip behavior for troubleshooting.
+	// In full-MTL mode, keep skip-by-default for stability; allow original only via opt-in arg.
+	// Use -ngreenV69AllowOriginal to test original init, and -ngreenV69SkipOriginal to hard-disable it.
 	const bool allowOriginal = checkKernelArgument("-ngreenV69AllowOriginal");
 	const bool forceFullMTL = shouldForceFullMetalPath();
 	const bool skipOriginal = checkKernelArgument("-ngreenV69SkipOriginal");
 	uint64_t gpuBufBase = mappedBufPtr ? getMember<uint64_t>(mappedBufPtr, 0x18) : 0;
 	uint64_t gpuBufSize = mappedBufPtr ? getMember<uint64_t>(mappedBufPtr, 0x20) : 0;
 	bool safeForOriginal = mappedBufPtr && gpuBufBase != 0 && gpuBufSize >= 0xD040;
-	const bool shouldTryOriginal = (!NGreen::callback->isRealTGL && forceFullMTL && !skipOriginal) ||
-		(allowOriginal && safeForOriginal);
+	const bool shouldTryOriginal = allowOriginal && !skipOriginal && safeForOriginal;
 	if (shouldTryOriginal) {
-		SYSLOG("ngreen", "V111B: calling original Blit3D init (fullMTL=%d allow=%d skip=%d base=0x%llx size=0x%llx)",
+		SYSLOG("ngreen", "V111B: calling original Blit3D init (opt-in, fullMTL=%d allow=%d skip=%d base=0x%llx size=0x%llx)",
 		       forceFullMTL, allowOriginal, skipOriginal,
 		       (unsigned long long)gpuBufBase, (unsigned long long)gpuBufSize);
 		FunctionCast(IGHardwareBlit3DContextinitialize, callback->oIGHardwareBlit3DContextinitialize)(that);
@@ -4981,7 +4984,9 @@ void Gen11::IGHardwareBlit3DContextinitialize(void *that)
 		SYSLOG("ngreen", "V106: -ngreenV69AllowOriginal requested but rejected (base=0x%llx size=0x%llx)",
 		       (unsigned long long)gpuBufBase, (unsigned long long)gpuBufSize);
 	} else if (!NGreen::callback->isRealTGL && forceFullMTL && skipOriginal) {
-		SYSLOG("ngreen", "V111B: full-MTL active but original Blit3D init skipped by -ngreenV69SkipOriginal");
+		SYSLOG("ngreen", "V111B: full-MTL active and original Blit3D init disabled by -ngreenV69SkipOriginal");
+	} else if (!NGreen::callback->isRealTGL && forceFullMTL && !allowOriginal) {
+		SYSLOG("ngreen", "V111B: full-MTL active; original Blit3D init remains disabled by default (use -ngreenV69AllowOriginal to test)");
 	} else if (v69Verbose || v69CallCount == 16 || v69CallCount == 64 || v69CallCount == 256) {
 		SYSLOG("ngreen", "V106: skip original Blit3D init on non-real TGL (base=0x%llx size=0x%llx)",
 		       (unsigned long long)gpuBufBase, (unsigned long long)gpuBufSize);
@@ -5005,9 +5010,31 @@ void Gen11::IGHardwareBlit3DContextinitialize(void *that)
 	getMember<uint64_t>(that, 0x108) = 0;
 	getMember<uint32_t>(that, 0x110) = 0;
 
-	// DO NOT call original — crashes at initialize()+0x4c writing to unmapped page 0xD
-	// DO NOT call blit3d_initialize_scratch_space / blit3d_init_ctx — their hooks are not
-	// connected so oblit3d_init_ctx=0 → FunctionCast to addr 0 → instant crash
+	const bool haveBlitHelpers = callback->oIGMappedBuffergetMemory && callback->oblit3d_initialize_scratch_space &&
+		callback->oblit3d_init_ctx;
+	if (haveBlitHelpers && mappedBufPtr) {
+		void *sysMem = IGMappedBuffergetMemory(mappedBufPtr);
+		if (sysMem) {
+			if (v69Verbose)
+				SYSLOG("ngreen", "V112: running guarded Blit3D scratch/context init via %p", sysMem);
+			blit3d_initialize_scratch_space(sysMem);
+			blit3d_init_ctx(that);
+			if (v69Verbose)
+				SYSLOG("ngreen", "V112: Blit3D scratch/context init completed");
+			return;
+		}
+		if (v69Verbose)
+			SYSLOG("ngreen", "V112: IGMappedBuffer::getMemory returned NULL; leaving fallback zero-init in place");
+	} else if (v69Verbose) {
+		SYSLOG("ngreen", "V112: Blit3D helpers unavailable (getMemory=%d scratch=%d initCtx=%d mapped=%p)",
+		       callback->oIGMappedBuffergetMemory != 0,
+		       callback->oblit3d_initialize_scratch_space != 0,
+		       callback->oblit3d_init_ctx != 0,
+		       mappedBufPtr);
+	}
+
+	// DO NOT call original here — it still faults on some spoofed boots.
+	// If helper routing is unavailable, keep the zero-init fallback rather than crash.
 	if (v69Verbose)
 		SYSLOG("ngreen", "V69: initialize complete (SKIPPED original — crash prevention)");
 
@@ -5018,7 +5045,7 @@ int Gen11::blit3d_supported(void *param_1,void *param_2)
 	return 0;
 }
 
-uint8_t Gen11::IGMappedBuffergetMemory(void *that)
+void * Gen11::IGMappedBuffergetMemory(void *that)
 {
 	auto ret=FunctionCast(IGMappedBuffergetMemory, callback->oIGMappedBuffergetMemory)(that);
 	return ret;

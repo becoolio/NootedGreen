@@ -8,7 +8,7 @@ Patches Apple's Tiger Lake (Gen12) graphics drivers to work with newer Intel iGP
 
 ## Status
 
-**Work in progress.** Framebuffer controller starts, combo PHY calibration is patched, accelerator ring initialises, and host-based scheduler (type 5) runs on RPL with sustained RCS activity. System reaches login screen and stays alive (no kernel panic). DYLD patches hook `_cs_validate_page` early (before DeviceInfo) so CoreDisplay is patched before WindowServer starts. Metal remains enabled by default. V50 still patches `gpu_bundle_find_trusted()` in libsystem_sandbox.dylib to redirect GPU bundle search from `/Library/GPUBundles` to `/Library/Extensions/` where the TGL driver bundle is installed. ICL Metal driver device-ID bypass uses mask-based matching for build portability. V52 adds CPUID-based cross-platform detection (`isRealTGL`) so RPL-only patches are skipped on genuine Tiger Lake hardware.
+**Work in progress.** Framebuffer controller starts, combo PHY calibration is patched, accelerator ring initialises, and host-based scheduler (type 5) runs on RPL with sustained RCS activity. Login is reachable on current test setups, but stability is still under active tuning for full-Metal paths. DYLD patches hook `_cs_validate_page` early (before DeviceInfo) so CoreDisplay is patched before WindowServer starts. Metal remains enabled by default. V50 still patches `gpu_bundle_find_trusted()` in libsystem_sandbox.dylib to redirect GPU bundle search from `/Library/GPUBundles` to `/Library/Extensions/` where the TGL driver bundle is installed. ICL Metal driver device-ID bypass uses mask-based matching for build portability. V52 adds CPUID-based cross-platform detection (`isRealTGL`) so RPL-only patches are skipped on genuine Tiger Lake hardware.
 
 ### Important (Current Test State)
 
@@ -17,6 +17,8 @@ Patches Apple's Tiger Lake (Gen12) graphics drivers to work with newer Intel iGP
 - Platform-ID and device-ID injection now handled cleanly by config.plist only — NootedGreen no longer interferes mid-initialization.
 - System boots to login screen reliably with no visual corruption or kernel panics.
 - CoreDisplay DYLD path keeps assertion bypass always-on for Ventura+/Sonoma. Stage-3 safety stubs (RunFullDisplayPipe NULL guard, GetMTLTexture NULL stub, GetMTLCommandQueue NULL stub) are now applied only on non-real TGL unless full-MTL mode is forced.
+- Blit3D init policy on spoofed paths is now conservative by default: Apple's original `IGHardwareBlit3DContext::initialize()` is **disabled unless explicitly opted in** with `-ngreenV69AllowOriginal`.
+- `-ngreenV69AllowOriginal` is **diagnostic only**. It can still panic at `IGHardwareBlit3DContext::initialize + 0x4c` (`SecurityAgent`/IOAccel submit path) on unsupported setups.
 - `DisplayPipeSupported` native path is now the default. Use `-ngreendp0` only for forced fallback testing.
 - V77 display-pipe client termination is disabled by default (delay defaults to full monitor window).
 - **V88 scanout fill remains opt-in** (`-ngreenv88`). Default boots do not paint diagnostic bars over normal UI layout.
@@ -33,10 +35,11 @@ Patches Apple's Tiger Lake (Gen12) graphics drivers to work with newer Intel iGP
 - **V74:** Permanent EMR enforcer — 50ms timer runs indefinitely, keeping ERROR_GEN6 masked.
 - **V73:** Fixed double-dereference crash in blit3D initialize hook.
 - **V72:** EMR write interception on all MMIO write paths.
+- **V111C:** For non-real TGL, original Blit3D initializer is no longer auto-selected in full-MTL mode; it is opt-in only via `-ngreenV69AllowOriginal`.
 
 ### Current Status
 
-System boots to login screen reliably. Current baseline is compact DYLD + native display-pipe defaults with minimal boot-arg requirements. V88 visual fill is opt-in only (`-ngreenv88`) so default boots preserve normal Apple UI layout.
+System can boot to login on current RPL test baselines. Current baseline is compact DYLD + native display-pipe defaults with minimal boot-arg requirements and conservative Blit3D init defaults. V88 visual fill is opt-in only (`-ngreenv88`) so default boots preserve normal Apple UI layout.
 
 ## Requirements
 
@@ -78,9 +81,10 @@ These properties are essential for correct platform identification and WEG coexi
 | `-ngreendp1` / `ngreendp1=1` | Explicitly keep native `DisplayPipeSupported` path (default behavior) |
 | `ngreenV77DelayKill=N` | Delay V77 display-pipe client termination by `N` monitor iterations (`0..60`, default `60` = effectively disabled) |
 | `-ngreenv88` / `ngreenv88=1` | Enable V88 scanout fill + plane toggle diagnostics (draws test bars/colors; off by default) |
-| `-ngreenfullmtl` / `ngreenfullmtl=1` | Force full CoreDisplay Metal path on Ventura+/Sonoma by skipping Stage-3 NULL safety stubs (GetMTLTexture/GetMTLCommandQueue/RunFullDisplayPipe guard). Use only for full-MTL bring-up validation. |
+| `-ngreenfullmtl` / `ngreenfullmtl=1` | Force full CoreDisplay Metal path on Ventura+/Sonoma by skipping Stage-3 NULL safety stubs (GetMTLTexture/GetMTLCommandQueue/RunFullDisplayPipe guard). This **does not** auto-enable Apple's original Blit3D initializer. |
 | `-ngreenRefProbeF2` / `ngreenRefProbeF2=1` | Enable reference f2 osinfo patch probe on non-real TGL (diagnostic only) |
-| `-ngreenV69AllowOriginal` | Allow original Blit3D initialize on non-real TGL when safety preconditions are met (crash-oriented diagnostic) |
+| `-ngreenV69AllowOriginal` | Opt in to Apple's original Blit3D initialize on non-real TGL when safety preconditions are met. **High risk / diagnostic only**; can panic on unsupported setups. |
+| `-ngreenV69SkipOriginal` | Hard-disable Apple's original Blit3D initialize on non-real TGL, even if `-ngreenV69AllowOriginal` is present. |
 | `ngreenLanes=1|2|4` | Override lane count used by non-real TGL computeLaneCount bypass (default 2 lanes) |
 | `-ngreenforceprops` / `ngreenforceprops=1` | Enable legacy forced IGPU property injection (`AAPL,ig-platform-id`, `model`, `saved-config`, etc.). Disabled by default in compatibility-first mode. |
 | `IGLogLevel=8` | Maximum Intel GPU driver logging |

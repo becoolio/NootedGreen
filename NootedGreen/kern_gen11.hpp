@@ -1593,7 +1593,7 @@ private:
 	static bool  initHardwareCaps(void *this_ptr);  // query HW capabilities
 	mach_vm_address_t oinitHardwareCaps {};
 	
-	static uint8_t IGMappedBuffergetMemory(void *that);
+	static void * IGMappedBuffergetMemory(void *that);
 	mach_vm_address_t oIGMappedBuffergetMemory {};
 	
 	static void *  IGHardwareBlit3DContextoperatornew(void *that,unsigned long param_1);
