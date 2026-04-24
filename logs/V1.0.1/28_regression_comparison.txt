@@ -1,0 +1,15 @@
+NO PREVIOUS LOG VERSION FOUND - regression comparison not possible.
+
+Previous version folder: NONE
+Current version folder: logs/V1.0.1/
+
+Overall comparison result: NOT COMPARABLE
+
+## Reason
+This is the first boot log collection after V1.0.0. The previous folder (V1.0.0) exists but was the initial collection. For proper regression comparison, a second version is needed.
+
+However, we can note key differences from V1.0.0:
+- Version: 1.0.0 -> 1.0.1
+- New boot flag: -ngreenforceprops added
+- System shows "Intel Iris Xe Graphics" (was "Unknown Unknown" in V1.0.0)
+- Device spoofing appears improved

@@ -1,0 +1,58 @@
+# Raw Command List - V1.0.1
+
+All commands executed during boot log collection:
+
+## System Identity
+1. sw_vers
+2. uname -a
+3. hostname
+4. uptime
+5. whoami
+6. date
+7. sysctl kern.boottime
+8. sysctl hw.model
+9. csrutil status
+10. csrutil authenticated-root status
+11. nvram -p
+12. nvram boot-args
+
+## Git and Build State
+13. git branch --show-current
+14. git status --short
+15. git log -1 --oneline
+16. git diff --stat
+
+## Kext Information
+17. kextstat
+18. kmutil showloaded
+19. find /Library/Extensions /System/Library/Extensions -name "*Nooted*" -o -name "*Lilu*"
+
+## Kernel Logs
+20. /usr/bin/log show --last boot (full log)
+21. grep filtering for graphics, lilu, nootedgreen, etc.
+
+## Dmesg
+22. dmesg
+
+## IORegistry
+23. ioreg -lw0
+24. ioreg -l
+25. ioreg -lw0 -p IOService (graphics tree)
+26. ioreg -lw0 -p IODisplayWrangler
+27. ioreg -lw0 -p IOService -c IOAccelerator
+28. ioreg -lw0 -p IOService -c IOFramebuffer
+29. ioreg -lw0 -p IODeviceTree (PCI GPU tree)
+30. ioreg -lw0 -p IOService -n IGPU
+31. ioreg -lw0 -p IOService -n GFX0
+
+## System Profiler
+32. system_profiler SPDisplaysDataType
+33. system_profiler SPHardwareDataType
+34. system_profiler SPExtensionsDataType
+
+## Diagnostic Reports
+35. ls -lah /Library/Logs/DiagnosticReports/
+
+## File System
+36. ls -la (project root)
+37. mkdir -p logs/V1.0.1

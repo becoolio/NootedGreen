@@ -1,0 +1,114 @@
+# Acceleration Readiness Analysis - V1.0.1
+
+## 1. Current Stage Classification
+
+**Current Acceleration Stage**: Stage 4
+
+Stage 4 = "Stable display, but no accelerator service"
+
+Same as V1.0.0 - display works at 1920x1080 but no hardware acceleration.
+
+## 2. Is IOAccelerator Attached?
+
+**Answer**: PARTIAL
+
+Same as V1.0.0 - generic IOAccelerator service exists with "com.unknown.bundle"
+
+## 3. Is IOAccelDisplayPipeUserClient2 Created?
+
+**Answer**: UNKNOWN - Not found in search
+
+Same as V1.0.0 - no display pipe user client found
+
+## 4. Is Metal Visible in system_profiler?
+
+**Answer**: NO
+
+Same as V1.0.0 - "No Metal renderer available" error persists
+
+## 5. Are Accelerator User Clients Visible?
+
+**Answer**: PARTIAL
+
+IOFramebufferUserClient present, but no accelerator-specific user clients
+
+## 6. Does the GPU Publish Required Accelerator Properties?
+
+**Answer**: PARTIAL
+
+Generic properties present: IOGLBundleName=AppleMetalGLRenderer, MetalPluginName=AGXMetalA12
+
+## 7. Are Framebuffer and Accelerator Matched to Same IGPU Device?
+
+**Answer**: UNKNOWN
+
+Both under GFX0 but neither is AppleIntel-specific
+
+## 8. Are Required AppleIntel Graphics Components Loaded?
+
+**Answer**: NO - CRITICAL FAILURE
+
+Same as V1.0.0 - No AppleIntelTGLGraphics.kext or AppleIntelTGLGraphicsFramebuffer.kext
+
+## 9. Are Required IORegistry Properties Present?
+
+**Answer**: PARTIAL
+
+device-id (0x0000499a) and platform-id (0x0000499a) correct
+Missing: EDID, VBT, OpRegion visibility
+
+## 10. Is Framebuffer Stable Enough for Acceleration Testing?
+
+**Answer**: Yes, but not AppleIntel framebuffer
+
+Basic framebuffer works, but need AppleIntel framebuffer for acceleration
+
+## 11. Does Display Pipe Creation Work?
+
+**Answer**: UNKNOWN
+
+No display pipe logs found
+
+## 12. Does Display Pipe Creation Cause the Hang?
+
+**Answer**: N/A - No hang observed
+
+System boots to login successfully
+
+## 13-17. Ring/Firmware/Power Status
+
+**Answer**: UNKNOWN
+
+No logs found for GuC/HuC/DMC/forcewake/power wells/rings
+
+## 18. Is Acceleration Blocked by Service Matching?
+
+**Answer**: YES
+
+AppleIntel kexts not matching to IGPU
+
+## 19-25. Other Blockers
+
+Same as V1.0.0 - multiple unknowns due to no detailed logging
+
+## 26. What Exact Condition Must Be Fixed Before Next Acceleration Test?
+
+**Primary Condition**: AppleIntel graphics kexts must load and match to IGPU
+
+Same blocker as V1.0.0 - the -ngreenforceprops flag was added but didn't resolve AppleIntel kext loading
+
+---
+
+## Comparison to V1.0.0
+
+**Improvements**:
+- GPU name now shows properly: "Intel Iris Xe Graphics" (was "Unknown Unknown")
+- device spoofing appears more complete
+
+**Same Issues**:
+- No AppleIntel kexts loading
+- No Metal acceleration
+- Generic IOAccelerator only
+- Same acceleration stage (Stage 4)
+
+**Conclusion**: This is a MINOR improvement (better GPU identification) but the primary blocker remains - AppleIntel graphics kexts are not loading.

@@ -1,0 +1,42 @@
+# Failure Matrix - V1.0.1
+
+Component | Expected | Observed | Status | Evidence | Likely Meaning
+--- | --- | --- | --- | --- | ---
+OpenCore boot-args | Custom args | -v -liludbg liludump=60 keepsyms=1 debug=0x100 -NGreenDebug ngreenSched=5 -ngreenforceprops | PASS | 07_nvram_boot_args.txt | Debug flags present
+Lilu load | Load successfully | Loaded | PASS | kextstat shows Lilu 1.7.3 | Lilu working
+NootedGreen load | Load successfully | Loaded | PASS | kextstat shows NootedGreen 1.0.1 | NootedGreen working
+NootedGreen version | 1.0.1 | 1.0.1 | PASS | Source and loaded match | Version correct
+NootedGreen patch application | Patches applied | Unknown - no detailed logs | UNKNOWN | NootedGreen in IORegistry but no boot logs visible | Needs more debug logging
+NootedGreen function routing | Routes created | Unknown | UNKNOWN | No evidence in logs | Needs verification
+IGPU IORegistry presence | IGPU present | Present as GFX0 | PASS | 13_ioreg_gfx0_node.txt shows GFX0 | IGPU working
+IGPU device-id | Spoofed ID | 0x9a49 (TigerLake) | PASS | device-id shows 0x0000499a | Spoof working
+IGPU platform-id | Set correctly | 0x0000499a | PASS | AAPL,ig-platform-id = 0000499a | Platform ID set
+AppleIntel graphics kext load | Should load | No AppleIntel kexts in kextstat | FAIL | kextstat shows no AppleIntel* | No AppleIntel acceleration
+AppleIntel framebuffer attach | Should attach | No AppleIntelFramebuffer in IORegistry | FAIL | IORegistry shows generic framebuffer | Framebuffer not from AppleIntel
+framebuffer service publication | Should publish | IOFramebuffer present | PASS | IORegistry shows IOFramebuffer | Basic framebuffer works
+IOFramebuffer availability | Available | Present | PASS | IOFramebuffer in IORegistry | Framebuffer available
+EDID present | Should be present | Unknown | UNKNOWN | Not found in search | Needs verification
+VBT present | Should be present | Unknown | UNKNOWN | Not found in search | Needs verification
+OpRegion present | Should be present | Unknown | UNKNOWN | Not found in search | Needs verification
+display online | Online | Yes | PASS | system_profiler shows Online: Yes | Display working
+display mode publication | 1920x1080 | 1920x1080 | PASS | system_profiler shows 1920x1080 | Resolution correct
+backlight service | Should be present | Unknown | UNKNOWN | Not found in search | Needs verification
+WindowServer startup | Starts | Started | PASS | Logs show WindowServer started | GUI available
+CoreDisplay transaction | Should complete | Unknown | UNKNOWN | No clear transaction logs | Needs verification
+IOAccelDisplayPipeUserClient2 | Should be created | Unknown | UNKNOWN | Not found in search | Needs verification
+IOAccelerator attach | Should attach | Shows generic accelerator | PARTIAL | "IOAccelerator" with "com.unknown.bundle" | Partial accelerator
+Metal support | Should work | "No Metal renderer available" | FAIL | SecurityAgent error log | Metal not working
+GuC firmware | Should load | Unknown | UNKNOWN | Not found in search | Needs verification
+HuC firmware | Should load | Unknown | UNKNOWN | Not found in search | Needs verification
+DMC firmware | Should load | Unknown | UNKNOWN | Not found in search | Needs verification
+forcewake | Should be enabled | Unknown | UNKNOWN | Not found in search | Needs verification
+power wells | Should be enabled | Unknown | UNKNOWN | Not found in search | Needs verification
+MMIO BAR0 | Accessible | Unknown | UNKNOWN | Not found in search | Needs verification
+RCS ring | Should be initialized | Unknown | UNKNOWN | Not found in search | Needs verification
+BCS ring | Should be initialized | Unknown | UNKNOWN | Not found in search | Needs verification
+VCS ring | Should be initialized | Unknown | UNKNOWN | Not found in search | Needs verification
+VECS ring | Should be initialized | Unknown | UNKNOWN | Not found in search | Needs verification
+execlists | Should initialize | Unknown | UNKNOWN | Not found in search | Needs verification
+stamp advancement | Stamps should advance | Unknown | UNKNOWN | Not found in search | Needs verification
+panic status | No panic | No panic | PASS | No panic logs found | System stable
+crash reports | None | None found | PASS | No crash reports | No crashes

@@ -1,0 +1,29 @@
+# Display and Panel State - V1.0.1
+
+## Display Status
+- Resolution: 1920 x 1080 (1080p FHD)
+- Main Display: Yes
+- Online: Yes
+- Framebuffer Depth: 24-Bit Color (ARGB8888)
+- Mirror: Off
+
+## Panel Information
+- Type: GPU
+- Bus: Built-In
+- Chipset Model: Intel Iris Xe Graphics (IMPROVED - was "Unknown Unknown" in V1.0.0)
+- VRAM (Total): 7 MB (very low - indicates basic framebuffer, not accelerated)
+- VRAM (Dynamic, Max): Not reported
+- Vendor: Intel
+- Device ID: 0x9a490000 (TigerLake GT2)
+- Revision ID: 0x0001
+- Kernel Extension Info: No Kext Loaded
+
+## Analysis
+The system shows the display is online and working at 1080p, but:
+1. VRAM is only 7 MB - indicates fallback/basic framebuffer mode
+2. No Metal kext is loaded - "No Kext Loaded"
+3. Device is using software rendering (no acceleration)
+
+This is a Stage 4 state: framebuffer attaches and display works, but no acceleration.
+
+**Improvement from V1.0.0**: GPU name now shows as "Intel Iris Xe Graphics" instead of "Unknown Unknown" - the -ngreenforceprops flag appears to have improved property injection.
