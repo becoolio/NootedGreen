@@ -123,9 +123,9 @@ bool Genx::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t a
 			
 			//{"__ZN24AppleIntelBaseController34isGPUSubSamplingSupportedForTimingEPK29IODetailedTimingInformationV2",isGPUSubSamplingSupportedForTiming,	this->oisGPUSubSamplingSupportedForTiming},
 			
-			//{"__ZN14AppleIntelPort7readAUXEjPvj",wrapICLReadAUX,	this->orgICLReadAUX},
+			{"__ZN14AppleIntelPort7readAUXEjPvj",wrapICLReadAUX,	this->orgICLReadAUX},
 			
-			//{"__ZN24AppleIntelBaseController12CallBackAGDCE31kAGDCRegisterLinkControlEvent_tmj",CallBackAGDC,	this->oCallBackAGDC},
+			{"__ZN24AppleIntelBaseController12CallBackAGDCE31kAGDCRegisterLinkControlEvent_tmj",CallBackAGDC,	this->oCallBackAGDC},
 			{"__ZN20IntelFBClientControl11doAttributeEjPmmS0_S0_P25IOExternalMethodArguments",wrapFBClientDoAttribute,	this->orgFBClientDoAttribute},
 			
 			//{"__ZN21AppleIntelFramebuffer14disableDisplayEb",dovoid},

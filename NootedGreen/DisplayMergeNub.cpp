@@ -63,6 +63,10 @@ DisplayMergeNub::probe(IOService *provider, SInt32 *score)
     OSNumber *deviceValue = (OSNumber*)getProperty("DisplayProductID");
     OSString *displayPrefs = (OSString*)getProperty("IODisplayPrefsKey");
     //OSBoolean *ignoreDisplayPrefs = (OSBoolean*)getProperty("IgnoreDisplayPrefs");
+    if (!provider || !providerDict || !providerVendor || !providerDevice || !vendorValue || !deviceValue) {
+        return NULL;
+    }
+
     OSString *displayOverrideClass = (OSString*)providerDict->getObject("IOClass");
 
     if ((providerDict) && (providerVendor->unsigned64BitValue() == vendorValue->unsigned64BitValue()) && (providerDevice->unsigned64BitValue() == deviceValue->unsigned64BitValue()))

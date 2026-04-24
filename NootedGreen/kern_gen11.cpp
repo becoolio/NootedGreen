@@ -149,6 +149,265 @@ static int getV77KillDelayIterations() {
 	return 60;
 }
 
+static constexpr const char *kNGreenBuildTag = "V101-port-blue-oldgreen-surgical";
+static bool gTglAccelPersonalityPublished = false;
+
+static bool shouldForceAcceleratorProbe() {
+	int enabled = 1;
+	if (PE_parse_boot_argn("ngreenforceprobe", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	if (checkKernelArgument("-ngreennoforceprobe")) {
+		return false;
+	}
+
+	return checkKernelArgument("-ngreenforceprobe") || enabled != 0;
+}
+
+static const char *safeServiceName(IOService *service) {
+	return service ? service->getName() : "<null>";
+}
+
+static const char *safeMetaClassName(const OSMetaClassBase *object) {
+	if (object == nullptr) return "<null>";
+	auto *meta = object->getMetaClass();
+	return meta ? meta->getClassName() : "<no-meta>";
+}
+
+static uint32_t safeServiceState(IOService *service) {
+	return service ? static_cast<uint32_t>(service->getState()) : 0;
+}
+
+static IOPCIDevice *getProviderPCIDevice(void *provider) {
+	auto *providerService = reinterpret_cast<IOService *>(provider);
+	return providerService ? OSDynamicCast(IOPCIDevice, providerService) : nullptr;
+}
+
+static uint32_t getProviderDeviceId(IOPCIDevice *provider) {
+	return provider ? WIOKit::readPCIConfigValue(provider, WIOKit::kIOPCIConfigDeviceID) : 0;
+}
+
+static uint32_t getProviderRevisionId(IOPCIDevice *provider) {
+	return provider ? WIOKit::readPCIConfigValue(provider, WIOKit::kIOPCIConfigRevisionID) : 0;
+}
+
+static uint32_t getProviderPchDeviceId(IOPCIDevice *provider) {
+	return provider ? WIOKit::readPCIConfigValue(provider, WIOKit::kIOPCIConfigSubSystemID) : 0;
+}
+
+static uint32_t getProviderPchRevisionId(IOPCIDevice *provider) {
+	return provider ? WIOKit::readPCIConfigValue(provider, 0x1F, 0, 8) : 0;
+}
+
+static uint32_t inferAcceleratorSku(uint32_t pciDevice) {
+	switch (pciDevice) {
+		case 0x9A40:
+			return 1;
+		case 0x9A48:
+		case 0x9A49:
+			return 2;
+		default:
+			return 0;
+	}
+}
+
+static void seedProbeStateFromProvider(void *that, IOPCIDevice *provider) {
+	if (that == nullptr || provider == nullptr) return;
+
+	const uint32_t pciDevice = getProviderDeviceId(provider);
+	getMember<uint32_t>(that, 0x1118) = (pciDevice << 16) | 0x8086;
+	getMember<uint32_t>(that, 0x111c) = 0;
+	getMember<uint32_t>(that, 0x1110) = getProviderRevisionId(provider);
+	getMember<uint32_t>(that, 0x1114) = getProviderPchRevisionId(provider);
+
+	const uint32_t inferredSku = inferAcceleratorSku(pciDevice);
+	if (inferredSku != 0) {
+		getMember<uint32_t>(that, 0x1120) = inferredSku;
+	}
+
+	SYSLOG("ngreen",
+			"IntelAccelerator::probe seeded state devid=0x%x full=0x%x pch=0x%x pchRev=0x%x sku=%u",
+			pciDevice,
+			getMember<uint32_t>(that, 0x1118),
+			getProviderPchDeviceId(provider),
+			getMember<uint32_t>(that, 0x1114),
+			getMember<uint32_t>(that, 0x1120));
+}
+
+static void v104LogProviderChildren(IOService *svc, unsigned delayMs) {
+	if (svc == nullptr) return;
+
+	auto *provider = svc->getProvider();
+	if (provider == nullptr) {
+		SYSLOG("ngreen", "V104: T+%ums framebuffer provider missing", delayMs);
+		return;
+	}
+
+	SYSLOG("ngreen", "V104: T+%ums framebuffer provider=%s class=%s state=0x%llx",
+			delayMs, provider->getName(), provider->getMetaClass()->getClassName(),
+			(unsigned long long)provider->getState());
+
+	OSIterator *iter = provider->getClientIterator();
+	if (iter == nullptr) {
+		SYSLOG("ngreen", "V104: T+%ums provider has no client iterator", delayMs);
+		return;
+	}
+
+	int idx = 0;
+	OSObject *obj = nullptr;
+	while ((obj = iter->getNextObject())) {
+		auto *child = OSDynamicCast(IOService, obj);
+		if (child == nullptr) continue;
+		SYSLOG("ngreen", "V104: T+%ums provider child[%d]: %s class=%s state=0x%llx",
+				delayMs, idx, child->getName(), child->getMetaClass()->getClassName(),
+				(unsigned long long)child->getState());
+		idx++;
+	}
+	iter->release();
+	SYSLOG("ngreen", "V104: T+%ums provider child count=%d", delayMs, idx);
+}
+
+static void v104DelayedProviderCheck(thread_call_param_t p0, thread_call_param_t p1) {
+	v104LogProviderChildren(static_cast<IOService *>(p0), (unsigned)(uintptr_t)p1);
+}
+
+static void v104ScheduleProviderCheck(void *framebufferController, unsigned delayMs) {
+	thread_call_t tc = thread_call_allocate(v104DelayedProviderCheck,
+											static_cast<thread_call_param_t>(framebufferController));
+	if (tc) {
+		uint64_t deadline;
+		clock_interval_to_deadline(delayMs, kMillisecondScale, &deadline);
+		thread_call_enter1_delayed(tc, (thread_call_param_t)(uintptr_t)delayMs, deadline);
+	}
+}
+
+static OSDictionary *createTglAcceleratorPersonality(bool isRealTGL) {
+	auto *dict = OSDictionary::withCapacity(32);
+	if (dict == nullptr) return nullptr;
+
+	auto *bi = OSString::withCString("com.xxxxx.driver.AppleIntelTGLGraphics");
+	auto *cls = OSString::withCString("IntelAccelerator");
+	auto *mc = OSString::withCString("IOAccelerator");
+	auto *pv = OSString::withCString("IOPCIDevice");
+	auto *pcm = OSString::withCString("0x03000000&0xff000000");
+	auto *ppm = OSString::withCString("0x9A498086");
+	auto *src = OSString::withCString("0.0.0.0.0");
+	auto *mtl = OSString::withCString("AppleIntelTGLGraphicsMTLDriver");
+	auto *gl = OSString::withCString("AppleIntelTGLGraphicsGLDriver");
+	auto *dvd = OSString::withCString("AppleIntelTGLGraphicsVADriver");
+	auto *vaCodec = OSString::withCString("Gen10");
+	auto *vaScaler = OSString::withCString("Gen10");
+	auto *vaBGRA = OSString::withCString("Gen10");
+	auto *ps = OSNumber::withNumber(1000ULL, 32);
+	auto *vaRendID = OSNumber::withNumber(17301568ULL, 32);
+
+	if (bi) {
+		dict->setObject("CFBundleIdentifier", bi);
+		dict->setObject("CFBundleIdentifierKernel", bi);
+		dict->setObject("IOPersonalityPublisher", bi);
+	}
+	if (cls) dict->setObject("IOClass", cls);
+	if (mc) dict->setObject("IOMatchCategory", mc);
+	if (pv) dict->setObject("IOProviderClass", pv);
+	if (pcm) dict->setObject("IOPCIClassMatch", pcm);
+	if (ppm) dict->setObject("IOPCIPrimaryMatch", ppm);
+	if (ps) dict->setObject("IOProbeScore", ps);
+	if (src) dict->setObject("IOSourceVersion", src);
+	if (mtl) dict->setObject("MetalPluginName", mtl);
+	if (gl) dict->setObject("IOGLBundleName", gl);
+	if (dvd) dict->setObject("IODVDBundleName", dvd);
+	if (vaCodec) dict->setObject("IOGVACodec", vaCodec);
+	if (vaScaler) dict->setObject("IOGVAScaler", vaScaler);
+	if (vaBGRA) dict->setObject("IOGVABGRAEnc", vaBGRA);
+	if (vaRendID) dict->setObject("IOVARendererID", vaRendID);
+
+	auto *development = OSDictionary::withCapacity(8);
+	if (development) {
+		auto setDevNumber = [&](const char *key, uint32_t value) {
+			auto *num = OSNumber::withNumber(static_cast<unsigned long long>(value), 32);
+			if (num) {
+				development->setObject(key, num);
+				num->release();
+			}
+		};
+		setDevNumber("GraphicsSchedulerSelect", isRealTGL ? 3 : 5);
+		setDevNumber("MultiForceWakeSelect", 1);
+		setDevNumber("SchedulerFallbackOnFirmwareFail", 1);
+		setDevNumber("PPGTT", 1);
+		dict->setObject("Development", development);
+		development->release();
+	}
+
+	auto *pluginDict = OSDictionary::withCapacity(1);
+	if (pluginDict) {
+		auto *pluginName = OSString::withCString("IOAccelerator2D.plugin");
+		if (pluginName) {
+			pluginDict->setObject("ACCF0000-0000-0000-0000-000a2789904e", pluginName);
+			pluginName->release();
+		}
+		dict->setObject("IOCFPlugInTypes", pluginDict);
+		pluginDict->release();
+	}
+
+	OSSafeReleaseNULL(bi);
+	OSSafeReleaseNULL(cls);
+	OSSafeReleaseNULL(mc);
+	OSSafeReleaseNULL(pv);
+	OSSafeReleaseNULL(pcm);
+	OSSafeReleaseNULL(ppm);
+	OSSafeReleaseNULL(src);
+	OSSafeReleaseNULL(mtl);
+	OSSafeReleaseNULL(gl);
+	OSSafeReleaseNULL(dvd);
+	OSSafeReleaseNULL(vaCodec);
+	OSSafeReleaseNULL(vaScaler);
+	OSSafeReleaseNULL(vaBGRA);
+	OSSafeReleaseNULL(ps);
+	OSSafeReleaseNULL(vaRendID);
+
+	return dict;
+}
+
+static bool publishTglAcceleratorPersonality(bool isRealTGL, IOPCIDevice *gpu, const char *reason) {
+	if (gTglAccelPersonalityPublished) {
+		SYSLOG("ngreen", "V105: accelerator personality already published (%s)", reason);
+		return true;
+	}
+	if (gIOCatalogue == nullptr) {
+		SYSLOG("ngreen", "V105: gIOCatalogue is null (%s)", reason);
+		return false;
+	}
+
+	auto *dict = createTglAcceleratorPersonality(isRealTGL);
+	if (dict == nullptr) {
+		SYSLOG("ngreen", "V105: failed to allocate accelerator personality (%s)", reason);
+		return false;
+	}
+
+	auto *array = OSArray::withCapacity(1);
+	if (array == nullptr) {
+		dict->release();
+		SYSLOG("ngreen", "V105: failed to allocate accelerator personality array (%s)", reason);
+		return false;
+	}
+
+	array->setObject(dict);
+	const bool ok = gIOCatalogue->addDrivers(array, true);
+	SYSLOG("ngreen", "V105: addDrivers accelerator personality (%s) -> %d count=%u",
+			reason, ok, dict->getCount());
+	array->release();
+	dict->release();
+	if (!ok) return false;
+
+	gTglAccelPersonalityPublished = true;
+	if (gpu) {
+		SYSLOG("ngreen", "V105: republishing IGPU after accelerator personality (%s)", reason);
+		gpu->registerService();
+	}
+	return true;
+}
+
 bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size) {
 	
 	if (kextG11FB.loadIndex == index) {
@@ -749,6 +1008,8 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			//IOSleep(delay);
 			PANIC_COND(!patches[i].apply(patcher, address, size), "ngreen", "kextG11HW Failed to apply patch %zu", i);
 		}
+		bool publishedICLAccel = publishTglAcceleratorPersonality(NGreen::callback->isRealTGL, NGreen::callback->iGPU, "kextG11HW-load");
+		SYSLOG("ngreen", "V105: early accelerator personality publish result=%d", publishedICLAccel);
 		DBGLOG("ngreen", "Loaded AppleIntelICLGraphics!");
 
 		return true;
@@ -770,6 +1031,13 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		const bool forceFullMTL = shouldForceFullMetalPath();
 
 		RouteRequestPlus requests[] = {
+			 {"__ZN16IntelAccelerator5probeEP9IOServicePi", probe, this->oprobeAccel},
+			 {"__ZN16IntelAccelerator15configureDeviceEP11IOPCIDevice", configureDevice, this->oconfigureDeviceAccel},
+			 {"__ZN16IntelAccelerator33registerWithFramebufferControllerEv", registerWithFramebufferController, this->oregisterWithFramebufferControllerAccel},
+			 {"__ZN16IntelAccelerator23initHardwareWorkaroundsEv", initHardwareWorkarounds, this->oinitHardwareWorkaroundsAccel},
+			 {"__ZN16IntelAccelerator19populateAccelConfigEP13IOAccelConfig", populateAccelConfig, this->opopulateAccelConfigAccel},
+			 {"__ZN16IntelAccelerator22populateDeviceSettingsEP13IOAccelConfig", populateDeviceSettings, this->opopulateDeviceSettingsAccel},
+			 {"__ZN16IntelAccelerator17initMemoryManagerEv", initMemoryManagerEarly, this->oinitMemoryManagerEarlyAccel},
 			
 			 {"__ZN16IntelAccelerator20_PAVPCommandCallbackEP8OSObject22PAVPSessionCommandID_tjPj", wrapPavpSessionCallback, this->orgPavpSessionCallback},
 			
@@ -799,8 +1067,10 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			 {"__ZN23IGHardwareBlit3DContext10initializeEv", IGHardwareBlit3DContextinitialize, this->oIGHardwareBlit3DContextinitialize},
 			// {"__ZNK14IGMappedBuffer9getMemoryEv", IGMappedBuffergetMemory, this->oIGMappedBuffergetMemory},
 			 
-		 };
+		};
 		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route symbols");
+		bool publishedTGLAccel = publishTglAcceleratorPersonality(NGreen::callback->isRealTGL, NGreen::callback->iGPU, "kextG11HWT-load");
+		SYSLOG("ngreen", "V105: early TGL accelerator personality publish result=%d", publishedTGLAccel);
 
 		{
 			// loadGuCBinary: always route — WEG's firmware path is Mojave-gated and dead on Sonoma.
@@ -4334,9 +4604,111 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 			
 			SYSLOG("ngreen", "FBController: calling registerService() to trigger accelerator matching");
 			service->registerService();
+			v104LogProviderChildren(service, 0);
+			v104ScheduleProviderCheck(service, 1000);
 		}
 	}
 	
+	return ret;
+}
+
+void *Gen11::probe(void *that, void *provider, int *score)
+{
+	auto *service = reinterpret_cast<IOService *>(that);
+	auto *providerService = reinterpret_cast<IOService *>(provider);
+	auto *providerPci = getProviderPCIDevice(provider);
+	const int scoreIn = score ? *score : -1;
+	const bool forceProbe = shouldForceAcceleratorProbe();
+	SYSLOG("ngreen",
+			"IntelAccelerator::probe entered that=%p class=%s name=%s state=0x%x provider=%p pclass=%s pname=%s pstate=0x%x providerPCI=%p devid=0x%x rev=0x%x scoreIn=%d force=%d build=%s",
+			that,
+			safeMetaClassName(service),
+			safeServiceName(service),
+			safeServiceState(service),
+			provider,
+			safeMetaClassName(providerService),
+			safeServiceName(providerService),
+			safeServiceState(providerService),
+			providerPci,
+			getProviderDeviceId(providerPci),
+			getProviderRevisionId(providerPci),
+			scoreIn,
+			forceProbe,
+			kNGreenBuildTag);
+	auto ret = FunctionCast(probe, callback->oprobeAccel)(that, provider, score);
+	const int scoreOut = score ? *score : -1;
+	SYSLOG("ngreen",
+			"IntelAccelerator::probe returned ret=%p retClass=%s scoreOut=%d seededFull=0x%x seededSku=%u",
+			ret,
+			safeMetaClassName(reinterpret_cast<OSMetaClassBase *>(ret)),
+			scoreOut,
+			that ? getMember<uint32_t>(that, 0x1118) : 0,
+			that ? getMember<uint32_t>(that, 0x1120) : 0);
+
+	if (ret == nullptr && forceProbe) {
+		seedProbeStateFromProvider(that, providerPci);
+		if (score && *score < 1000) {
+			*score = 1000;
+		}
+		SYSLOG("ngreen",
+				"IntelAccelerator::probe forcing accept that=%p provider=%p providerPCI=%p scoreForced=%d full=0x%x sku=%u",
+				that,
+				provider,
+				providerPci,
+				score ? *score : -1,
+				that ? getMember<uint32_t>(that, 0x1118) : 0,
+				that ? getMember<uint32_t>(that, 0x1120) : 0);
+		return that;
+	}
+
+	return ret;
+}
+
+uint8_t Gen11::configureDevice(void *that, void *provider)
+{
+	SYSLOG("ngreen", "IntelAccelerator::configureDevice entered that=%p provider=%p", that, provider);
+	auto ret = FunctionCast(configureDevice, callback->oconfigureDeviceAccel)(that, provider);
+	SYSLOG("ngreen", "IntelAccelerator::configureDevice returned %u", ret);
+	return ret;
+}
+
+uint8_t Gen11::registerWithFramebufferController(void *that)
+{
+	SYSLOG("ngreen", "IntelAccelerator::registerWithFramebufferController entered that=%p", that);
+	auto ret = FunctionCast(registerWithFramebufferController, callback->oregisterWithFramebufferControllerAccel)(that);
+	SYSLOG("ngreen", "IntelAccelerator::registerWithFramebufferController returned %u", ret);
+	return ret;
+}
+
+uint8_t Gen11::initHardwareWorkarounds(void *that)
+{
+	SYSLOG("ngreen", "IntelAccelerator::initHardwareWorkarounds entered that=%p", that);
+	auto ret = FunctionCast(initHardwareWorkarounds, callback->oinitHardwareWorkaroundsAccel)(that);
+	SYSLOG("ngreen", "IntelAccelerator::initHardwareWorkarounds returned %u", ret);
+	return ret;
+}
+
+uint64_t Gen11::populateAccelConfig(void *that, void *config)
+{
+	SYSLOG("ngreen", "IntelAccelerator::populateAccelConfig entered that=%p config=%p", that, config);
+	auto ret = FunctionCast(populateAccelConfig, callback->opopulateAccelConfigAccel)(that, config);
+	SYSLOG("ngreen", "IntelAccelerator::populateAccelConfig returned 0x%llx", (unsigned long long)ret);
+	return ret;
+}
+
+uint64_t Gen11::populateDeviceSettings(void *that, void *config)
+{
+	SYSLOG("ngreen", "IntelAccelerator::populateDeviceSettings entered that=%p config=%p", that, config);
+	auto ret = FunctionCast(populateDeviceSettings, callback->opopulateDeviceSettingsAccel)(that, config);
+	SYSLOG("ngreen", "IntelAccelerator::populateDeviceSettings returned 0x%llx", (unsigned long long)ret);
+	return ret;
+}
+
+bool Gen11::initMemoryManagerEarly(void *that)
+{
+	SYSLOG("ngreen", "IntelAccelerator::initMemoryManager entered that=%p", that);
+	auto ret = FunctionCast(initMemoryManagerEarly, callback->oinitMemoryManagerEarlyAccel)(that);
+	SYSLOG("ngreen", "IntelAccelerator::initMemoryManager returned %d", ret);
 	return ret;
 }
 

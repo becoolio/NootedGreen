@@ -10,6 +10,7 @@
 #include "kern_patcherplus.hpp"
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_devinfo.hpp>
+#include <IOKit/IOCatalogue.h>
 
 
 static const char *pathIOAcceleratorFamily2= "/System/Library/Extensions/IOAcceleratorFamily2.kext/Contents/MacOS/IOAcceleratorFamily2";
@@ -49,6 +50,90 @@ static bool shouldForceRPLBringupPlatform(IORegistryEntry *entry) {
 	uint32_t platformId = *reinterpret_cast<const uint32_t *>(prop->getBytesNoCopy());
 	// 0x8A5C0002 is undefined for the currently used TGL framebuffer path on this setup.
 	return platformId == 0x8A5C0002U;
+}
+
+static bool shouldAutoSeedIGPUPropertiesEarly() {
+	const char *paths[] = {
+		"IOService:/AppleACPIPlatformExpert/PC00@0/IGPU@2",
+		"IOService:/AppleACPIPlatformExpert/PC00@0/GFX0@2",
+		"IOService:/AppleACPIPlatformExpert/PCI0@0/IGPU@2",
+		"IOService:/AppleACPIPlatformExpert/PCI0@0/GFX0@2"
+	};
+
+	for (auto path : paths) {
+		auto *entry = IORegistryEntry::fromPath(path, gIOServicePlane);
+		if (!entry) {
+			continue;
+		}
+
+		const bool shouldSeed = shouldForceRPLBringupPlatform(entry) || !entry->getProperty("device-id");
+		entry->release();
+		if (shouldSeed) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool shouldEnableLegacyPllBringup() {
+	int enabled = 0;
+	if (PE_parse_boot_argn("ngreenlegacypll", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	return checkKernelArgument("-ngreenlegacypll");
+}
+
+static void publishTglFramebufferPersonality(IOPCIDevice *gpu) {
+	auto *fbDict = OSDictionary::withCapacity(8);
+	if (!fbDict) {
+		return;
+	}
+
+	auto *bi = OSString::withCString("com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer");
+	auto *cls = OSString::withCString("AppleIntelFramebufferController");
+	auto *cat = OSString::withCString("IOFramebuffer");
+	auto *prov = OSString::withCString("IOPCIDevice");
+	auto *pciClass = OSString::withCString("0x03000000&0xff000000");
+	auto *pciMatch = OSString::withCString("0x9A498086");
+	auto *src = OSString::withCString("0.0.0.0.0");
+	auto *score = OSNumber::withNumber(static_cast<unsigned long long>(80000), 32);
+
+	if (bi) fbDict->setObject("CFBundleIdentifier", bi);
+	if (cls) fbDict->setObject("IOClass", cls);
+	if (cat) fbDict->setObject("IOMatchCategory", cat);
+	if (prov) fbDict->setObject("IOProviderClass", prov);
+	if (pciClass) fbDict->setObject("IOPCIClassMatch", pciClass);
+	if (pciMatch) fbDict->setObject("IOPCIPrimaryMatch", pciMatch);
+	if (src) fbDict->setObject("IOSourceVersion", src);
+	if (score) fbDict->setObject("IOProbeScore", score);
+
+	OSSafeReleaseNULL(bi);
+	OSSafeReleaseNULL(cls);
+	OSSafeReleaseNULL(cat);
+	OSSafeReleaseNULL(prov);
+	OSSafeReleaseNULL(pciClass);
+	OSSafeReleaseNULL(pciMatch);
+	OSSafeReleaseNULL(src);
+	OSSafeReleaseNULL(score);
+
+	auto *array = OSArray::withCapacity(1);
+	if (array) {
+		array->setObject(fbDict);
+		if (gIOCatalogue) {
+			const bool ok = gIOCatalogue->addDrivers(array, true);
+			SYSLOG("ngreen", "Published TGL framebuffer personality for 0x9A49: %d", ok);
+			if (gpu) {
+				gpu->registerService();
+			}
+		} else {
+			SYSLOG("ngreen", "Failed to publish TGL framebuffer personality: gIOCatalogue is null");
+		}
+		array->release();
+	}
+
+	fbDict->release();
 }
 
 static bool isLegacyIGPUPropSeedingEnabled() {
@@ -181,8 +266,10 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		DBGLOG("ngreen", "DYLD patches disabled by boot argument -nbdyldoff");
 	}
 
-	// Compatibility-first default: do not force-inject IGPU properties unless explicitly requested.
-	if (isLegacyIGPUPropSeedingEnabled()) {
+	const bool autoSeedIGPUProps = shouldAutoSeedIGPUPropertiesEarly();
+	const bool seedIGPUProps = isLegacyIGPUPropSeedingEnabled() || autoSeedIGPUProps;
+
+	if (seedIGPUProps) {
 		seedIGPUPropertiesEarly();
 	} else {
 		SYSLOG("ngreen", "compat mode: legacy IGPU property seeding disabled (use -ngreenforceprops to enable)");
@@ -207,7 +294,7 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		WIOKit::renameDevice(this->iGPU, "IGPU");
 		WIOKit::awaitPublishing(this->iGPU);
 
-		if (isLegacyIGPUPropSeedingEnabled()) {
+		if (seedIGPUProps) {
 			seedIGPUPropertiesOnEntry(this->iGPU);
 		}
 		
@@ -228,7 +315,7 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 
 		//this->iGPU->setProperty("@0,display-dither-support", panel, arrsize(panel));
 		
-		if (isLegacyIGPUPropSeedingEnabled()) {
+		if (seedIGPUProps) {
 			this->iGPU->setProperty("built-in", builtin, arrsize(builtin));
 			this->iGPU->setProperty("AAPL,slot-name", const_cast<char *>("built-in"), 9);
 			this->iGPU->setProperty("hda-gfx", const_cast<char *>("onboard-1"), 10);
@@ -280,9 +367,33 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		stolen_size *= (1024 * 1024);
 		SYSLOG("ngreen", "stolen_size 0x%x",stolen_size);
 		
-		if (isLegacyIGPUPropSeedingEnabled()) {
+		if (seedIGPUProps) {
 			static uint8_t unifiedMem[] = {0x00, 0x00, 0x00, 0x60};
 			this->iGPU->setProperty("framebuffer-unifiedmem", unifiedMem, arrsize(unifiedMem));
+		}
+
+		publishTglFramebufferPersonality(this->iGPU);
+
+		if (shouldEnableLegacyPllBringup()) {
+			setRMMIOIfNecessary();
+			constexpr uint32_t GEN9_PG_ENABLE = 0x46020;
+			constexpr uint32_t LEGACY_BXT_DE_PLL_CTL = 0x6d000;
+
+			writeReg32(GEN9_PG_ENABLE, 0);
+			IODelay(50);
+			writeReg32(BXT_DE_PLL_ENABLE, 0);
+			IODelay(20);
+			intel_de_rmw(LEGACY_BXT_DE_PLL_CTL, 0xFF, 60);
+			writeReg32(BXT_DE_PLL_ENABLE, BXT_DE_PLL_PLL_ENABLE);
+
+			int timeout = 2000;
+			while (timeout--) {
+				if (readReg32(BXT_DE_PLL_ENABLE) & BXT_DE_PLL_LOCK) {
+					break;
+				}
+				IODelay(1);
+			}
+			SYSLOG("ngreen", "legacy PLL bring-up applied via -ngreenlegacypll");
 		}
 		
 		KernelPatcher::routeVirtual(this->iGPU, WIOKit::PCIConfigOffset::ConfigRead16, configRead16, &orgConfigRead16);
@@ -505,4 +616,3 @@ bool NGreen::wrapApplePanelSetDisplay(IOService *that, IODisplay *display) {
 	bool ret = FunctionCast(wrapApplePanelSetDisplay, callback->orgApplePanelSetDisplay)(that, display);
 	return ret;
 }
-

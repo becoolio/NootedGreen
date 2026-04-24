@@ -1690,6 +1690,21 @@ private:
 	static uint8_t connectionChanged(void *that);
 	mach_vm_address_t oconnectionChanged {};
 
+	static void *probe(void *that, void *provider, int *score);
+	mach_vm_address_t oprobeAccel {};
+	static uint8_t configureDevice(void *that, void *provider);
+	mach_vm_address_t oconfigureDeviceAccel {};
+	static uint8_t registerWithFramebufferController(void *that);
+	mach_vm_address_t oregisterWithFramebufferControllerAccel {};
+	static uint8_t initHardwareWorkarounds(void *that);
+	mach_vm_address_t oinitHardwareWorkaroundsAccel {};
+	static uint64_t populateAccelConfig(void *that, void *config);
+	mach_vm_address_t opopulateAccelConfigAccel {};
+	static uint64_t populateDeviceSettings(void *that, void *config);
+	mach_vm_address_t opopulateDeviceSettingsAccel {};
+	static bool initMemoryManagerEarly(void *that);
+	mach_vm_address_t oinitMemoryManagerEarlyAccel {};
+
 	static uint8_t isPanelPowerOn(void *that);
 	mach_vm_address_t oisPanelPowerOn {};
 
