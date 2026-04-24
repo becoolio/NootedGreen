@@ -1,0 +1,23 @@
+ProductName:		macOS
+ProductVersion:		14.8.3
+BuildVersion:		23J220
+Darwin becoolios-mbp 23.6.0 Darwin Kernel Version 23.6.0: Wed Nov  5 21:49:21 PST 2025; root:xnu-10063.141.1.708.2~1/RELEASE_X86_64 x86_64
+becoolios-mbp
+ 0:31  up 4 mins, 1 user, load averages: 14.72 26.73 13.53
+becoolio
+Fri Apr 24 00:31:12 EST 2026
+kern.boottime: { sec = 1777008450, usec = 663816 } Fri Apr 24 00:27:30 2026
+hw.model: MacBookPro16,2
+System Integrity Protection status: unknown (Custom Configuration).
+
+Configuration:
+	Apple Internal: disabled
+	Kext Signing: disabled
+	Filesystem Protections: disabled
+	Debugging Restrictions: disabled
+	DTrace Restrictions: disabled
+	NVRAM Protections: disabled
+	BaseSystem Verification: disabled
+
+This is an unsupported configuration, likely to break in the future and leave your machine in an unknown state.
+Authenticated Root status: disabled

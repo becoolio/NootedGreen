@@ -1,0 +1,52 @@
+# Boot Timeline - V1.0.0
+
+## Timeline (approximate from logs)
+
+### 00:27:29 - Boot Start
+- Kernel boot beginning
+- Security policies loading
+
+### 00:27:31 - Early Services
+- AppleSystemPolicy initializing
+- AppleCredentialManager initializing
+
+### 00:27:41-48 - USB and Device Services
+- USB devices initializing
+- fseventsd logging issues (non-critical)
+- AppleUSBRealtek8153Patcher starting
+
+### 00:27:44 - Network and Display
+- WiFi (airportd) starting
+- MTLCompilerService stubs being created
+- WindowServer not yet started
+
+### 00:27:45 - Kext Approval
+- HookCase kext approved (not NootedGreen related)
+- kernelmanagerd validating extensions
+
+### 00:27:52 - Graphics Kext Loading
+- **00:27:52.731570** - Lilu kext load notification received
+- **00:27:53.525461** - kernelmanager_helper error: Lilu not found in helper
+- **00:27:53.537848** - NootedGreen kext load notification received
+- **00:27:53.538010** - kernelmanager_helper error: NootedGreen not found in helper
+
+### 00:27:56 - WindowServer Startup
+- WindowServer starting
+- MTLCompilerService stub created for WindowServer
+- loginwindow starting
+- CoreDisplay/display initialization occurs
+
+### 00:27:57 - Loginwindow
+- loginwindow starting
+- Metal selection policy applied
+- ViewBridgeAuxil starting
+
+### 00:28:00 - Post-Login
+- SecurityAgent error: "No Metal renderer available"
+- System appears to reach login screen
+
+## Key Observations
+1. Both Lilu and NootedGreen loaded (kextstat shows them)
+2. kernelmanager_helper errors are non-critical (helper doesn't have them registered, but kexts loaded)
+3. Display works (1920x1080) but no Metal acceleration
+4. System reaches GUI (loginwindow started)

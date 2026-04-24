@@ -1,0 +1,209 @@
+# Acceleration Readiness Analysis - V1.0.0
+
+## 1. Current Stage Classification
+
+**Current Acceleration Stage**: Stage 4
+
+Stage 4 = "Stable display, but no accelerator service"
+
+The system has a working display at 1920x1080 with the main display online. However, there is no proper IOAccelerator service and Metal is not working.
+
+## 2. Is IOAccelerator Attached?
+
+**Answer**: PARTIAL
+
+A generic IOAccelerator service exists in IORegistry, but it shows:
+- CFBundleIdentifier: "com.unknown.bundle"
+- This is NOT a proper AppleIntel accelerator
+
+The expected AppleIntel IOAcceleratorFamily2 service is NOT attached.
+
+## 3. Is IOAccelDisplayPipeUserClient2 Created?
+
+**Answer**: UNKNOWN - Not found in search
+
+No IOAccelDisplayPipeUserClient2 was found in the collected logs. This indicates display pipe creation may have failed or not been attempted.
+
+## 4. Is Metal Visible in system_profiler?
+
+**Answer**: NO
+
+System profiler shows:
+- "Kernel Extension Info: No Kext Loaded"
+- SecurityAgent error: "No Metal renderer available"
+
+Metal is NOT working.
+
+## 5. Are Accelerator User Clients Visible?
+
+**Answer**: PARTIAL
+
+IOFramebufferUserClient and IOFramebufferSharedUserClient are visible, but these are framebuffer user clients, not accelerator user clients.
+
+No IOAccelDisplayPipeUserClient2 or similar accelerator user clients found.
+
+## 6. Does the GPU Publish Required Accelerator Properties?
+
+**Answer**: PARTIAL
+
+The IORegistry shows:
+- IOAccelerator entry exists with:
+  - IOGLBundleName: "AppleMetalGLRenderer"
+  - MetalPluginName: "AGXMetalA12"
+  - VRAM,totalMB: 16384
+
+However, these properties appear to be generic/fallback values, not properly initialized AppleIntel properties.
+
+## 7. Are Framebuffer and Accelerator Matched to Same IGPU Device?
+
+**Answer**: UNKNOWN
+
+Both framebuffer and generic accelerator appear under the GFX0 node, but:
+- Framebuffer is basic (not AppleIntelFramebuffer)
+- Accelerator is generic (not AppleIntel accelerator)
+- No clear evidence they're properly matched
+
+## 8. Are Required AppleIntel Graphics Components Loaded?
+
+**Answer**: NO - CRITICAL FAILURE
+
+No AppleIntel graphics kexts are loaded:
+- AppleIntelTGLGraphics.kext: NOT LOADED
+- AppleIntelTGLGraphicsFramebuffer.kext: NOT LOADED
+- AppleIntelAccelerator: NOT LOADED
+
+This is the primary blocker for acceleration.
+
+## 9. Are Required IORegistry Properties Present?
+
+**Answer**: PARTIAL
+
+IGPU properties present:
+- device-id: 0x0000499a (spoofed) - YES
+- AAPL,ig-platform-id: 0x0000499a - YES
+- vendor-id: 0x8086 - YES
+- class-code: 0x030000 - YES
+
+Missing properties (not found in logs):
+- EDID - UNKNOWN
+- VBT - UNKNOWN
+- OpRegion - UNKNOWN
+
+## 10. Is Framebuffer Stable Enough for Acceleration Testing?
+
+**Answer**: Yes, but...
+
+The basic framebuffer is stable (display works, no crashes), but it's not the AppleIntel framebuffer. You cannot test AppleIntel acceleration when the AppleIntel framebuffer isn't loaded.
+
+## 11. Does Display Pipe Creation Work?
+
+**Answer**: UNKNOWN
+
+No display pipe logs found. IOAccelDisplayPipeUserClient2 is not present, suggesting display pipe creation may have failed or not been attempted.
+
+## 12. Does Display Pipe Creation Cause the Hang?
+
+**Answer**: N/A - No hang observed
+
+System boots to login screen successfully. No blue-bar hang or freeze observed in this boot.
+
+## 13. Is BCS Involved in Display Pipe Failure?
+
+**Answer**: UNKNOWN
+
+No BCS (Blitter Command Stream) logs found. Cannot determine BCS involvement.
+
+## 14. Is RCS Initialized Before Acceleration Is Attempted?
+
+**Answer**: UNKNOWN
+
+No RCS (Render Command Stream) logs found. Cannot determine RCS initialization state.
+
+## 15. Are Forcewake and Power Wells Stable Before Ring Use?
+
+**Answer**: UNKNOWN
+
+No forcewake or power well logs found. Cannot verify.
+
+## 16. Is GuC Required, Skipped, Stuck, or Failing?
+
+**Answer**: UNKNOWN
+
+No GuC firmware logs found. Cannot determine status.
+
+## 17. Is DMC Required, Skipped, Loaded, or Failing?
+
+**Answer**: UNKNOWN
+
+No DMC firmware logs found. Cannot determine status.
+
+## 18. Is Acceleration Blocked by Service Matching?
+
+**Answer**: YES
+
+The AppleIntel graphics kexts are not loading, which means they're not matching to the IGPU. This is a service matching failure.
+
+## 19. Is Acceleration Blocked by Missing Properties?
+
+**Answer**: PARTIALLY
+
+Platform-id and device-id are set correctly, but:
+- No AppleIntel framebuffer properties visible
+- No AppleIntel accelerator properties visible
+
+## 20. Is Acceleration Blocked by Failed Framebuffer Attach?
+
+**Answer**: YES
+
+The AppleIntelFramebuffer is not present. The basic IOFramebuffer is present but it's not the AppleIntel framebuffer.
+
+## 21. Is Acceleration Blocked by Display Pipe Timeout?
+
+**Answer**: UNKNOWN
+
+No display pipe timeout logs found. However, no display pipe appears to have been created either.
+
+## 22. Is Acceleration Blocked by WindowServer/CoreDisplay?
+
+**Answer**: NO
+
+WindowServer started successfully. No CoreDisplay errors visible. The display works (just without acceleration).
+
+## 23. Is Acceleration Blocked by Ring Initialization?
+
+**Answer**: UNKNOWN
+
+No ring initialization logs found. Cannot determine.
+
+## 24. Is Acceleration Blocked by Firmware Handling?
+
+**Answer**: UNKNOWN
+
+No firmware logs found. Cannot determine.
+
+## 25. Is Acceleration Blocked by Userspace Graphics Framework Rejection?
+
+**Answer**: YES (indirectly)
+
+The error "No Metal renderer available" in SecurityAgent indicates userspace frameworks cannot use the GPU for acceleration. This is because there's no AppleIntel accelerator service for them to connect to.
+
+## 26. What Exact Condition Must Be Fixed Before Next Acceleration Test?
+
+**Primary Condition**: AppleIntel graphics kexts must load and match to IGPU
+
+Specifically:
+1. AppleIntelTGLGraphics.kext must load
+2. AppleIntelTGLGraphicsFramebuffer.kext must load  
+3. These kexts must match to the spoofed IGPU (device-id 0x9a49)
+4. The framebuffer must attach as AppleIntelFramebuffer (not basic IOFramebuffer)
+5. The IOAccelerator must attach with proper AppleIntel bundle ID
+
+**Without AppleIntel kexts loading, acceleration cannot work regardless of other factors.**
+
+---
+
+## Summary
+
+The system is at Stage 4 - display works but no acceleration. The primary blocker is that **AppleIntel graphics kexts are not loading**. Without these kexts, there is no AppleIntel framebuffer, no AppleIntel accelerator, and no Metal support.
+
+The next step must be to diagnose why AppleIntel kexts aren't matching to the IGPU. This is likely a device-id or platform-id compatibility issue with NootedGreen's patching.

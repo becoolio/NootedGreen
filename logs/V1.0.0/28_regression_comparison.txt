@@ -1,0 +1,35 @@
+# Regression Comparison - V1.0.0
+
+Previous version folder: NONE
+Current version folder: logs/V1.0.0/
+
+Overall comparison result: NOT COMPARABLE
+
+## Reason
+This is the first boot log collection for version V1.0.0. There is no previous log folder to compare against.
+
+A regression comparison requires at least one previous log folder with a summary report, failure matrix, or success matrix file. Since this is the first collection, comparison is not possible.
+
+## What Would Be Needed for Future Comparisons
+
+For the next boot (V1.0.1 or later), the following items should be tracked:
+
+1. Boot result (success/partial/failed/panic)
+2. Lilu load status and version
+3. NootedGreen load status and version
+4. Source vs installed vs loaded version matching
+5. IGPU device-id and platform-id
+6. AppleIntel graphics kext load status
+7. Framebuffer attach status
+8. Display online/offline
+9. Metal availability
+10. Acceleration stage (0-10)
+
+## Recommendation for Future Collections
+
+After each reboot collection, ensure:
+- 27_summary_report.md is created
+- 23_failure_matrix.txt is created  
+- 24_success_matrix.txt is created
+
+This will enable meaningful regression comparisons in future boot analyses.
