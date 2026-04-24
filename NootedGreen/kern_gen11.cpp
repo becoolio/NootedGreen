@@ -4240,13 +4240,20 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 		if (service) {
 			SYSLOG("ngreen", "FBController: injecting IntelAccelerator personality into IOCatalogue");
 			
-			auto *dict = OSDictionary::withCapacity(24);
+			auto *dict = OSDictionary::withCapacity(25);
 			if (dict) {
 				const bool useTglNames = callback && callback->tglHWLoaded;
 				const char *bundleId = useTglNames ? "com.xxxxx.driver.AppleIntelTGLGraphics" : "com.apple.driver.AppleIntelICLGraphics";
 				const char *mtlName = useTglNames ? "AppleIntelTGLGraphicsMTLDriver" : "AppleIntelICLGraphicsMTLDriver";
 				const char *glName = useTglNames ? "AppleIntelTGLGraphicsGLDriver" : "AppleIntelICLGraphicsGLDriver";
 				const char *vaName = useTglNames ? "AppleIntelTGLGraphicsVADriver" : "AppleIntelICLGraphicsVADriver";
+				char pciPrimaryMatch[11] = "0x9A498086";
+				auto *provider = OSDynamicCast(IOPCIDevice, service->getProvider());
+				if (provider) {
+					snprintf(pciPrimaryMatch, sizeof(pciPrimaryMatch), "0x%04X%04X",
+					         provider->configRead16(kIOPCIConfigDeviceID),
+					         provider->configRead16(kIOPCIConfigVendorID));
+				}
 
 				// Basic matching properties
 				auto *bi  = OSString::withCString(bundleId);
@@ -4254,6 +4261,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 				auto *mc  = OSString::withCString("IOAccelerator");
 				auto *pv  = OSString::withCString("IOPCIDevice");
 				auto *pcm = OSString::withCString("0x03000000&0xff000000");
+				auto *ppm = OSString::withCString(pciPrimaryMatch);
 				auto *ps  = OSNumber::withNumber(static_cast<unsigned long long>(1000), 32);
 				
 				dict->setObject("CFBundleIdentifier", bi);
@@ -4261,6 +4269,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 				dict->setObject("IOMatchCategory", mc);
 				dict->setObject("IOProviderClass", pv);
 				dict->setObject("IOPCIClassMatch", pcm);
+				dict->setObject("IOPCIPrimaryMatch", ppm);
 				dict->setObject("IOProbeScore", ps);
 				
 				OSSafeReleaseNULL(bi);
@@ -4268,6 +4277,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 				OSSafeReleaseNULL(mc);
 				OSSafeReleaseNULL(pv);
 				OSSafeReleaseNULL(pcm);
+				OSSafeReleaseNULL(ppm);
 				OSSafeReleaseNULL(ps);
 				
 				// V44: GPU driver bundle names — required by IOAcceleratorFamily2 and WindowServer
@@ -4322,7 +4332,9 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 					dpCaps->release();
 				}
 				
-				SYSLOG("ngreen", "V44: personality has %u properties", dict->getCount());
+				SYSLOG("ngreen",
+				       "V44: IntelAccelerator personality bundle=%s match=%s metal=%s gl=%s va=%s props=%u",
+				       bundleId, pciPrimaryMatch, mtlName, glName, vaName, dict->getCount());
 				
 				auto *array = OSArray::withCapacity(1);
 				if (array) {
@@ -4338,8 +4350,36 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 				dict->release();
 			}
 			
-			SYSLOG("ngreen", "FBController: calling registerService() to trigger accelerator matching");
+			SYSLOG("ngreen", "FBController: calling registerService() to trigger accelerator matching for IntelAccelerator");
 			service->registerService();
+
+			OSIterator *clientIter = service->getClientIterator();
+			if (clientIter) {
+				bool sawIntelAccelerator = false;
+				OSObject *clientObj = nullptr;
+				while ((clientObj = clientIter->getNextObject())) {
+					auto *client = OSDynamicCast(IOService, clientObj);
+					if (!client) {
+						continue;
+					}
+
+					const char *clientName = client->getName();
+					const char *clientClass = client->getMetaClass() ? client->getMetaClass()->getClassName() : "<null>";
+					SYSLOG("ngreen", "FBController: post-publish child name=%s class=%s state=0x%llx",
+					       clientName ? clientName : "<null>",
+					       clientClass,
+					       static_cast<unsigned long long>(client->getState()));
+
+					if ((clientName && !strcmp(clientName, "IntelAccelerator")) ||
+					    (clientClass && !strcmp(clientClass, "IntelAccelerator"))) {
+						sawIntelAccelerator = true;
+					}
+				}
+				clientIter->release();
+				SYSLOG("ngreen", "FBController: post-publish IntelAccelerator visible=%d", sawIntelAccelerator);
+			} else {
+				SYSLOG("ngreen", "FBController: post-publish child scan unavailable");
+			}
 		}
 	}
 	

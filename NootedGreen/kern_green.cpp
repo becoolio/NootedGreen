@@ -244,7 +244,7 @@ void NGreen::init() {
     callback = this;
 
     SYSLOG("ngreen", "============================================================");
-    SYSLOG("ngreen", "NootedGreen V1.0.2 - STARTING");
+	SYSLOG("ngreen", "NootedGreen V1.0.3 - STARTING");
     SYSLOG("ngreen", "============================================================");
 
     lilu.onKextLoadForce(&kextAGDP);

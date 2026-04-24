@@ -15,11 +15,11 @@
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.2</string>
+	<string>1.0.3</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>1.0.2</string>
+	<string>1.0.3</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>AppleIntelTGLGraphicsFramebuffer</key>
@@ -33,7 +33,7 @@
 			<key>IOPCIClassMatch</key>
 			<string>0x03000000&amp;0xff000000</string>
 			<key>IOPCIPrimaryMatch</key>
-			<string></string>
+			<string>0x9A498086</string>
 			<key>IOProbeScore</key>
 			<integer>80000</integer>
 			<key>IOProviderClass</key>
@@ -85,7 +85,7 @@
 			<key>IOPCIClassMatch</key>
 			<string>0x03000000&amp;0xff000000</string>
 			<key>IOPCIPrimaryMatch</key>
-			<string></string>
+			<string>0x9A498086</string>
 			<key>IOProbeScore</key>
 			<integer>1000</integer>
 			<key>IOProviderClass</key>
