@@ -1,0 +1,95 @@
+# Raw Command List - V1.0.2
+
+## System Identity Commands
+```
+sw_vers
+uname -a  
+hostname
+uptime
+whoami
+date
+sysctl kern.boottime
+sysctl hw.model
+csrutil status
+csrutil authenticated-root status
+nvram -p
+nvram boot-args
+```
+
+## Git and Build State
+```
+git branch --show-current
+git status --short
+git log -1 --oneline
+git diff --stat
+/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" NootedGreen/Info.plist
+find /Library/Extensions /System/Library/Extensions -name "*Nooted*" -o -name "*Lilu*"
+```
+
+## Loaded Kexts
+```
+kmutil showloaded
+kextstat
+kmutil showloaded | grep -Ei "Lilu|Nooted|NootedGreen|AppleIntel|Intel|Framebuffer|Graphics|IOGraphics|IOAccelerator|CoreDisplay|Metal"
+```
+
+## Kernel Logs
+```
+log show --last boot --style syslog --info --debug
+log show --last 30m --style syslog --info --debug
+log show --last 10m --style syslog --info --debug
+```
+
+## Filtered Graphics Logs
+```
+cat 04_kernel_log_full.txt | grep -iE "Nooted|Lilu|Framebuffer|IOAccel|CoreDisplay|GPU|GuC|BCS|RCS"
+```
+
+## Dmesg
+```
+dmesg
+cat 06_dmesg.txt | grep -iE "Nooted|Lilu|Intel|Framebuffer|Graphics|IOAccel|display|GPU|GuC|HuC|DMC|forcewake|ring|BCS|RCS|VCS|VECS|hang|panic|timeout"
+```
+
+## NVRAM
+```
+nvram -p
+nvram boot-args
+```
+
+## IORegistry
+```
+ioreg -lw0
+ioreg -l
+ioreg -lw0 -p IOService | grep -iE "Nooted|AppleIntel|Intel|IGPU|GFX0|Framebuffer|display|IODisplay|IOFramebuffer|IOGraphics|IOAccelerator|IOAccel|Metal|CoreDisplay|AGDC|backlight|AppleBacklight|AppleCLCD|ApplePanel|OpRegion|VBT|EDID"
+ioreg -lw0 -p IODisplayWrangler
+ioreg -lw0 -p IOService -c IOAccelerator
+ioreg -lw0 -p IOService -c IOAcceleratorFamily2
+ioreg -lw0 -p IOService -c IOFramebuffer
+ioreg -lw0 -p IODeviceTree | grep -iE "IGPU|GFX0|display|AAPL|framebuffer|built-in|device-id|vendor-id|class-code|model|compatible|name"
+ioreg -lw0 -p IOService -n IGPU
+ioreg -lw0 -p IOService -n GFX0
+```
+
+## System Profiler
+```
+system_profiler SPDisplaysDataType
+system_profiler SPHardwareDataType
+system_profiler SPExtensionsDataType | grep -iE "Nooted|Lilu|Intel|Framebuffer|Graphics|IOAccel"
+```
+
+## WindowServer Logs
+```
+log show --last boot --predicate 'process == "WindowServer"' --style syslog --info --debug
+```
+
+## Lilu/NootedGreen Logs
+```
+cat 04_kernel_log_full.txt | grep -iE "Lilu|Nooted|NootedGreen|NGreen|patcher|routeMultiple|routeFunction|kernel patch|userspace patch|framebuffer patch|device-id|platform-id|IGPU|spoof|hook|callback"
+```
+
+## Analysis
+```
+grep -iE "IOAccelDisplayPipeUserClient2|Metal|IOAccel" logs/V1.0.2/*.txt
+ls -lah logs/V1.0.2/
+```

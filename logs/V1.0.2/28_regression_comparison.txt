@@ -1,0 +1,50 @@
+# Regression Comparison - V1.0.2 vs V1.0.1
+
+Previous version folder: logs/V1.0.1/
+Current version folder: logs/V1.0.2/
+
+Overall comparison result: **MAJOR IMPROVEMENT**
+
+## Overview
+This boot shows MASSIVE improvement over V1.0.1. The core issue preventing AppleIntel graphics kexts from loading has been FIXED.
+
+## Comparison Table
+
+| Item | V1.0.1 | V1.0.2 | Change Type | Meaning |
+|------|--------|--------|------------|---------|
+| AppleIntelTGLGraphicsFramebuffer | NOT LOADED | LOADED | **NEW SUCCESS** | KEYS FIXED! |
+| AppleIntelTGLGraphics | NOT LOADED | LOADED | **NEW SUCCESS** | KEYS FIXED! |
+| IOAcceleratorFamily2 | Generic | Loaded | NEW SUCCESS | Framework loading |
+| NootedGreen version | 1.0.1 | 1.0.2 | IMPROVED | Version bump |
+| Device spoofing | Working | Working | UNCHANGED | Still functional |
+| GPU name | Intel Iris Xe | Intel Iris Xe | UNCHANGED | Same |
+| Display | 1920x1080 | 1920x1080 | UNCHANGED | Same |
+| Display online | Yes | Yes | UNCHANGED | Same |
+| WindowServer | Running | Running | UNCHANGED | Same |
+| IOAccelerator | Unknown | com.unknown.bundle | **NEW FAILURE** | Different failure |
+| Metal | Not working | AGXMetalA12 | **NEW FAILURE** | Different failure |
+| Acceleration stage | 4 | 4 | UNCHANGED | Still Stage 4 |
+
+## What Works Now (V1.0.2):
+- AppleIntel graphics kexts ARE LOADING - this is huge!
+- Framebuffer is working
+- Display is online at 1920x1080
+- WindowServer is running
+
+## What's Still Failing (V1.0.2):
+- IOAccelerator is generic (com.unknown.bundle) not AppleIntel
+- Metal shows AGXMetalA12 (Apple GPU framework) instead of Intel
+- No full acceleration (still Stage 4)
+
+## Most Important Evidence:
+1. kextstat shows BOTH AppleIntelTGLGraphicsFramebuffer and AppleIntelTGLGraphics loaded!
+2. device-id spoofed to 0x9a49 (TigerLake GT2)
+3. Platform ID 0x0000499a
+4. Display is online
+
+## Conclusion:
+**MOSTLY IMPROVEMENT** - AppleIntel kexts now loading but accelerator is still generic. The core blocker of AppleIntel loading is FIXED. Now need to work on matching/accelerator binding.
+
+Recommended next action: 
+- Add logging to trace why IOAccelerator binds to generic instead of AppleIntel
+- Investigate platform-id and configuration for accelerator matching

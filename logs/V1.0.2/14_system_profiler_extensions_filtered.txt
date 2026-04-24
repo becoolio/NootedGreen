@@ -1,0 +1,142 @@
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/AGDCBacklightControl.kext
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/AGDCPluginDisplayMetrics.kext
+    AMDFramebuffer:
+      Bundle ID: com.apple.kext.AMDFramebuffer
+      Get Info String: AMDFramebuffer 5.5.20 24628
+      Location: /System/Library/Extensions/AMDFramebuffer.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AMDFramebuffer
+    AMDRadeonX6000Framebuffer:
+      Bundle ID: com.apple.kext.AMDRadeonX6000Framebuffer
+      Get Info String: AMDRadeonX6000Framebuffer 5.5.20 24628
+      Location: /System/Library/Extensions/AMDRadeonX6000Framebuffer.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AMDRadeonX6000Framebuffer
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/AppleGPUWrangler.kext
+    AppleGraphicsControl:
+      Bundle ID: com.apple.driver.AppleGraphicsControl
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleGraphicsControl
+    AppleGraphicsDeviceControl:
+      Bundle ID: com.apple.AppleGraphicsDeviceControl
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/AppleGraphicsDeviceControl.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleGraphicsDeviceControl
+    AppleGraphicsDevicePolicy:
+      Bundle ID: com.apple.driver.AppleGraphicsDevicePolicy
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/AppleGraphicsDevicePolicy.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleGraphicsDevicePolicy
+    AppleGraphicsPowerManagement:
+      Location: /System/Library/Extensions/AppleGraphicsPowerManagement.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleGraphicsPowerManagement
+    AppleIntelCFLGraphicsFramebuffer:
+      Bundle ID: com.apple.driver.AppleIntelCFLGraphicsFramebuffer
+      Get Info String: AppleIntelCFLGraphicsFramebuffer 22.5.15 10
+      Location: /System/Library/Extensions/AppleIntelCFLGraphicsFramebuffer.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelCFLGraphicsFramebuffer
+    AppleIntelICLGraphics:
+      Bundle ID: com.apple.driver.AppleIntelICLGraphics
+      Get Info String: AppleIntelICLGraphics 22.5.15 10
+      Location: /System/Library/Extensions/AppleIntelICLGraphics.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelICLGraphics
+    AppleIntelICLLPGraphicsFramebuffer:
+      Bundle ID: com.apple.driver.AppleIntelICLLPGraphicsFramebuffer
+      Get Info String: AppleIntelICLLPGraphicsFramebuffer 22.5.15 10
+      Location: /System/Library/Extensions/AppleIntelICLLPGraphicsFramebuffer.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelICLLPGraphicsFramebuffer
+    AppleIntelKBLGraphics:
+      Bundle ID: com.apple.driver.AppleIntelKBLGraphics
+      Get Info String: AppleIntelKBLGraphics 22.5.15 10
+      Location: /System/Library/Extensions/AppleIntelKBLGraphics.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelKBLGraphics
+    AppleIntelKBLGraphicsFramebuffer:
+      Bundle ID: com.apple.driver.AppleIntelKBLGraphicsFramebuffer
+      Get Info String: AppleIntelKBLGraphicsFramebuffer 22.5.15 10
+      Location: /System/Library/Extensions/AppleIntelKBLGraphicsFramebuffer.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelKBLGraphicsFramebuffer
+    AppleIntelLpssDmac:
+      Bundle ID: com.apple.driver.AppleIntelLpssDmac
+      Location: /System/Library/Extensions/AppleIntelLpssDmac.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelLpssDmac
+    AppleIntelLpssGspi:
+      Bundle ID: com.apple.driver.AppleIntelLpssGspi
+      Location: /System/Library/Extensions/AppleIntelLpssGspi.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelLpssGspi
+    AppleIntelLpssI2C:
+      Bundle ID: com.apple.driver.AppleIntelLpssI2C
+      Location: /System/Library/Extensions/AppleIntelLpssI2C.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelLpssI2C
+    AppleIntelLpssI2CController:
+      Bundle ID: com.apple.driver.AppleIntelLpssI2CController
+      Location: /System/Library/Extensions/AppleIntelLpssI2CController.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelLpssI2CController
+    AppleIntelLpssSpiController:
+      Bundle ID: com.apple.driver.AppleIntelLpssSpiController
+      Location: /System/Library/Extensions/AppleIntelLpssSpiController.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelLpssSpiController
+    AppleIntelLpssUARTCommon:
+      Bundle ID: com.apple.driver.AppleIntelLpssUARTCommon
+      Location: /System/Library/Extensions/AppleIntelLpssUARTCommon.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelLpssUARTCommon
+    AppleIntelLpssUARTv0:
+      Bundle ID: com.apple.driver.AppleIntelLpssUARTv0
+      Location: /System/Library/Extensions/AppleIntelLpssUARTv0.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelLpssUARTv0
+    AppleIntelLpssUARTv1:
+      Bundle ID: com.apple.driver.AppleIntelLpssUARTv1
+      Location: /System/Library/Extensions/AppleIntelLpssUARTv1.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelLpssUARTv1
+    AppleIntelMCEReporter:
+      Bundle ID: com.apple.driver.AppleIntelMCEReporter
+      Location: /System/Library/Extensions/AppleIntelMCEReporter.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelMCEReporter
+    AppleIntelPCHPMC:
+      Bundle ID: com.apple.driver.AppleIntelPCHPMC
+      Location: /System/Library/Extensions/AppleIntelPCHPMC.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelPCHPMC
+    AppleIntelSlowAdaptiveClocking:
+      Bundle ID: com.apple.driver.AppleIntelSlowAdaptiveClocking
+      Location: /System/Library/Extensions/AppleIntelSlowAdaptiveClocking.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleIntelSlowAdaptiveClocking
+    AppleIntelTGLGraphics:
+      Bundle ID: com.xxxxx.driver.AppleIntelTGLGraphics
+      Get Info String: AppleIntelTGLGraphics 16.0.32 10
+      Kind: Intel
+      64-Bit (Intel): Yes
+      Location: /Library/Extensions/AppleIntelTGLGraphics.kext
+              Indirect dependencies can't be resolved: com.apple.iokit.IOPCIFamily, com.apple.iokit.IOSurface, org.smichaud.HookCase, com.apple.iokit.IOGraphicsFamily, com.apple.iokit.IOAcceleratorFamily2
+    AppleIntelTGLGraphicsFramebuffer:
+      Bundle ID: com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer
+      Get Info String: AppleIntelTGLGraphicsFramebuffer 16.0.32 10
+      Kind: Intel
+      64-Bit (Intel): Yes
+      Location: /Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext
+              Indirect dependencies can't be resolved: com.apple.iokit.IOPCIFamily, com.apple.iokit.IOACPIFamily, org.smichaud.HookCase, com.apple.iokit.IOAcceleratorFamily2, com.apple.iokit.IOReportFamily, com.apple.AppleGraphicsDeviceControl, com.apple.iokit.IOGraphicsFamily
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/AppleMGPUPowerControl.kext
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/AppleMuxControl.kext
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/AppleMuxControl2.kext
+      Location: /System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/ApplePolicyControl.kext
+    AppleVirtualGraphics:
+      Bundle ID: com.apple.driver.AppleVirtualGraphics
+      Location: /System/Library/Extensions/AppleVirtualGraphics.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: AppleVirtualGraphics
+      Kind: Intel
+      64-Bit (Intel): Yes
+      Kind: Intel
+      64-Bit (Intel): Yes
+      Kind: Intel
+      64-Bit (Intel): Yes
+    IOAcceleratorFamily2:
+      Bundle ID: com.apple.iokit.IOAcceleratorFamily2
+      Location: /System/Library/Extensions/IOAcceleratorFamily2.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: IOAcceleratorFamily2
+    IOGraphicsFamily:
+      Bundle ID: com.apple.iokit.IOGraphicsFamily
+      Location: /System/Library/Extensions/IOGraphicsFamily.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: IOGraphicsFamily
+    IOMobileGraphicsFamily-DCP:
+      Bundle ID: com.apple.iokit.IOMobileGraphicsFamily-DCP
+      Location: /System/Library/Extensions/IOMobileGraphicsFamily-DCP.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: IOMobileGraphicsFamily-DCP
+    IOMobileGraphicsFamily:
+      Bundle ID: com.apple.iokit.IOMobileGraphicsFamily
+      Location: /System/Library/Extensions/IOMobileGraphicsFamily.kext
+              Kext has a CFBundleExecutable property but the executable can't be found: IOMobileGraphicsFamily
+      64-Bit (Intel): Yes

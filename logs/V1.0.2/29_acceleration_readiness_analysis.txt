@@ -1,0 +1,86 @@
+# Acceleration Readiness Analysis - V1.0.2
+
+## Current Stage: Stage 4 (STABLE DISPLAY, NO ACCELERATOR)
+
+## Analysis Questions:
+
+1. **Is the system at display bring-up only, or has it reached acceleration bring-up?**
+   - ANSWER: Display bring-up only (Stage 4)
+
+2. **Is IOAccelerator attached?**
+   - ANSWER: Yes, but generic (com.unknown.bundle)
+
+3. **Is IOAccelDisplayPipeUserClient2 created?**
+   - ANSWER: Unknown - not visible in simple search
+
+4. **Is Metal visible in system_profiler?**
+   - ANSWER: Shows as "Metal renderer: N/A" or AGXMetalA12
+
+5. **Are accelerator user clients visible?**
+   - ANSWER: IOAccelerationUserClient exists but generic
+
+6. **Does the GPU publish required accelerator properties?**
+   - ANSWER: Generic properties only
+
+7. **Are framebuffer and accelerator matched to the same IGPU device?**
+   - ANSWER: Yes - both attached to IGPU@2
+
+8. **Are required AppleIntel graphics components loaded?**
+   - ANSWER: YES - AppleIntelTGLGraphicsFramebuffer and AppleIntelTGLGraphics loaded!
+
+9. **Are required IORegistry properties present?**
+   - ANSWER: Basic properties present, but accelerator-specific missing
+
+10. **Is the framebuffer stable enough for acceleration testing?**
+    - ANSWER: Yes - display is online and stable
+
+11. **Does display pipe creation work?**
+    - ANSWER: Unknown - no visible display pipe services
+
+12. **Does display pipe creation cause the hang?**
+    - ANSWER: Unknown - no hang observed
+
+13. **Is BCS involved in display pipe failure?**
+    - ANSWER: Unknown - no ring logs visible
+
+14. **Is RCS initialized before acceleration is attempted?**
+    - ANSWER: Unknown - no ring logs
+
+15. **Are forcewake and power wells stable before ring use?**
+    - ANSWER: Unknown - no power logs
+
+16. **Is GuC required, skipped, stuck, or failing?**
+    - ANSWER: Unknown - no GuC logs
+
+17. **Is DMC required, skipped, loaded, or failing?**
+    - ANSWER: Unknown - no DMC logs
+
+18. **Is acceleration blocked by service matching?**
+    - ANSWER: YES - IOAccelerator binds to generic, not AppleIntel
+
+19. **Is acceleration blocked by missing properties?**
+    - ANSWER: Possibly - need to compare with AppleIntel bind requirements
+
+20. **Is acceleration blocked by failed framebuffer attach?**
+    - ANSWER: NO - framebuffer works fine
+
+21. **Is acceleration blocked by display pipe timeout?**
+    - ANSWER: Unknown
+
+22. **Is acceleration blocked by WindowServer/CoreDisplay?**
+    - ANSWER: Unknown
+
+23. **Is acceleration blocked by ring initialization?**
+    - ANSWER: Unknown (need ring state check)
+
+24. **Is acceleration blocked by firmware handling?**
+    - ANSWER: Unknown (need firmware logs)
+
+25. **Is acceleration blocked by userspace graphics framework rejection?**
+    - ANSWER: Probably -Metal shows AGXMetalA12 not Intel
+
+26. **What exact condition must be fixed before the next acceleration test?**
+    - ANSWER: IOAccelerator must bind to AppleIntel accelerator (com.xxxxx.driver.AppleIntelTGLGraphics), not generic
+
+## Next Step:
+The core blocking issue (AppleIntel kexts not loading) is NOW FIXED. The NEW blocker is that the IOAccelerator is binding to generic "com.unknown.bundle" instead of binding to AppleIntel's accelerator service. Need to investigate why this binding fails even though AppleIntelTGLGraphics is loaded.

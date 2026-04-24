@@ -1,0 +1,20 @@
+# Failure Matrix - V1.0.2
+
+| Component | Expected | Observed | Status | Evidence |
+|------------|----------|---------|--------|----------|
+| Boot result | Full success | Partial (no accel) | PARTIAL | Display works, Metal not working |
+| IOAccelerator | AppleIntel | com.unknown.bundle | FAIL | IORegistry shows "CFBundleIdentifier"="com.unknown.bundle" |
+| Metal renderer | Intel Metal | AGXMetalA12 | FAIL | Shows AGXMetalA12 (Apple GPU) not Intel |
+| NootedGreen logs | Detailed | Sparse | PARTIAL | Need boot-stage marker logging |
+| IOAccelDisplayPipe | Should exist | Unknown | UNKNOWN | Need check for pipe services |
+| Ring state | Available | Unknown | UNKNOWN | Need ring state check |
+| GuC/HuC/DMC | Status logged | None visible | UNKNOWN | Need firmware logs |
+| Forcewake | Ready | Unknown | UNKNOWN | Need power state check |
+| Acceleration stage | 10 | 4 | FAIL | Stage 4 - stable display, but no accelerator |
+
+## Key Failures:
+1. Generic IOAccelerator (com.unknown.bundle) instead of AppleIntel accelerator
+2. Metal shows AGXMetalA12 instead of Intel Metal
+3. No display pipe services visible
+4. No ring/power/firmware logs visible
+5. VRAM shows only 1536 MB (not full 16GB)
