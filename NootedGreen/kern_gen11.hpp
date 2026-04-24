@@ -1295,6 +1295,9 @@ private:
 	static IOMemoryMap *v85PersistMap;   // V85: persistent FB page 0 mapping for 50ms fill
 	static uint32_t v85SurfAddr;         // V85: cached PLANE_SURF address
 	mach_vm_address_t ostart {};
+
+	static bool deviceStart(void *that);   // V111: force IGAccelDevice::deviceStart true on RPL
+	mach_vm_address_t odeviceStart {};
 	
 	static bool patchRCSCheck(mach_vm_address_t& start);  // bypass RCS engine check
 	static void forceWake(void *that, bool set, uint32_t dom, uint8_t ctx);  // custom forcewake

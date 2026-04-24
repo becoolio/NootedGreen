@@ -811,6 +811,21 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route loadGuCBinary");
 		}
 
+		if (!NGreen::callback->isRealTGL) {
+			// V111: Hook IGAccelDevice::deviceStart to force success on RPL.
+			// Binary pattern (f_devstart) may not match every Sonoma build variant.
+			// This symbol-based hook guarantees deviceStart returns true regardless of
+			// BCS ring state, so the accelerator device is always registered with IOKit.
+			RouteRequestPlus devStartRoute[] = {
+				{"__ZN13IGAccelDevice11deviceStartEv", deviceStart, this->odeviceStart},
+			};
+			if (RouteRequestPlus::routeAll(patcher, index, devStartRoute, address, size)) {
+				SYSLOG("ngreen", "V111: Hooked IGAccelDevice::deviceStart for RPL force-success");
+			} else {
+				SYSLOG("ngreen", "V111: IGAccelDevice::deviceStart symbol not found — relying on binary patch");
+			}
+		}
+
 		if (!wegCoexist || forceFullMTL) {
 			RouteRequestPlus coexistOffRoutes[] = {
 				// ForceWake: replace Apple's SafeForceWakeMultithreaded with i915-ported version.
@@ -1070,6 +1085,23 @@ void  Gen11::setAsyncSliceCount(void *that,uint32_t configRaw)
 		0x00, 0x36, 0x6e, 0x01, 0x00, 0xf8, 0x24, 0x01,
 		0x00, 0xf0, 0x49, 0x02, 0x40, 0x78, 0x7d, 0x01
 	};
+
+bool Gen11::deviceStart(void *that)
+{
+	// V111: Force IGAccelDevice::deviceStart to succeed on spoofed RPL platform.
+	// The original checks encodeFailureStack[1] which is set when BCS ring fails to
+	// start. On RPL hardware with TGL driver, BCS init fails (RPL uses different
+	// ring programming). We allow the original to run and then force success if it
+	// returned false, preventing CoreDisplay from seeing a null accelerator device.
+	auto ret = FunctionCast(deviceStart, callback->odeviceStart)(that);
+	const bool isRealTGL = NGreen::callback && NGreen::callback->isRealTGL;
+	if (!isRealTGL && !ret) {
+		SYSLOG("ngreen", "V111: IGAccelDevice::deviceStart returned false on RPL — forcing true");
+		return true;
+	}
+	DBGLOG("ngreen", "V111: IGAccelDevice::deviceStart returned %d", ret);
+	return ret;
+}
 
 
 bool  Gen11::getGPUInfo(void *that)
