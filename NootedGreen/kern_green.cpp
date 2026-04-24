@@ -294,7 +294,6 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 
 		this->iGPU = OSDynamicCast(IOPCIDevice, devInfo->videoBuiltin);
 		PANIC_COND(!this->iGPU, "ngreen", "videoBuiltin is not IOPCIDevice");
-		SYSLOG("ngreen", "processPatcher: IGPU provider resolved name=%s class=%s", this->iGPU->getName(), this->iGPU->getMetaClass()->getClassName());
 		
 		this->iGPU->enablePCIPowerManagement(kPCIPMCSPowerStateD0);
 		this->iGPU->setBusMasterEnable(true);
@@ -385,7 +384,6 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		}
 
 		publishTglFramebufferPersonality(this->iGPU);
-		SYSLOG("ngreen", "processPatcher: TGL framebuffer personality publication attempted");
 
 		if (shouldEnableLegacyPllBringup()) {
 			setRMMIOIfNecessary();
