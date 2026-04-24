@@ -1,0 +1,11 @@
+# IORegistry Graphics Tree
+
+IGPU is present in IORegistry at IODeviceTree/IGPU@2
+
+Key findings from system_profiler:
+- Device ID: 0x9a49 (TigerLake GT2)
+- VRAM: 1536 MB Dynamic
+- Metal: Supported
+- Display: 1920x1080, Online, Internal
+
+Note: Full IORegistry dump saved to 08_ioreg_full.txt

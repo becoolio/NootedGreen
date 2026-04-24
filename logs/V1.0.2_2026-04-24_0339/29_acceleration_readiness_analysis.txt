@@ -1,0 +1,152 @@
+# Acceleration Readiness Analysis
+
+## Current State Assessment
+
+### 1. Display Bring-up vs Acceleration Bring-up
+**Status**: Display bring-up is COMPLETE. Acceleration bring-up is PARTIAL.
+
+The system has:
+- Working display at 1920x1080
+- Display online
+- Metal framework available (showing as "Supported" in system_profiler)
+- Basic IOAccelerator present
+
+### 2. IOAccelerator Attached?
+**Answer**: YES - Basic IOAccelerator is attached
+
+Evidence from system_profiler:
+- "Type: GPU"
+- "Metal: Supported"
+- "VRAM (Dynamic, Max): 1536 MB"
+
+### 3. IOAccelDisplayPipeUserClient2 Created?
+**Answer**: UNKNOWN - Not visible in current checks
+
+Need to verify with deeper IORegistry inspection or kernel logs.
+
+### 4. Metal Visible in system_profiler?
+**Answer**: YES
+
+Metal shows as "Supported" - but it's using AGXMetalA12 (Apple Silicon Metal) rather than Intel-specific Metal.
+
+### 5. Accelerator User Clients Visible?
+**Answer**: UNKNOWN - Need deeper inspection
+
+Basic IOAccelerator is present but whether user clients are properly published is unclear.
+
+### 6. Does GPU Publish Required Accelerator Properties?
+**Answer**: PARTIAL
+
+Basic acceleration properties are present, but the Intel-specific accelerator (IntelAccelerator) is not binding - it's using generic acceleration.
+
+### 7. Are framebuffer and accelerator matched to same IGPU device?
+**Answer**: YES (likely)
+
+Both framebuffer and accelerator are binding to the same IGPU (device-id 0x9a49).
+
+### 8. Are required AppleIntel graphics components loaded?
+**Answer**: YES
+
+- AppleIntelTGLGraphicsFramebuffer (16.0.0) - LOADED
+- IOAcceleratorFamily2 - LOADED
+- IOGraphicsFamily - LOADED
+
+### 9. Are required IORegistry properties present?
+**Answer**: YES (basic)
+
+- device-id: 0x9a49
+- Platform ID: present
+- VRAM: 1536 MB
+- Metal: Supported
+
+### 10. Is framebuffer stable enough for acceleration testing?
+**Answer**: YES
+
+Display is online at correct resolution with no visible issues.
+
+### 11. Does display pipe creation work?
+**Answer**: UNKNOWN - Need kernel logs
+
+Not enough information from current data collection.
+
+### 12. Does display pipe creation cause the hang?
+**Answer**: N/A - No hang observed
+
+System booted successfully to GUI.
+
+### 13. Is BCS involved in display pipe failure?
+**Answer**: UNKNOWN - No evidence either way
+
+### 14. Is RCS initialized before acceleration is attempted?
+**Answer**: UNKNOWN - No evidence
+
+### 15. Are forcewake and power wells stable before ring use?
+**Answer**: UNKNOWN - No evidence
+
+### 16. Is GuC required, skipped, stuck, or failing?
+**Answer**: UNKNOWN - Not visible in logs
+
+### 17. Is DMC required, skipped, loaded, or failing?
+**Answer**: UNKNOWN - Not visible in logs
+
+### 18. Is acceleration blocked by service matching?
+**Answer**: LIKELY YES
+
+The accelerator is binding to generic instead of AppleIntel-specific accelerator.
+
+### 19. Is acceleration blocked by missing properties?
+**Answer**: POSSIBLY
+
+Missing detailed IORegistry analysis.
+
+### 20. Is acceleration blocked by failed framebuffer attach?
+**Answer**: NO
+
+Framebuffer is working correctly.
+
+### 21. Is acceleration blocked by display pipe timeout?
+**Answer**: NO EVIDENCE
+
+No hang observed.
+
+### 22. Is acceleration blocked by WindowServer/CoreDisplay?
+**Answer**: NO EVIDENCE
+
+WindowServer started successfully.
+
+### 23. Is acceleration blocked by ring initialization?
+**Answer**: UNKNOWN
+
+### 24. Is acceleration blocked by firmware handling?
+**Answer**: UNKNOWN
+
+### 25. Is acceleration blocked by userspace graphics framework rejection?
+**Answer**: POSSIBLY
+
+Metal shows as "Supported" but may be falling back to generic implementation.
+
+### 26. What exact condition must be fixed before next acceleration test?
+
+The key blocker appears to be:
+**IOAccelerator is binding to generic instead of AppleIntel-specific accelerator service**
+
+This means the IntelAccelerator personality from NootedGreen is not being matched or is being overridden by a generic IOAccelerator.
+
+---
+
+## Current Acceleration Stage: Stage 4-5
+
+**Classification**:
+- Stage 0 - NootedGreen does not load: **RULLED OUT**
+- Stage 1 - NootedGreen loads, but IGPU does not match: **RULLED OUT**
+- Stage 2 - IGPU matches, but framebuffer does not attach: **RULLED OUT**
+- Stage 3 - framebuffer attaches, but display is unstable/offline: **RULLED OUT**
+- Stage 4 - stable display, but no accelerator service: **MOSTLY PASSED** (basic accelerator present)
+- Stage 5 - accelerator service appears, but no usable user clients: **LIKELY**
+- Stage 6 - IOAccelDisplayPipeUserClient2 appears, but display pipe fails: **NOT YET**
+- Stage 7 - accelerator partially works, but no Metal: **NOT YET**
+- Stage 8 - Metal appears, but unstable: **NOT YET**
+- Stage 9 - acceleration works with bugs: **NOT YET**
+- Stage 10 - stable acceleration: **NOT YET**
+
+**Current Stage**: Stage 4/5 - Display works, basic accelerator present, but Intel-specific accelerator not binding properly.

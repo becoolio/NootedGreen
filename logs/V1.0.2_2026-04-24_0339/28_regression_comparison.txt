@@ -1,0 +1,55 @@
+# Regression Comparison
+
+## Previous version folder: logs/V1.0.2/
+## Current version folder: logs/V1.0.2_2026-04-24_0339/
+## Overall comparison result: MOSTLY UNCHANGED
+
+### Comparison Table
+
+| Item | Previous Version | Current Version | Change Type | Meaning | Evidence |
+|------|------------------|-----------------|-------------|---------|----------|
+| macOS Version | 14.8.3 | 14.8.3 | UNCHANGED | Same OS version | sw_vers |
+| Lilu Load | LOADED (1.7.3) | LOADED (1.7.3) | UNCHANGED | Lilu working | kextstat |
+| NootedGreen Load | LOADED (1.0.2) | LOADED (1.0.2) | UNCHANGED | NootedGreen working | kextstat |
+| Source Version | 1.0.2 | 1.0.2 | UNCHANGED | Same source version | Info.plist |
+| AppleIntelTGLGraphicsFramebuffer | LOADED | LOADED | UNCHANGED | Framebuffer working | kextstat |
+| Device ID | 0x9a49 | 0x9a49 | UNCHANGED | Spoofing working | system_profiler |
+| Display Resolution | 1920x1080 | 1920x1080 | UNCHANGED | Same resolution | system_profiler |
+| Display Online | Yes | Yes | UNCHANGED | Display functional | system_profiler |
+| Metal | Supported | Supported | UNCHANGED | Metal working | system_profiler |
+| VRAM | 1536 MB | 1536 MB | UNCHANGED | Same memory | system_profiler |
+| IOAccelerator | Present (generic) | Present | UNCHANGED | Basic acceleration | system_profiler |
+| WindowServer | Started | Started | UNCHANGED | GUI reached | system_profiler |
+| Boot Args | -v -liludbg... | -v -liludbg... | UNCHANGED | Same test flags | nvram |
+
+### What improved versus previous version:
+- NONE - this is essentially the same boot state as V1.0.2
+
+### What regressed versus previous version:
+- NONE detected
+
+### What is unchanged versus previous version:
+- All major components are in the same state
+- NootedGreen loads correctly
+- AppleIntel graphics kexts load
+- Display works at 1920x1080
+- Metal is supported
+- No panics or crashes
+
+### Most important improvement:
+N/A - Boot state unchanged from V1.0.2
+
+### Most important regression:
+N/A - No regressions detected
+
+### Most important new evidence:
+The current boot appears to be a clean reboot of V1.0.2 with the same results.
+
+### Most suspicious unexpected change:
+None - The boot is consistent with the previous V1.0.2 report.
+
+### Recommended next action based on comparison:
+Since the boot is unchanged from V1.0.2, the next focus should remain on:
+1. Investigating why IOAccelerator binds to generic instead of AppleIntel accelerator
+2. Adding more detailed logging to trace the accelerator binding process
+3. Verifying Metal plugin loading for Intel GPU specifically

@@ -297,7 +297,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		
 		
 	}	else if (kextG11FBT.loadIndex == index) {
-		SYSLOG("ngreen", "Matched TGL framebuffer callback");
+		SYSLOG("ngreen", "[FB Tracer] AppleIntelTGLGraphicsFramebuffer LOADED");
 		this->tglFBLoaded = true;
 		auto *activeKext = &kextG11FBT;
 		NGreen::callback->setRMMIOIfNecessary();
@@ -757,10 +757,10 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		return true;
 
     } else if (kextG11HWT.loadIndex == index) {
-		SYSLOG("ngreen", "Matched TGL accelerator callback");
+		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics LOADED");
 		this->tglHWLoaded = true;
 		auto *activeKext = &kextG11HWT;
-		SYSLOG("ngreen", "init AppleIntelTGLGraphics (HW accelerator)");
+		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics (HW accelerator) initializing");
 		NGreen::callback->setRMMIOIfNecessary();
 /*
 		SolveRequestPlus solveRequests[] = {
@@ -3702,8 +3702,11 @@ bool Gen11::forceWakeWaitAckFallback(uint32_t reqReg, uint32_t ackReg, uint32_t 
 
 void Gen11::releaseDoorbell()
 {
-	
-	
+	static int doorbellCount = 0;
+	if (doorbellCount < 20) {
+		doorbellCount++;
+		SYSLOG("ngreen", "[PowerWell] releaseDoorbell called (count=%d)", doorbellCount);
+	}
 }
 
 bool Gen11::dotrue()

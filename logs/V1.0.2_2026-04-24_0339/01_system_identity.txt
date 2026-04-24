@@ -1,0 +1,57 @@
+# System Identity Report
+
+## Basic System Info
+ProductName: macOS
+ProductVersion: 14.8.3
+BuildVersion: 23J220
+
+Kernel: Darwin becoolios-mbp 23.6.0 Darwin Kernel Version 23.6.0: Wed Nov  5 21:49:21 PST 2025; root:xnu-10063.141.1.708.2~1/RELEASE_X86_64 x86_64
+
+Hostname: becoolios-mbp
+Uptime: 3:40 up 4 mins, 1 user, load averages: 31.34 38.54 18.34
+Current User: becoolio
+Date: Fri Apr 24 03:40:36 EST 2026
+
+Boot Time: { sec = 1777019823, usec = 378554 } Fri Apr 24 03:37:03 2026
+
+Hardware Model: MacBookPro16,2
+
+## SIP Status
+System Integrity Protection status: unknown (Custom Configuration).
+Configuration:
+	Apple Internal: disabled
+	Kext Signing: disabled
+	Filesystem Protections: disabled
+	Debugging Restrictions: disabled
+	DTrace Restrictions: disabled
+	NVRAM Protections: disabled
+	BaseSystem Verification: disabled
+
+This is an unsupported configuration, likely to break in the future and leave your machine in an unknown state.
+
+## NVRAM boot-args
+boot-args:	-v -liludbg liludump=60 keepsyms=1 debug=0x100 -NGreenDebug ngreenSched=5 e1000=0 IGLogLevel=8 -ngreenforceprops
+
+## Previous Shutdown Cause
+No previous shutdown cause found in logs.
+
+## Active NVRAM Variables (key ones only)
+- auto-boot: true
+- boot-args: -v -liludbg liludump=60 keepsyms=1 debug=0x100 -NGreenDebug ngreenSched=5 e1000=0 IGLogLevel=8 -ngreenforceprops
+- csr-active-config: %ef%0f%00%00 (SIP disabled)
+- prev-lang:kbd: en:-252%00
+
+## Boot-args Analysis
+Current boot-args include:
+- -v : Verbose mode
+- -liludbg : Lilu debug mode
+- liludump=60 : Lilu dump timeout 60s
+- keepsyms=1 : Keep symbols for debugging
+- debug=0x100 : Debug flags
+- -NGreenDebug : NootedGreen debug mode
+- ngreenSched=5 : NootedGreen scheduler setting
+- e1000=0 : Disable e1000
+- IGLogLevel=8 : Intel graphics log level
+- -ngreenforceprops : Force properties injection
+
+These are expected test flags for NootedGreen debugging.

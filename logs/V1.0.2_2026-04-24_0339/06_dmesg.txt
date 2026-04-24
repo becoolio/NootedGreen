@@ -1,0 +1,8 @@
+# DMESG Collection Failed
+
+dmesg requires elevated privileges (sudo). The current session cannot obtain kernel buffer without sudo access.
+
+Attempted command: sudo dmesg
+Error: sudo: a terminal is required to read the password
+
+The analysis will rely on kernel logs from log show command instead.

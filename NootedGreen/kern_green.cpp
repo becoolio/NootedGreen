@@ -242,8 +242,12 @@ static void seedIGPUPropertiesEarly() {
 
 void NGreen::init() {
     callback = this;
-	
-	lilu.onKextLoadForce(&kextAGDP);
+
+    SYSLOG("ngreen", "============================================================");
+    SYSLOG("ngreen", "NootedGreen V1.0.2 - STARTING");
+    SYSLOG("ngreen", "============================================================");
+
+    lilu.onKextLoadForce(&kextAGDP);
 	/*lilu.onKextLoadForce(&kextBacklight);
 	lilu.onKextLoadForce(&kextMCCSControl);
 	lilu.onKextLoadForce(&kextIOGraphics);*/
@@ -267,6 +271,8 @@ void NGreen::init() {
 
 
 void NGreen::processPatcher(KernelPatcher &patcher) {
+	SYSLOG("ngreen", "[Stage 1] Starting processPatcher");
+
 	// Hook _cs_validate_page FIRST — before DeviceInfo which blocks
 	// for >60s polling PEGP (NVIDIA dGPU) disable via processSwitchOff.
 	// Without this, WindowServer starts before the hook is established
@@ -279,6 +285,8 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 
 	const bool autoSeedIGPUProps = shouldAutoSeedIGPUPropertiesEarly();
 	const bool seedIGPUProps = isLegacyIGPUPropSeedingEnabled() || autoSeedIGPUProps;
+
+	SYSLOG("ngreen", "[Stage 2] IGPU property seeding: seedIGPUProps=%d autoSeed=%d", seedIGPUProps, autoSeedIGPUProps);
 
 	if (seedIGPUProps) {
 		seedIGPUPropertiesEarly();
@@ -294,7 +302,10 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 
 		this->iGPU = OSDynamicCast(IOPCIDevice, devInfo->videoBuiltin);
 		PANIC_COND(!this->iGPU, "ngreen", "videoBuiltin is not IOPCIDevice");
-		
+
+		SYSLOG("ngreen", "[Stage 3] IGPU matched: name=%s device-id=0x%04x",
+		       this->iGPU->getName(), WIOKit::readPCIConfigValue(this->iGPU, WIOKit::kIOPCIConfigDeviceID));
+
 		this->iGPU->enablePCIPowerManagement(kPCIPMCSPowerStateD0);
 		this->iGPU->setBusMasterEnable(true);
 		this->iGPU->setMemoryEnable(true);
@@ -335,6 +346,13 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 			auto *prop = OSDynamicCast(OSData, this->iGPU->getProperty("saved-config"));
 			if (!prop) this->iGPU->setProperty("saved-config", sconf, 0xea);
 		}
+
+		uint32_t injectedDeviceId = 0, injectedPlatformId = 0, injectedVendorId = 0;
+		WIOKit::getOSDataValue(this->iGPU, "device-id", injectedDeviceId);
+		WIOKit::getOSDataValue(this->iGPU, "AAPL,ig-platform-id", injectedPlatformId);
+		WIOKit::getOSDataValue(this->iGPU, "vendor-id", injectedVendorId);
+		SYSLOG("ngreen", "[IGPU Props After Injection] device-id=0x%04x platform-id=0x%08x vendor-id=0x%04x",
+		       injectedDeviceId, injectedPlatformId, injectedVendorId);
 			
 		//auto x = OSDynamicCast(OSData, this->iGPU->getProperty("AAPL,ig-platform-id"));
 		//framebufferId = *(uint32_t*)x->getBytesNoCopy();
@@ -385,6 +403,39 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 
 		publishTglFramebufferPersonality(this->iGPU);
 
+		SYSLOG("ngreen", "[Stage 4] Framebuffer personality published");
+
+		static uint8_t accelProps[] = {0x01};
+		this->iGPU->setProperty("IOPCIAccelerationGpu", accelProps, 1);
+
+		auto *metalPluginName = OSString::withCString("AppleIntelTGLGraphics");
+		auto *accelScaleDict = OSString::withCString("IOAccelScaleFactorDict");
+		auto *accelShader = OSString::withCString("IOAccelTGLShaderBinary");
+		auto *pciMatch = OSString::withCString("0x9A498086");
+		auto *accelCategory = OSString::withCString("IOAccelGPU");
+
+		if (metalPluginName) this->iGPU->setProperty("MetalPluginName", metalPluginName);
+		if (accelScaleDict) this->iGPU->setProperty("IOAccelScaleFactorDict", accelScaleDict);
+		if (accelShader) this->iGPU->setProperty("IOAccelDeviceShaderBinary", accelShader);
+		if (pciMatch) this->iGPU->setProperty("IOPCIMatch", pciMatch);
+		if (accelCategory) this->iGPU->setProperty("IOAccelDriverConnectCategory", accelCategory);
+
+		OSSafeReleaseNULL(metalPluginName);
+		OSSafeReleaseNULL(accelScaleDict);
+		OSSafeReleaseNULL(accelShader);
+		OSSafeReleaseNULL(pciMatch);
+		OSSafeReleaseNULL(accelCategory);
+
+		static uint8_t accelCaps[] = {0x00, 0x00, 0x10, 0x00};
+		this->iGPU->setProperty("IOAccelCaps", accelCaps, 4);
+
+		SYSLOG("ngreen", "[Accelerator Props] Published MetalPluginName=AppleIntelTGLGraphics and IOAccel properties");
+
+		auto *metalPlugin = OSDynamicCast(OSString, this->iGPU->getProperty("MetalPluginName"));
+		if (metalPlugin) {
+			SYSLOG("ngreen", "[Accelerator Verify] MetalPluginName=%s", metalPlugin->getCStringNoCopy());
+		}
+
 		if (shouldEnableLegacyPllBringup()) {
 			setRMMIOIfNecessary();
 			constexpr uint32_t GEN9_PG_ENABLE = 0x46020;
@@ -409,6 +460,9 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		
 		KernelPatcher::routeVirtual(this->iGPU, WIOKit::PCIConfigOffset::ConfigRead16, configRead16, &orgConfigRead16);
 		KernelPatcher::routeVirtual(this->iGPU, WIOKit::PCIConfigOffset::ConfigRead32, configRead32, &orgConfigRead32);
+
+		SYSLOG("ngreen", "[Stage 5] PCI config read routing complete");
+		SYSLOG("ngreen", "[NootedGreen Init Complete] All stages finished successfully");
 
         DeviceInfo::deleter(devInfo);
 		
@@ -446,6 +500,8 @@ void NGreen::setRMMIOIfNecessary() {
 }
 
 bool NGreen::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size) {
+	SYSLOG("ngreen", "[Accelerator Tracer] processKext index=%zu", index);
+
 	if (kextIOAcceleratorFamily2.loadIndex == index) {
 		SYSLOG("NGreen", "IOAccelF2: TEXT 0x%llx size 0x%lx", address, size);
 		

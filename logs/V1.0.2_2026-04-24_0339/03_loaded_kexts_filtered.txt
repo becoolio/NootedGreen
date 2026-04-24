@@ -1,0 +1,8 @@
+   57   14 0xffffff8003ce5000 0x8d000    0x8d000    as.vit9696.Lilu (1.7.3) C2310F3B-B155-3DE3-9D3F-922C2007B61F <9 7 6 3 2 1>
+   59    0 0xffffff8003f59000 0x61000    0x61000    com.StezzaPilot.NootedGreen (1.0.2) 353DA2BB-FD64-3229-82C5-4CAE9E840F65 <57 18 9 7 6 3 2 1>
+   90    0 0xffffff8001985000 0x7000     0x7000     com.apple.driver.AppleIntelLpssGspi (3.0.60) BF6BAA8F-DA09-3045-968C-5FD237121BFD <18 17 9 7 6 3>
+  136   13 0xffffff7f95639000 0x2effa    0x2effa    com.apple.iokit.IOGraphicsFamily (598) 79F2F7E4-E451-35E1-BF22-1EFFA4192888 <18 9 7 6 3 1>
+  138    1 0xffffff7f954a9000 0x6affc    0x6affc    com.apple.iokit.IOAcceleratorFamily2 (481.40.2) D4E64BC5-BB33-38C7-A445-932573231969 <136 118 49 27 18 9 8 7 6 3 1>
+  140    0 0xffffff7f96669000 0x138000   0x138000   com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer (16.0.0) B96A8448-9D17-3F78-B76D-15A0B359A9A0 <139 138 137 136 49 18 17 9 7 6 3 1>
+  147    0 0xffffff7f951fb000 0xfff      0xfff      com.apple.driver.AppleIntelSlowAdaptiveClocking (4.0.0) F1C609DC-0407-3D83-A000-45CFD02084D1 <146 6 3>
+  160    0 0xffffff7f951f4000 0x3000     0x3000     com.apple.driver.AppleIntelPCHPMC (2.0.1) D9097257-9E3B-3CF6-B91D-DAFF8F591BB9 <142 19 18 17 6 3>

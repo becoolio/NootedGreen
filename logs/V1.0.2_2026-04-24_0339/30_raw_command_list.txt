@@ -1,0 +1,75 @@
+# Raw Command List
+
+## D1: System Identity
+sw_vers
+uname -a
+hostname
+uptime
+whoami
+date
+sysctl kern.boottime
+sysctl hw.model
+csrutil status
+nvram -p
+nvram boot-args
+
+## D2: Git and Build State
+git branch --show-current
+git status --short
+git log -1 --oneline
+git diff --stat
+/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" /Users/becoolio/Documents/NootedGreen/NootedGreen/Info.plist
+/usr/libexec/PlistBuddy -c "Print CFBundleVersion" /Users/becoolio/Documents/NootedGreen/NootedGreen/Info.plist
+/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" /Users/becoolio/Documents/NootedGreen/NootedGreen/Info.plist
+kextstat | grep -Ei "Lilu|Nooted"
+/usr/libexec/PlistBuddy -c "Print CFBundleVersion" /Users/becoolio/Documents/NootedGreen/Lilu.kext/Contents/Info.plist
+
+## D3: Loaded Kexts
+kmutil showloaded
+kmutil showloaded | grep -Ei "Lilu|Nooted|AppleIntel|IntelGraphics|Framebuffer|IOGraphics|IOAccelerator|CoreDisplay|Metal"
+kextstat | grep -Ei "AppleIntel"
+kextstat
+
+## D4-D5: Kernel Logs
+log show --last boot --style syslog --info --debug
+log show --last 30m --style syslog --info --debug
+log show --last 10m --style syslog --info --debug
+log show --last boot --style syslog --info --debug | grep -Ei "Nooted|NootedGreen|Lilu|AppleIntel|IntelGraphics|Framebuffer|IOGraphics|IOAccelerator|IOAccel|CoreDisplay|WindowServer|display|pipe|stamp|timeout|hang|GPU|GuC|guc|HuC|DMC|forcewake|power well|powerwell|BCS|RCS|VCS|VECS|ring|execlist|submission|fence|MMIO|BAR|OpRegion|VBT|EDID|backlight|DPCD|AUX|DDI|CDCLK|GT|Metal|MTL|AGDC|IODisplay|AppleCLCD|transaction"
+log show --last boot --predicate 'process == "kernel" AND (eventMessage CONTAINS[c] "Nooted" OR eventMessage CONTAINS[c] "Lilu" OR eventMessage CONTAINS[c] "Intel" OR eventMessage CONTAINS[c] "Framebuffer" OR eventMessage CONTAINS[c] "IOAccel" OR eventMessage CONTAINS[c] "CoreDisplay" OR eventMessage CONTAINS[c] "display" OR eventMessage CONTAINS[c] "GPU" OR eventMessage CONTAINS[c] "GuC" OR eventMessage CONTAINS[c] "BCS" OR eventMessage CONTAINS[c] "RCS" OR eventMessage CONTAINS[c] "ring" OR eventMessage CONTAINS[c] "timeout")' --style syslog --info --debug
+
+## D6: dmesg
+dmesg (requires sudo - not completed due to permission restrictions)
+
+## D7: NVRAM and Boot Args
+nvram -p
+nvram boot-args
+
+## D8: IORegistry
+ioreg -lw0
+ioreg -l
+ioreg -lw0 -p IOService
+ioreg -lw0 -p IODisplayWrangler
+ioreg -lw0 -p IOService -c IOAccelerator
+ioreg -lw0 -p IOService -c IOAcceleratorFamily2
+ioreg -lw0 -p IOService -c IOFramebuffer
+ioreg -lw0 -p IOService -c AppleIntelFramebuffer
+ioreg -lw0 -p IODeviceTree
+ioreg -lw0 -p IOService -n IGPU
+ioreg -lw0 -p IOService -n GFX0
+ioreg -p IOService -n IGPU
+
+## D9: System Profiler
+system_profiler SPDisplaysDataType
+system_profiler SPHardwareDataType
+
+## D10: WindowServer and CoreDisplay
+log show --last boot --predicate 'process == "WindowServer"' --style syslog --info --debug
+
+## D11: Lilu and NootedGreen Logs
+(log collection combined with D4-D5)
+
+## D12: AppleIntel Graphics Logs
+(log collection combined with D4-D5)
+
+## D13: Panic and Crash Reports
+(Crash reports check - no new reports found)

@@ -1,0 +1,41 @@
+# Git and Build State Report
+
+## Git Repository
+- Current branch: main
+- Latest commit: 2ddfffa 1.0.2 logs
+- Uncommitted changes: Yes
+
+## Uncommitted Changes
+- Modified: NootedGreen/kern_gen11.cpp (13 lines changed)
+- Modified: NootedGreen/kern_green.cpp (62 lines changed)
+
+## Source Info.plist Values
+- CFBundleIdentifier: com.StezzaPilot.NootedGreen
+- CFBundleVersion: 1.0.2
+- CFBundleShortVersionString: 1.0.2
+
+## Loaded Kext Versions (from kextstat)
+- Lilu: 1.7.3 (loaded)
+- NootedGreen: 1.0.2 (loaded)
+
+## Source Lilu.kext Version
+- Lilu.kext/Contents/Info.plist version: 1.7.2 (source)
+- Loaded Lilu version: 1.7.3 (different!)
+
+## Version Matching Analysis
+- Source NootedGreen version: 1.0.2
+- Loaded NootedGreen version: 1.0.2
+- **MATCH**: Source and loaded versions match
+
+- Source Lilu version: 1.7.2
+- Loaded Lilu version: 1.7.3
+- **MISMATCH**: Source (1.7.2) vs loaded (1.7.3) - a pre-installed Lilu 1.7.3 is being used
+
+## Kext Loading Location
+- Lilu loaded from: System (pre-installed kext)
+- NootedGreen loaded from: Unknown (needs to be located)
+
+## Notes
+- There are uncommitted local changes to NootedGreen source code
+- The loaded NootedGreen (1.0.2) matches the source version (1.0.2)
+- Lilu appears to be a pre-installed version (1.7.3) not from the project source (1.7.2)

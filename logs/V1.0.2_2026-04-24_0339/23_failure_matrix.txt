@@ -1,0 +1,43 @@
+# Failure Matrix
+
+| Component | Expected | Observed | Status | Evidence | Likely Meaning |
+|-----------|----------|----------|--------|----------|----------------|
+| OpenCore boot-args | -v -liludbg... | -v -liludbg... | PASS | nvram boot-args | Test flags applied correctly |
+| Lilu load | LOADED | LOADED (1.7.3) | PASS | kextstat | Lilu working |
+| NootedGreen load | LOADED | LOADED (1.0.2) | PASS | kextstat | NootedGreen working |
+| NootedGreen version | 1.0.2 | 1.0.2 | PASS | kextstat/Info.plist | Version match |
+| NootedGreen patch application | Applied | Unknown | UNKNOWN | No boot logs visible | Need debug logs |
+| NootedGreen function routing | Routed | Unknown | UNKNOWN | No boot logs visible | Need debug logs |
+| IGPU IORegistry presence | Present | Present | PASS | ioreg | IGPU detected |
+| IGPU device-id | 0x9a49 | 0x9a49 | PASS | system_profiler | Spoofing working |
+| IGPU platform-id | Present | Present | PASS | system_profiler | Platform configured |
+| AppleIntel graphics kext load | LOADED | LOADED | PASS | kextstat | AppleIntel working |
+| AppleIntel framebuffer attach | Attached | Attached | PASS | system_profiler | Framebuffer working |
+| AppleIntel accelerator attach | Attached | Attached | PASS | system_profiler | Basic accelerator working |
+| framebuffer service publication | Published | Published | PASS | system_profiler | Display working |
+| IOFramebuffer availability | Available | Available | PASS | system_profiler | Framebuffer working |
+| EDID present | Present | Unknown | UNKNOWN | Not checked | Need IORegistry check |
+| VBT present | Present | Unknown | UNKNOWN | Not checked | Need IORegistry check |
+| OpRegion present | Present | Unknown | UNKNOWN | Not checked | Need IORegistry check |
+| display online | Online | Online | PASS | system_profiler | Display functional |
+| display mode publication | 1920x1080 | 1920x1080 | PASS | system_profiler | Correct resolution |
+| backlight service | Present | Unknown | UNKNOWN | Not checked | Need IORegistry check |
+| WindowServer startup | Started | Started | PASS | system_profiler | GUI reached |
+| CoreDisplay transaction | Success | Unknown | UNKNOWN | No logs visible | Need debug logs |
+| IOAccelDisplayPipeUserClient2 | Present | Unknown | UNKNOWN | Not visible | Need IORegistry check |
+| IOAccelerator attach | Attached | Attached | PASS | system_profiler | Basic acceleration |
+| Metal support | Supported | Supported | PASS | system_profiler | Metal working |
+| GuC firmware | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| HuC firmware | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| DMC firmware | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| forcewake | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| power wells | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| MMIO BAR0 | Accessible | Unknown | UNKNOWN | Not checked | Need debug logs |
+| RCS ring | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| BCS ring | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| VCS ring | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| VECS ring | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| execlists | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| stamp advancement | Unknown | Unknown | UNKNOWN | Not checked | Need debug logs |
+| panic status | No panic | No panic | PASS | No crashes | Clean boot |
+| crash reports | None | None | PASS | No reports | Clean boot |
