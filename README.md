@@ -65,7 +65,7 @@ These properties are essential for correct platform identification and WEG coexi
 ## Boot args
 
 ```
--v keepsyms=1 debug=0x100 -liludbg liludump=60 -NGreenDebug -disablegfxfirmware
+-v keepsyms=1 debug=0x100 IGLogLevel=8 -NGreenDebug -liludbg liludump=200 ngreen-dmc=skip -allow3d -disablegfxfirmware -ngreenexp (as optional to try full MTL path : -ngreenfullmtl)
 ```
 
 | Arg | Purpose |
@@ -90,6 +90,66 @@ These properties are essential for correct platform identification and WEG coexi
 | `IGLogLevel=8` | Maximum Intel GPU driver logging |
 | `-liludbg` | Enable Lilu debug logging |
 | `liludump=60` | Dump Lilu logs after 60 seconds |
+
+## Hookcase And Debug Logs
+
+Hookcase (change `AppleInteePortHal` and `AppleIntelPortHal` implementation):
+
+```cpp
+// Register selection by platform:
+//   ICL  (AppleIntelFramebufferController path): 0xC4030 (ICL_SHOTPLUG_CTL_DDI)
+//   TGL:                                         0x44470
+//   ADL-P / RPL-P:                               0x1638a0
+uint32_t registerValue = callback->readReg32(0x1638a0); // ADL-P/RPL-P
+```
+
+Useful logs to debug:
+
+need your logs.. without them I cannot do anything...
+so you must boot with - for example an empty nblue - inside the system and get previous lilulog and logs related THAT boot.
+
+```bash
+log show --style syslog --predicate 'processID == 0' --last 15m --info --debug > /tmp/x.log
+grep "[IGFB]" /tmp/x.log > /tmp/fb.log
+```
+
+Example Lilu log path:
+
+```text
+/private/var/log/Lilu_1.7.2_23.6.txt
+```
+
+Additional developer note:
+
+```text
+[N.B. library is in continue developement]
+
+Developer from all over the world, are you ready?  Still needs some patches to my fully working RPL-P laptop but... it's open to developer now.
+No more IOPCIPrimaryMatch, we work on IOResource so just put your kexts (+ bundle) in /Library/Extensions folder or use /System/Library/Extensions kext
+
+https://github.com/sgiammori/NootedGreen
+
+IOResources solving now is done like this for TGL kexts or IcL ketxts : first look at LE kexts and if any kexts is found than fallback to find in SLE kexts : * framebuffer for fb * + * graphics for gpu * + * bundle for metal *
+
+they (also Bookcase) need permissions fix so before move to /L/E do in some random folder (maybe better use our Lilu plugin forked for IOResources eventually problems...
+
+Workflow for kexts (fb+Graphics+Hookcase in LE)
+
+- sudo chmod -R 755 Apple*
+- sudo chown -R root:wheel Apple*
+- move the files to /L/E
+- delete /Library/KernelCollections/AuxiliaryKernelExtensions.kc
+- redo sudo chown -R root:wheel /Library/Extensions/Apple*
+- sudo kextcache -i /
+(if System asks you permissions, just allow and restart before to test)
+
+(maybe necessary this below also)
+
+sudo kmutil load -p /Library/Extensions/AppleIntelTGLGraphics.kext 2>&1
+sudo kextcache -i /
+
+- and - important - also set IOPCIPrimaryMatch in kexts to probe your device-id
+```
 
 ## Compatibility-First Defaults
 
