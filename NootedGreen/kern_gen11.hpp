@@ -1289,12 +1289,17 @@ private:
 	
 	// ── Accelerator start & forcewake ──
 	static bool start(void *that,void  *param_1);   // IntelAccelerator::start wrapper
+	static void ensureDisplayPipeBacking(void *that);
 	static void v54IrqWatchdog(thread_call_param_t, thread_call_param_t);  // V54: IRQ watchdog
 	static void v60GpuHealthMonitor(thread_call_param_t, thread_call_param_t);  // V60: active ERROR_GEN6 suppression + monitor
 	static void v71EmrEnforcer(thread_call_param_t, thread_call_param_t);  // V71: high-freq EMR mask + ERROR clear (50ms)
 	static IOMemoryMap *v85PersistMap;   // V85: persistent FB page 0 mapping for 50ms fill
 	static uint32_t v85SurfAddr;         // V85: cached PLANE_SURF address
 	mach_vm_address_t ostart {};
+	mach_vm_address_t oNewDisplayMachine {};
+	mach_vm_address_t oDisplayMachineInit {};
+	mach_vm_address_t oDisplayMachineStart {};
+	mach_vm_address_t oDisplayMachineProbeDisplayPipes {};
 	
 	static bool patchRCSCheck(mach_vm_address_t& start);  // bypass RCS engine check
 	static void forceWake(void *that, bool set, uint32_t dom, uint8_t ctx);  // custom forcewake

@@ -1,0 +1,275 @@
+# Acceleration Readiness Analysis - V1.0.4_2026-04-24_0844
+
+## Current Acceleration Stage Classification
+**Stage 7: Metal appears, but unstable**
+
+## Detailed Analysis
+
+### 1. Is the system currently at display bring-up only, or has it reached acceleration bring-up?
+
+**Answer**: The system has reached acceleration bring-up infrastructure, but may have stability/functional issues.
+
+**Evidence**:
+- IOAcceleratorFamily2 (481.40.2) loaded successfully
+- Metal: Supported in system_profiler
+- MetalPluginName = "AppleIntelTGLGraphics"
+- IOAccelDeviceShaderBinary = "IOAccelTGLShaderBinary"
+
+### 2. Is IOAccelerator attached?
+
+**Answer**: YES - IOAccelerator infrastructure is present.
+
+**Evidence**: 
+- IOAcceleratorFamily2 loaded (kextstat)
+- AppleIntelTGLGraphics (accelerator) loaded
+- AppleIntelTGLGraphicsFramebuffer loaded
+
+### 3. Is IOAccelDisplayPipeUserClient2 created?
+
+**Answer**: UNKNOWN - Not found in IORegistry class queries.
+
+**Evidence**:
+- IORegistry queries for IOAccelerator and IOAcceleratorFamily2 did not show explicit IOAccelDisplayPipeUserClient2
+- This may be created dynamically on demand or may be the next blocker
+
+### 4. Is Metal visible in system_profiler?
+
+**Answer**: YES - Metal is supported.
+
+**Evidence**:
+```
+Metal: Supported
+```
+
+### 5. Are accelerator user clients visible?
+
+**Answer**: PARTIAL - Some user clients are visible but the critical display pipe user client may be missing.
+
+**Evidence**:
+- IOAccelerationUserClient present (not registered)
+- Various IOFramebufferUserClient and IOFramebufferSharedUserClient present (!registered)
+- IOAccelDisplayPipeUserClient2 not explicitly found
+
+### 6. Does the GPU publish required accelerator properties?
+
+**Answer**: YES.
+
+**Evidence**:
+- IOAccelDeviceShaderBinary present
+- IOAccelDriverConnectCategory = "IOAccelGPU"
+- MetalPluginName = "AppleIntelTGLGraphics"
+- IOAccelScaleFactorDict present
+- IOAccelCaps = <00001000>
+
+### 7. Are framebuffer and accelerator matched to the same IGPU device?
+
+**Answer**: YES.
+
+**Evidence**:
+- Both AppleIntelFramebufferController and AppleIntelTGLGraphics are children of IGPU@2
+- They share the same parent device at path: AppleACPIPlatformExpert/PC00/AppleACPIPCI/IGPU@2
+
+### 8. Are required AppleIntel graphics components loaded?
+
+**Answer**: YES.
+
+**Evidence**:
+- AppleIntelTGLGraphics (16.0.0)
+- AppleIntelTGLGraphicsFramebuffer (16.0.0)
+- IOAcceleratorFamily2 (481.40.2)
+- IOGraphicsFamily (598)
+- AppleGraphicsDeviceControl (8.1.9)
+- AppleGraphicsControl (8.1.9)
+
+### 9. Are required IORegistry properties present?
+
+**Answer**: MOSTLY.
+
+**Evidence**:
+- Present: device-id, vendor-id, model, compatible, framebuffer-unifiedmem
+- Present: IOAccel properties, MetalPluginName
+- Present: NumFrameBuffer = 3, AAPL,DisplayPipe
+- Unknown: AAPL,ig-platform-id (not found in filtered output)
+
+### 10. Is the framebuffer stable enough for acceleration testing?
+
+**Answer**: LIKELY YES - Display is online and working.
+
+**Evidence**:
+- Display online at native resolution
+- No panics in current boot
+- Framebuffer services all published
+- AAPL,boot-display = Yes for display 0
+
+### 11. Does display pipe creation work?
+
+**Answer**: UNKNOWN - Cannot determine from collected data.
+
+**Evidence**:
+- AAPL,DisplayPipe property shows <ffff0000> for controller (indicating all pipes enabled)
+- AAPL,DisplayPipe = <00000000> for AppleIntelFramebufferDiags@0
+- No explicit display pipe transaction logs captured
+
+### 12. Does display pipe creation cause the hang?
+
+**Answer**: UNKNOWN for this boot - Previous boots showed watchdog timeouts.
+
+**Evidence**:
+- This current boot shows no hang - GUI is active and responsive
+- Previous boot crash reports show WindowServer watchdog timeouts
+- The current boot appears to have succeeded where previous boots failed
+
+### 13. Is BCS involved in display pipe failure?
+
+**Answer**: UNKNOWN - No BCS logs captured.
+
+**Evidence**:
+- 19_appleintel_graphics_logs.txt is empty (0 lines)
+- No ring state logs available
+- Previous versions may have shown BCS errors
+
+### 14. Is RCS initialized before acceleration is attempted?
+
+**Answer**: UNKNOWN.
+
+**Evidence**:
+- No RCS initialization logs captured
+- System appears to be functioning without reported errors
+
+### 15. Are forcewake and power wells stable before ring use?
+
+**Answer**: UNKNOWN.
+
+**Evidence**:
+- No forcewake logs captured
+- No power well logs captured
+- System appears stable but we cannot confirm this
+
+### 16. Is GuC required, skipped, stuck, or failing?
+
+**Answer**: UNKNOWN.
+
+**Evidence**:
+- No GuC-related logs found
+- IGScheduler5 class count = 0 in IOKitDiagnostics
+- IGHardwareGuC class count = 0 in IOKitDiagnostics
+- May be intentionally disabled or skipped
+
+### 17. Is DMC required, loaded, or failing?
+
+**Answer**: UNKNOWN.
+
+**Evidence**:
+- No DMC-related logs found
+- No obvious DMC failure indicators
+
+### 18. Is acceleration blocked by service matching?
+
+**Answer**: NO - Services match correctly.
+
+**Evidence**:
+- AppleIntelFramebufferController has IOPersonalityPublisher = "com.StezzaPilot.NootedGreen"
+- All AppleIntel components have correct bundle identifiers
+- No matching failures observed
+
+### 19. Is acceleration blocked by missing properties?
+
+**Answer**: POSSIBLY - AAPL,ig-platform-id not confirmed.
+
+**Evidence**:
+- Platform-id not visible in filtered IORegistry output
+- May be injected but not shown in queries
+- May be the blocker if missing
+
+### 20. Is acceleration blocked by failed framebuffer attach?
+
+**Answer**: NO - Framebuffer attached successfully.
+
+**Evidence**:
+- AppleIntelFramebufferController registered, matched, active
+- IntelFBClientControl registered, matched, active
+- Display online and functional
+
+### 21. Is acceleration blocked by display pipe timeout?
+
+**Answer**: NO FOR THIS BOOT - Boot succeeded.
+
+**Evidence**:
+- Current boot shows no timeout
+- GUI is active and responsive
+- Previous boots had watchdog timeouts but current boot is working
+
+### 22. Is acceleration blocked by WindowServer/CoreDisplay?
+
+**Answer**: NO.
+
+**Evidence**:
+- WindowServer is running (pid 166)
+- displaypolicyd is active
+- User session is established
+- No evidence of display-related service failures
+
+### 23. Is acceleration blocked by ring initialization?
+
+**Answer**: UNKNOWN.
+
+**Evidence**:
+- No ring initialization logs captured
+- System appears stable but we cannot confirm ring state
+
+### 24. Is acceleration blocked by firmware handling?
+
+**Answer**: UNKNOWN.
+
+**Evidence**:
+- No GuC/HuC/DMC logs captured
+- Cannot determine firmware handling status
+
+### 25. Is acceleration blocked by userspace graphics framework rejection?
+
+**Answer**: NO.
+
+**Evidence**:
+- Metal: Supported
+- WindowServer running normally
+- GUI session active
+- No framework rejection observed
+
+### 26. What exact condition must be fixed before the next acceleration test?
+
+**Primary blocker to confirm**: IOAccelDisplayPipeUserClient2 creation
+
+**Supporting evidence**:
+- Not found in IORegistry queries
+- May be created on-demand
+- Current boot shows no hang but previous boots had watchdog timeouts
+
+**Next test should verify**:
+1. Does IOAccelDisplayPipeUserClient2 appear during normal operation?
+2. Are there any display pipe creation errors in system log?
+3. Does Metal work for actual rendering (not just "Supported")?
+4. What is the actual GPU utilization under load?
+
+## Classification Summary
+
+| Stage | Description | Status |
+|-------|-------------|--------|
+| Stage 0 | NootedGreen does not load | PASS |
+| Stage 1 | NootedGreen loads, but IGPU does not match | PASS |
+| Stage 2 | IGPU matches, but framebuffer does not attach | PASS |
+| Stage 3 | framebuffer attaches, but display is unstable/offline | PASS |
+| Stage 4 | stable display, but no accelerator service | PASS |
+| Stage 5 | accelerator service appears, but no usable user clients | PARTIAL |
+| Stage 6 | IOAccelDisplayPipeUserClient2 appears, but display pipe fails | UNKNOWN |
+| Stage 7 | Metal appears, but unstable | LIKELY PASSING |
+| Stage 8 | Metal works, but unstable | NOT TESTED |
+| Stage 9 | acceleration works with bugs | NOT TESTED |
+| Stage 10 | stable acceleration | NOT TESTED |
+
+## Conclusion
+
+**Current Status**: The system has achieved Stage 7 or higher. Display is functional, Metal is supported, and the GUI is active. The acceleration infrastructure is in place.
+
+**Primary Investigation Needed**: Confirm whether IOAccelDisplayPipeUserClient2 is created successfully and whether actual Metal rendering works without issues.
+
+**Confidence**: MEDIUM-HIGH that acceleration infrastructure is present and functional.

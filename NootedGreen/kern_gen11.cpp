@@ -100,6 +100,138 @@ static bool isDisplayPipeForceDisabled() {
 	return false;
 }
 
+static OSDictionary *createDisplayPipeCapabilityDict(bool enabled) {
+	auto *dpCaps = OSDictionary::withCapacity(2);
+	if (!dpCaps) {
+		return nullptr;
+	}
+
+	OSObject *state = enabled ? static_cast<OSObject *>(kOSBooleanTrue) : static_cast<OSObject *>(kOSBooleanFalse);
+	dpCaps->setObject("DisplayPipeSupported", state);
+	dpCaps->setObject("TransactionsSupported", state);
+	return dpCaps;
+}
+
+static void applyDisplayPipePolicy(IORegistryEntry *entry, const char *stage) {
+	if (!entry) {
+		return;
+	}
+
+	const bool enabled = !isDisplayPipeForceDisabled();
+	auto *dpCaps = createDisplayPipeCapabilityDict(enabled);
+	if (!dpCaps) {
+		return;
+	}
+
+	entry->setProperty("IOAccelDisplayPipeCapabilities", dpCaps);
+	SYSLOG("ngreen", "DisplayPipe policy[%s]: enabled=%d service=%s class=%s",
+	       stage ? stage : "<null>", enabled,
+	       entry->getName() ? entry->getName() : "<null>",
+	       entry->getMetaClass() ? entry->getMetaClass()->getClassName() : "<null>");
+	dpCaps->release();
+}
+
+static void publishBootDisplayProperties(IOService *framebuffer, uint32_t framebufferIndex) {
+	if (!framebuffer) {
+		return;
+	}
+
+	framebuffer->setProperty("AAPL,DisplayPipe", framebufferIndex, 32);
+	if (framebufferIndex == 0) {
+		framebuffer->setProperty("AAPL,boot-display", true);
+	}
+
+	SYSLOG("ngreen", "Boot display publish: fb=%s idx=%u boot=%d",
+	       framebuffer->getName() ? framebuffer->getName() : "<null>",
+	       framebufferIndex, framebufferIndex == 0);
+}
+
+static void publishFramebufferTriageResources() {
+	auto *resources = IORegistryEntry::fromPath("/IOResources", gIOServicePlane);
+	if (!resources) {
+		SYSLOG("ngreen", "FB triage publish: IOResources not available");
+		return;
+	}
+
+	if (!resources->getProperty("FB_Triage")) {
+		auto *fbTriage = OSString::withCString("FB Driver Info :  56 0 ff 51 54 52 54 53");
+		if (fbTriage) {
+			resources->setProperty("FB_Triage", fbTriage);
+			fbTriage->release();
+			SYSLOG("ngreen", "FB triage publish: restored FB_Triage on IOResources");
+		}
+	}
+
+	if (!resources->getProperty("Triage")) {
+		auto *triage = OSString::withCString("3D Debug Info: 1 223");
+		if (triage) {
+			resources->setProperty("Triage", triage);
+			triage->release();
+			SYSLOG("ngreen", "FB triage publish: restored Triage on IOResources");
+		}
+	}
+
+	resources->release();
+}
+
+void Gen11::ensureDisplayPipeBacking(void *that) {
+	using NewDisplayMachine = void *(*)(void *);
+	using DisplayMachineInit = bool (*)(void *, void *);
+	using DisplayMachineStart = bool (*)(void *, void *);
+	using DisplayMachineProbeDisplayPipes = void (*)(void *);
+
+	if (!that || !callback) {
+		return;
+	}
+
+	auto *accelSvc = static_cast<IOService *>(that);
+	auto *provider = OSDynamicCast(IOPCIDevice, accelSvc ? accelSvc->getProvider() : nullptr);
+	void *displayMachine = getMember<void *>(that, 0x378);
+	bool createdDisplayMachine = false;
+
+	SYSLOG("ngreen", "DisplayPipe backing: pre-rescue displayMachine=%p provider=%s",
+	       displayMachine,
+	       provider ? (provider->getName() ? provider->getName() : "<null>") : "<null>");
+
+	if (!displayMachine && callback->oNewDisplayMachine && callback->oDisplayMachineInit) {
+		displayMachine = reinterpret_cast<NewDisplayMachine>(callback->oNewDisplayMachine)(that);
+		SYSLOG("ngreen", "DisplayPipe backing: newDisplayMachine -> %p", displayMachine);
+		if (displayMachine) {
+			const bool initOk = reinterpret_cast<DisplayMachineInit>(callback->oDisplayMachineInit)(displayMachine, that);
+			SYSLOG("ngreen", "DisplayPipe backing: displayMachine init -> %d", initOk);
+			if (initOk) {
+				getMember<void *>(that, 0x378) = displayMachine;
+				createdDisplayMachine = true;
+			} else {
+				auto *displayMachineObject = OSDynamicCast(OSObject, reinterpret_cast<OSObject *>(displayMachine));
+				if (displayMachineObject) {
+					displayMachineObject->release();
+				}
+				displayMachine = nullptr;
+			}
+		}
+	}
+
+	if (!displayMachine) {
+		SYSLOG("ngreen", "DisplayPipe backing: no display machine available after rescue");
+		return;
+	}
+
+	if (provider && callback->oDisplayMachineStart) {
+		const bool startOk = reinterpret_cast<DisplayMachineStart>(callback->oDisplayMachineStart)(displayMachine, provider);
+		SYSLOG("ngreen", "DisplayPipe backing: displayMachine start -> %d created=%d", startOk, createdDisplayMachine);
+	}
+
+	if (callback->oDisplayMachineProbeDisplayPipes) {
+		reinterpret_cast<DisplayMachineProbeDisplayPipes>(callback->oDisplayMachineProbeDisplayPipes)(displayMachine);
+		SYSLOG("ngreen", "DisplayPipe backing: probeDisplayPipes forced for %p", displayMachine);
+	}
+
+	SYSLOG("ngreen", "DisplayPipe backing: post-rescue accel=%s displayMachine=%p created=%d",
+	       accelSvc && accelSvc->getName() ? accelSvc->getName() : "<null>",
+	       displayMachine, createdDisplayMachine);
+}
+
 static bool isV93PlaneGuardEnabled() {
 	int enabled = 0;
 	if (PE_parse_boot_argn("ngreenv93", &enabled, sizeof(enabled))) {
@@ -148,6 +280,131 @@ static int getV77KillDelayIterations() {
 
 	// Final/default behavior: do not kill DisplayPipe clients unless explicitly requested.
 	return 60;
+}
+
+static uint32_t gServicePublishTraceSeq = 0;
+
+static bool isServicePublishTraceTarget(const char *name, const char *cls) {
+	if ((name && (!strcmp(name, "IntelAccelerator") ||
+	              !strcmp(name, "IGAccelDevice") ||
+	              strstr(name, "DisplayPipe") != nullptr)) ||
+	    (cls && (!strcmp(cls, "IntelAccelerator") ||
+	             !strcmp(cls, "IGAccelDevice") ||
+	             strstr(cls, "DisplayPipe") != nullptr))) {
+		return true;
+	}
+
+	return false;
+}
+
+static void logServicePublishSnapshot(IOService *svc, const char *stage, bool includeProviderChildren = true,
+	                                  bool includeChildClients = true) {
+	if (!svc || !stage) {
+		return;
+	}
+
+	const uint32_t seq = ++gServicePublishTraceSeq;
+	const char *svcName = svc->getName();
+	const char *svcClass = svc->getMetaClass() ? svc->getMetaClass()->getClassName() : "<null>";
+	const uint64_t svcState = svc->getState();
+	SYSLOG("ngreen", "V111[%u] %s root name=%s class=%s state=0x%llx open=%d",
+	       seq, stage, svcName ? svcName : "<null>", svcClass,
+	       static_cast<unsigned long long>(svcState), svc->isOpen());
+
+	auto *provider = svc->getProvider();
+	if (provider) {
+		const char *providerName = provider->getName();
+		const char *providerClass = provider->getMetaClass() ? provider->getMetaClass()->getClassName() : "<null>";
+		SYSLOG("ngreen", "V111[%u] %s provider name=%s class=%s state=0x%llx",
+		       seq, stage, providerName ? providerName : "<null>", providerClass,
+		       static_cast<unsigned long long>(provider->getState()));
+	}
+
+	OSIterator *iter = svc->getClientIterator();
+	if (iter) {
+		OSObject *obj = nullptr;
+		int childIndex = 0;
+		while ((obj = iter->getNextObject())) {
+			auto *child = OSDynamicCast(IOService, obj);
+			if (!child) {
+				continue;
+			}
+
+			const char *childName = child->getName();
+			const char *childClass = child->getMetaClass() ? child->getMetaClass()->getClassName() : "<null>";
+			const uint64_t childState = child->getState();
+			const bool interesting = isServicePublishTraceTarget(childName, childClass);
+			SYSLOG("ngreen", "V111[%u] %s child[%d] name=%s class=%s state=0x%llx open=%d interesting=%d",
+			       seq, stage, childIndex, childName ? childName : "<null>", childClass,
+			       static_cast<unsigned long long>(childState), child->isOpen(), interesting);
+
+			if (interesting) {
+				auto *dpCaps = OSDynamicCast(OSDictionary, child->getProperty("IOAccelDisplayPipeCapabilities"));
+				OSObject *dpObj = dpCaps ? dpCaps->getObject("DisplayPipeSupported") : nullptr;
+				OSObject *txObj = dpCaps ? dpCaps->getObject("TransactionsSupported") : nullptr;
+				auto *dpSupported = OSDynamicCast(OSBoolean, dpObj);
+				auto *txSupported = OSDynamicCast(OSBoolean, txObj);
+				auto *dpSupportedNum = OSDynamicCast(OSNumber, dpObj);
+				auto *txSupportedNum = OSDynamicCast(OSNumber, txObj);
+				const char *metal = OSDynamicCast(OSString, child->getProperty("MetalPluginName")) ?
+					OSDynamicCast(OSString, child->getProperty("MetalPluginName"))->getCStringNoCopy() : "<null>";
+				SYSLOG("ngreen", "V111[%u] %s child[%d] dpCaps=%d dp=%d tx=%d metal=%s",
+				       seq, stage, childIndex, dpCaps != nullptr,
+				       dpSupported ? dpSupported->isTrue() : (dpSupportedNum ? static_cast<int>(dpSupportedNum->unsigned32BitValue()) : -1),
+				       txSupported ? txSupported->isTrue() : (txSupportedNum ? static_cast<int>(txSupportedNum->unsigned32BitValue()) : -1),
+				       metal ? metal : "<null>");
+
+				if (includeChildClients) {
+					OSIterator *grandIter = child->getClientIterator();
+					if (grandIter) {
+						OSObject *grandObj = nullptr;
+						int grandIndex = 0;
+						while ((grandObj = grandIter->getNextObject())) {
+							auto *grand = OSDynamicCast(IOService, grandObj);
+							if (!grand) {
+								continue;
+							}
+							const char *grandName = grand->getName();
+							const char *grandClass = grand->getMetaClass() ? grand->getMetaClass()->getClassName() : "<null>";
+							SYSLOG("ngreen", "V111[%u] %s child[%d] grandchild[%d] name=%s class=%s state=0x%llx",
+							       seq, stage, childIndex, grandIndex,
+							       grandName ? grandName : "<null>", grandClass,
+							       static_cast<unsigned long long>(grand->getState()));
+							grandIndex++;
+						}
+						grandIter->release();
+					}
+				}
+			}
+
+			childIndex++;
+		}
+		iter->release();
+	}
+
+	if (includeProviderChildren && provider) {
+		OSIterator *providerIter = provider->getClientIterator();
+		if (providerIter) {
+			OSObject *providerObj = nullptr;
+			int providerIndex = 0;
+			while ((providerObj = providerIter->getNextObject())) {
+				auto *providerChild = OSDynamicCast(IOService, providerObj);
+				if (!providerChild) {
+					continue;
+				}
+				const char *providerChildName = providerChild->getName();
+				const char *providerChildClass = providerChild->getMetaClass() ? providerChild->getMetaClass()->getClassName() : "<null>";
+				if (providerChild == svc || isServicePublishTraceTarget(providerChildName, providerChildClass)) {
+					SYSLOG("ngreen", "V111[%u] %s provider-child[%d] name=%s class=%s state=0x%llx",
+					       seq, stage, providerIndex,
+					       providerChildName ? providerChildName : "<null>", providerChildClass,
+					       static_cast<unsigned long long>(providerChild->getState()));
+				}
+				providerIndex++;
+			}
+			providerIter->release();
+		}
+	}
 }
 
 bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size) {
@@ -662,6 +919,16 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		const bool wegCoexist = isWEGCoexistMode();
 
 		{
+			SolveRequestPlus solveRequests[] = {
+				{"__ZN16IntelAccelerator17newDisplayMachineEv", this->oNewDisplayMachine},
+				{"__ZN21IGAccelDisplayMachine4initEP22IOGraphicsAccelerator2", this->oDisplayMachineInit},
+				{"__ZN21IGAccelDisplayMachine5startEP11IOPCIDevice", this->oDisplayMachineStart},
+				{"__ZN21IGAccelDisplayMachine17probeDisplayPipesEv", this->oDisplayMachineProbeDisplayPipes},
+			};
+			PANIC_COND(!SolveRequestPlus::solveAll(patcher, index, solveRequests, address, size), "ngreen", "Failed to resolve display machine symbols (ICL)");
+		}
+
+		{
 			// loadGuCBinary: always route — WEG's firmware path is Mojave-gated and dead on Sonoma.
 			// Without this hook, no GuC binary loads at all in coexist mode → ring dead.
 			RouteRequestPlus firmwareRoute[] = {
@@ -772,6 +1039,16 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		
 		const bool wegCoexist = isWEGCoexistMode();
 		const bool forceFullMTL = shouldForceFullMetalPath();
+
+		{
+			SolveRequestPlus solveRequests[] = {
+				{"__ZN16IntelAccelerator17newDisplayMachineEv", this->oNewDisplayMachine},
+				{"__ZN21IGAccelDisplayMachine4initEP22IOGraphicsAccelerator2", this->oDisplayMachineInit},
+				{"__ZN21IGAccelDisplayMachine5startEP11IOPCIDevice", this->oDisplayMachineStart},
+				{"__ZN21IGAccelDisplayMachine17probeDisplayPipesEv", this->oDisplayMachineProbeDisplayPipes},
+			};
+			PANIC_COND(!SolveRequestPlus::solveAll(patcher, index, solveRequests, address, size), "ngreen", "Failed to resolve display machine symbols (TGL)");
+		}
 
 		RouteRequestPlus requests[] = {
 			 {"__ZN16IntelAccelerator20_PAVPCommandCallbackEP8OSObject22PAVPSessionCommandID_tjPj", wrapPavpSessionCallback, this->orgPavpSessionCallback},
@@ -1591,6 +1868,9 @@ uint32_t Gen11::wrapProbeCDClockFrequency(void *that) {
 static void v45DelayedChildCheck(thread_call_param_t p0, thread_call_param_t p1) {
 	auto *svc = static_cast<IOService *>(p0);
 	unsigned delayMs = (unsigned)(uintptr_t)p1;
+	char stage[48];
+	snprintf(stage, sizeof(stage), "delayed-check T+%ums", delayMs);
+	logServicePublishSnapshot(svc, stage);
 	
 	uint64_t state = svc->getState();
 	OSIterator *iter = svc->getClientIterator();
@@ -2765,6 +3045,7 @@ bool Gen11::start(void *that,void  *param_1)
 	}
 	
 	auto ret= FunctionCast(start, callback->ostart)(that,param_1);
+	ensureDisplayPipeBacking(that);
 	
 	// V65: IMMEDIATELY after original start() returns, re-enable RCS0 interrupts.
 	// Apple's init code may have overwritten our pre-start settings.
@@ -2989,6 +3270,7 @@ bool Gen11::start(void *that,void  *param_1)
 		
 		// 1. IOService state bitmask — verify the service is registered, matched, published
 		uint64_t svcState = accelSvc->getState();
+		logServicePublishSnapshot(accelSvc, "accel-start pre-registerService");
 		SYSLOG("ngreen", "V45: getState()=0x%llx (reg=%d match=%d pub=%d fmatch=%d inact=%d)",
 			   (unsigned long long)svcState,
 			   !!(svcState & 0x02),  // kIOServiceRegisteredState
@@ -3052,20 +3334,7 @@ bool Gen11::start(void *that,void  *param_1)
 			accelSvc->setProperty("IOSourceVersion", "0.0.0.0.0");
 			auto *vaRendID = OSNumber::withNumber(static_cast<unsigned long long>(17301568), 32);
 			if (vaRendID) { accelSvc->setProperty("IOVARendererID", vaRendID); vaRendID->release(); }
-			// V77: DisplayPipeSupported=0 — disable GPU display pipe compositing.
-			// WindowServer crash-loops (consecutiveCrashCount=11) in
-			// CoreDisplay::DisplayPipe::RunFullDisplayPipe because GPU can't render
-			// surfaces (RCS ring idle). Force CPU compositing via FB aperture.
-			auto *dpCaps = OSDictionary::withCapacity(2);
-			if (dpCaps) {
-				auto *v1 = OSNumber::withNumber(0ULL, 32);
-				auto *v2 = OSNumber::withNumber(0ULL, 32);
-				if (v1) { dpCaps->setObject("DisplayPipeSupported", v1); v1->release(); }
-				if (v2) { dpCaps->setObject("TransactionsSupported", v2); v2->release(); }
-				accelSvc->setProperty("IOAccelDisplayPipeCapabilities", dpCaps);
-				dpCaps->release();
-				SYSLOG("ngreen", "V77: DisplayPipeSupported=0 set on accelerator");
-			}
+			applyDisplayPipePolicy(accelSvc, "accel-start missing-metal");
 			auto *cfpi = OSDictionary::withCapacity(1);
 			if (cfpi) {
 				auto *pn = OSString::withCString("IOAccelerator2D.plugin");
@@ -3075,24 +3344,16 @@ bool Gen11::start(void *that,void  *param_1)
 			}
 		}
 		
-		// V78: Keep native DisplayPipe ON by default. Experimental monitor logging must
-		// not disable DisplayPipe, otherwise we hide the exact first-light/compositor
-		// path we are trying to debug. Only an explicit ngreendp0 fallback should force
-		// DisplayPipeSupported=0.
-		if (isDisplayPipeForceDisabled()) {
-			auto *dpCaps = OSDictionary::withCapacity(2);
-			if (dpCaps) {
-				auto *dpSupp = OSNumber::withNumber(0ULL, 32);
-				auto *trSupp = OSNumber::withNumber(0ULL, 32);
-				if (dpSupp) { dpCaps->setObject("DisplayPipeSupported", dpSupp); dpSupp->release(); }
-				if (trSupp) { dpCaps->setObject("TransactionsSupported", trSupp); trSupp->release(); }
-				accelSvc->setProperty("IOAccelDisplayPipeCapabilities", dpCaps);
-				dpCaps->release();
-				SYSLOG("ngreen", "V78: DisplayPipeSupported=0 forced by boot-arg");
-			}
-		} else {
-			SYSLOG("ngreen", "V78: keeping native DisplayPipeSupported");
-		}
+		applyDisplayPipePolicy(accelSvc, "accel-start final");
+		SYSLOG("ngreen", "DisplayPipe MMIO[accel-start pre-registerService]: RCS_HEAD=0x%x RCS_TAIL=0x%x RCS_CTL=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK=0x%x FW_BLT=0x%x ACK=0x%x",
+		       NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE)),
+		       NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE)),
+		       NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE)),
+		       NGreen::callback->readReg32(ERROR_GEN6),
+		       NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9));
 		
 		// 6. Explicit registerService() — ensures the service is visible to IOKit matching
 		//    even if IntelAccelerator::start() didn't call it or the internal call failed.
@@ -3101,6 +3362,16 @@ bool Gen11::start(void *that,void  *param_1)
 		
 		// 7. Post-registerService state
 		svcState = accelSvc->getState();
+		logServicePublishSnapshot(accelSvc, "accel-start post-registerService");
+		SYSLOG("ngreen", "DisplayPipe MMIO[accel-start post-registerService]: RCS_HEAD=0x%x RCS_TAIL=0x%x RCS_CTL=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK=0x%x FW_BLT=0x%x ACK=0x%x",
+		       NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE)),
+		       NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE)),
+		       NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE)),
+		       NGreen::callback->readReg32(ERROR_GEN6),
+		       NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9));
 		SYSLOG("ngreen", "V45: post-registerService state=0x%llx (reg=%d match=%d)",
 			   (unsigned long long)svcState, !!(svcState & 0x02), !!(svcState & 0x04));
 		
@@ -4318,16 +4589,8 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 					pluginDict->release();
 				}
 				
-				// V77: Display pipe capabilities — DISABLED to prevent WS GPU compositing crash.
-				// See V77 comment in start() for full explanation.
-				auto *dpCaps = OSDictionary::withCapacity(2);
+				auto *dpCaps = createDisplayPipeCapabilityDict(!isDisplayPipeForceDisabled());
 				if (dpCaps) {
-					auto *dpSupp = OSNumber::withNumber(static_cast<unsigned long long>(0), 32);
-					auto *trSupp = OSNumber::withNumber(static_cast<unsigned long long>(0), 32);
-					dpCaps->setObject("DisplayPipeSupported", dpSupp);
-					dpCaps->setObject("TransactionsSupported", trSupp);
-					OSSafeReleaseNULL(dpSupp);
-					OSSafeReleaseNULL(trSupp);
 					dict->setObject("IOAccelDisplayPipeCapabilities", dpCaps);
 					dpCaps->release();
 				}
@@ -4351,7 +4614,27 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 			}
 			
 			SYSLOG("ngreen", "FBController: calling registerService() to trigger accelerator matching for IntelAccelerator");
+			applyDisplayPipePolicy(service, "fbcontroller registerService");
+			SYSLOG("ngreen", "DisplayPipe MMIO[fbcontroller pre-registerService]: RCS_HEAD=0x%x RCS_TAIL=0x%x RCS_CTL=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK=0x%x FW_BLT=0x%x ACK=0x%x",
+			       NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE)),
+			       NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE)),
+			       NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE)),
+			       NGreen::callback->readReg32(ERROR_GEN6),
+			       NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9),
+			       NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9),
+			       NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9),
+			       NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9));
 			service->registerService();
+			logServicePublishSnapshot(service, "fbcontroller post-registerService", true, false);
+			SYSLOG("ngreen", "DisplayPipe MMIO[fbcontroller post-registerService]: RCS_HEAD=0x%x RCS_TAIL=0x%x RCS_CTL=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK=0x%x FW_BLT=0x%x ACK=0x%x",
+			       NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE)),
+			       NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE)),
+			       NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE)),
+			       NGreen::callback->readReg32(ERROR_GEN6),
+			       NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9),
+			       NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9),
+			       NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9),
+			       NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9));
 
 			OSIterator *clientIter = service->getClientIterator();
 			if (clientIter) {
@@ -4443,6 +4726,21 @@ bool Gen11::AppleIntelFramebufferinit(void *frame,void *cont,uint32_t param_2)
 	
 	auto ret=FunctionCast(AppleIntelFramebufferinit, callback->oAppleIntelFramebufferinit)(frame,cont,param_2 );
 	getMember<void *>(frame, 0x4a40) = ccont;
+	auto *fbService = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(frame));
+	if (fbService) {
+		publishFramebufferTriageResources();
+		publishBootDisplayProperties(fbService, param_2);
+		SYSLOG("ngreen", "DisplayPipe MMIO[%s]: RCS_HEAD=0x%x RCS_TAIL=0x%x RCS_CTL=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK=0x%x FW_BLT=0x%x ACK=0x%x",
+		       param_2 == 0 ? "fb-init boot" : "fb-init aux",
+		       NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE)),
+		       NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE)),
+		       NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE)),
+		       NGreen::callback->readReg32(ERROR_GEN6),
+		       NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9));
+	}
 	return ret;
 }
 

@@ -1,0 +1,60 @@
+# Failure Matrix - V1.0.4_2026-04-24_0844
+
+Component | Expected | Observed | Status | Evidence | Likely Meaning
+----------|----------|----------|--------|----------|---------------
+OpenCore boot-args | -v -liludbg ngreenSched | Present | PASS | 07_nvram_boot_args.txt | Debug flags active
+Lilu load | Load successfully | Loaded | PASS | kextstat: as.vit9696.Lilu (1.7.3) | Lilu 1.7.3 loaded
+NootedGreen load | Load successfully | Loaded | PASS | kextstat: com.StezzaPilot.NootedGreen (1.0.4) | NootedGreen 1.0.4 loaded
+NootedGreen version | 1.0.4 | 1.0.4 | PASS | Info.plist CFBundleShortVersionString=1.0.4 | Version matches
+NootedGreen patch application | Patches applied | UNKNOWN | NOT TESTED | Kernel logs filtered to 0 lines | Debug logs not captured in log show
+NootedGreen function routing | Functions routed | UNKNOWN | NOT TESTED | No predicate matches in logs | May be working silently
+IGPU IORegistry presence | IGPU present | Present | PASS | IORegistry shows IGPU@2 | IGPU detected
+IGPU device-id | Correct spoofed ID | 0x9a49 | PASS | system_profiler: Device ID: 0x9a49 | Matches Intel Iris Xe
+IGPU platform-id | Correct platform-id | UNKNOWN | NOT TESTED | AAPL,ig-platform-id not in filtered output | Need direct IOReg query
+AppleIntel graphics kext load | All components load | Loaded | PASS | AppleIntelTGLGraphics + AppleIntelTGLGraphicsFramebuffer loaded | Success
+AppleIntel framebuffer attach | Framebuffer attaches | Attached | PASS | AppleIntelFramebufferController registered | Framebuffer working
+AppleIntel accelerator attach | Accelerator attaches | Attached | PASS | IOAcceleratorFamily2 loaded with AppleIntel | Acceleration service present
+framebuffer service publication | Services published | YES | PASS | IntelFBClientControl, AppleIntelMEClientController | Services active
+IOFramebuffer availability | IOFramebuffer available | Available | PASS | AppleIntelFramebufferController with NumFrameBuffer | Framebuffer operational
+EDID present | EDID parsed | Present | PASS | IODisplayEDID data in IORegistry | Display detected with EDID
+VBT present | VBT parsed | UNKNOWN | NOT TESTED | No VBT logs found | May be present but not logged
+OpRegion present | OpRegion available | UNKNOWN | NOT TESTED | No OpRegion logs found | May be present but not logged
+display online | Display online | Online | PASS | system_profiler: Online: Yes | Display working
+display mode publication | Modes published | 1920x1080 | PASS | system_profiler: Resolution: 1920 x 1080 | Native resolution available
+backlight service | Backlight device present | Present | PASS | AppleBacklightDisplay registered | Backlight control available
+WindowServer startup | WindowServer starts | Started | PASS | User session active, GUI reached | Full GUI achieved
+CoreDisplay transaction | Transaction completes | UNKNOWN | NOT TESTED | No transaction logs captured | Likely working
+IOAccelDisplayPipeUserClient2 | User client created | UNKNOWN | NOT TESTED | Not found in IORegistry class query | May be created dynamically
+IOAccelerator attach | Accelerator attaches | Attached | PASS | IOAcceleratorFamily2 (481.40.2) loaded | Acceleration infrastructure present
+Metal support | Metal available | Supported | PASS | system_profiler: Metal: Supported | Metal GPU family available
+GuC firmware | GuC loaded/skipped | UNKNOWN | NOT TESTED | No GuC logs in filtered output | Firmware handling unknown
+HuC firmware | HuC loaded/skipped | UNKNOWN | NOT TESTED | No HuC logs in filtered output | Firmware handling unknown
+DMC firmware | DMC loaded/skipped | UNKNOWN | NOT TESTED | No DMC logs in filtered output | Firmware handling unknown
+forcewake | Forcewake enabled | UNKNOWN | NOT TESTED | No forcewake logs in filtered output | May be working silently
+power wells | Power wells enabled | UNKNOWN | NOT TESTED | No power well logs in filtered output | May be working silently
+MMIO BAR0 | BAR0 accessible | UNKNOWN | NOT TESTED | No MMIO logs in filtered output | Unknown
+RCS ring | RCS available | UNKNOWN | NOT TESTED | No RCS logs in filtered output | Unknown
+BCS ring | BCS available | UNKNOWN | NOT TESTED | No BCS logs in filtered output | Unknown
+VCS ring | VCS available | UNKNOWN | NOT TESTED | No VCS logs in filtered output | Unknown
+VECS ring | VECS available | UNKNOWN | NOT TESTED | No VECS logs in filtered output | Unknown
+execlists | Execlists init | UNKNOWN | NOT TESTED | No execlist logs in filtered output | Unknown
+stamp advancement | Stamps advancing | UNKNOWN | NOT TESTED | No stamp logs in filtered output | No timeout observed
+panic status | No panic | No panic | PASS | System running for 4+ minutes, GUI active | No panic occurred
+crash reports | No recent crashes | Some reports | PARTIAL | Kernel_2026-04-24-014940.gpuRestart | GPU restart events from previous boots, not current
+
+## Summary
+**Overall Status**: MOSTLY PASSING
+- macOS boots successfully
+- NootedGreen 1.0.4 loads correctly
+- Lilu 1.7.3 loads correctly
+- Display works with native resolution
+- Metal is supported
+- No panics in current boot
+- GUI reaches login screen and session is active
+
+**Unknown Areas** (require deeper investigation):
+- Ring initialization status (RCS, BCS, VCS, VECS)
+- Firmware handling (GuC, HuC, DMC)
+- Forcewake/power well status
+- IOAccelDisplayPipeUserClient2 creation
+- CoreDisplay transaction completion

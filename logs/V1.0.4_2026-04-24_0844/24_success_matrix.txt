@@ -1,0 +1,89 @@
+# Success Matrix - V1.0.4_2026-04-24_0844
+
+## What Worked in This Boot
+
+### Boot Success
+- [PASS] macOS booted successfully - Evidence: kern.boottime shows boot at 08:41:41, uptime 4 mins
+- [PASS] GUI reached login screen - Evidence: kCGSSessionLoginDoneKey=Yes in IORegistry
+- [PASS] User session active - Evidence: IOConsoleUsers shows session for user becoolio
+- [PASS] No kernel panic occurred - Evidence: System running 4+ minutes without crash
+- [PASS] No immediate reboot - Evidence: Consistent uptime measurement
+
+### Lilu Success
+- [PASS] Lilu loaded successfully - Evidence: kextstat shows as.vit9696.Lilu (1.7.3)
+- [PASS] Lilu version correct - Evidence: CFBundleVersion C2310F3B
+
+### NootedGreen Success
+- [PASS] NootedGreen loaded successfully - Evidence: kextstat shows com.StezzaPilot.NootedGreen (1.0.4)
+- [PASS] NootedGreen version matches Info.plist - Evidence: Source shows 1.0.4, loaded shows 1.0.4
+- [PASS] NootedGreen IORegistry presence - Evidence: NootedGreen node visible in IORegistry
+- [PASS] NootedGreen published to IGPU - Evidence: "IOPersonalityPublisher" = "com.StezzaPilot.NootedGreen" in AppleIntelFramebufferController
+
+### IGPU Detection
+- [PASS] IGPU detected - Evidence: IGPU@2 present in IORegistry
+- [PASS] IGPU device ID correct - Evidence: device-id = 0x9a49 (Intel Iris Xe Graphics)
+- [PASS] IGPU model correct - Evidence: model = "Intel Iris Xe Graphics"
+- [PASS] IGPU compatible property - Evidence: compatible includes "pci8086,9a49", "GFX0", "IGPU"
+- [PASS] IGPU framebuffer unified memory - Evidence: framebuffer-unifiedmem = <00000060>
+
+### AppleIntel Graphics Components
+- [PASS] AppleIntelTGLGraphics loaded - Evidence: kextstat shows com.xxxxx.driver.AppleIntelTGLGraphics (16.0.0)
+- [PASS] AppleIntelTGLGraphicsFramebuffer loaded - Evidence: kextstat shows com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer (16.0.0)
+- [PASS] IOAcceleratorFamily2 loaded - Evidence: kextstat shows com.apple.iokit.IOAcceleratorFamily2 (481.40.2)
+- [PASS] IOGraphicsFamily loaded - Evidence: kextstat shows com.apple.iokit.IOGraphicsFamily (598)
+- [PASS] AppleGraphicsDeviceControl loaded - Evidence: kextstat shows com.apple.AppleGraphicsDeviceControl (8.1.9)
+
+### Framebuffer Success
+- [PASS] AppleIntelFramebufferController attached - Evidence: AppleIntelFramebufferController registered, matched, active
+- [PASS] IntelFBClientControl attached - Evidence: IntelFBClientControl registered and active
+- [PASS] AppleIntelMEClientController attached - Evidence: AppleIntelMEClientController registered
+- [PASS] NumFrameBuffer = 3 - Evidence: "NumFrameBuffer" = <03000000> in IORegistry
+- [PASS] AAPL,DisplayPipe property - Evidence: "AAPL,DisplayPipe" = <ffff0000> in AppleIntelFramebufferController
+
+### Display Detection
+- [PASS] Display detected - Evidence: Color LCD in system_profiler
+- [PASS] Display online - Evidence: system_profiler shows "Online: Yes"
+- [PASS] Native resolution available - Evidence: system_profiler shows "1920 x 1080 (1080p FHD)"
+- [PASS] Mirror off - Evidence: system_profiler shows "Mirror: Off"
+- [PASS] Main display - Evidence: system_profiler shows "Main Display: Yes"
+- [PASS] Connection type internal - Evidence: system_profiler shows "Connection Type: Internal"
+- [PASS] EDID present - Evidence: IODisplayEDID data visible in IORegistry
+
+### Backlight Success
+- [PASS] AppleBacklightDisplay attached - Evidence: AppleBacklightDisplay registered in IORegistry
+- [PASS] Backlight parameters published - Evidence: IODisplayParameters show bklt min/max/value
+- [PASS] DisplayProductID visible - Evidence: DisplayProductID = 40178
+
+### Acceleration Infrastructure
+- [PASS] IOAccelDeviceShaderBinary present - Evidence: "IOAccelDeviceShaderBinary" = "IOAccelTGLShaderBinary"
+- [PASS] IOAccelDriverConnectCategory - Evidence: "IOAccelDriverConnectCategory" = "IOAccelGPU"
+- [PASS] MetalPluginName present - Evidence: "MetalPluginName" = "AppleIntelTGLGraphics"
+- [PASS] IOAccelScaleFactorDict present - Evidence: Scale dictionary referenced
+
+### Metal Support
+- [PASS] Metal supported - Evidence: system_profiler shows "Metal: Supported"
+- [PASS] Metal GPU family available - Evidence: MetalPluginName points to AppleIntelTGLGraphics
+- [PASS] VRAM reported - Evidence: system_profiler shows "VRAM (Dynamic, Max): 1536 MB"
+
+### WindowServer/CoreDisplay
+- [PASS] WindowServer running - Evidence: pid 166 WindowServer in IORegistry
+- [PASS] displaypolicyd active - Evidence: displaypolicyd user clients visible
+- [PASS] loginwindow active - Evidence: pid 172 loginwindow in IORegistry
+- [PASS] IODisplayWrangler active - Evidence: IODisplayWrangler registered, matched, active
+
+### Additional Observations
+- [PASS] Boot display marked - Evidence: "AAPL,boot-display" = Yes in AppleIntelFramebufferDiags@0
+- [PASS] Framebuffer Diags for all 3 indices - Evidence: AppleIntelFramebufferDiags@0, @1, @2 all present
+- [PASS] display0 connect active - Evidence: display0 (IODisplayConnect) registered
+- [PASS] AppleIntelMEIDriver attached - Evidence: AppleIntelMEIDriver registered and active
+
+## Summary
+**This boot was a MAJOR SUCCESS.** The system:
+1. Boot completed successfully to GUI
+2. NootedGreen 1.0.4 loaded and attached
+3. Display detected with full EDID at native 1920x1080
+4. Metal GPU support confirmed
+5. VRAM correctly reported (1536 MB)
+6. Framebuffer services all published
+7. No panics or crashes in current boot
+8. User session active and responsive

@@ -85,6 +85,10 @@ static bool shouldEnableLegacyPllBringup() {
 	return checkKernelArgument("-ngreenlegacypll");
 }
 
+static bool hasAllow3DBootArg() {
+	return checkKernelArgument("-allow3d");
+}
+
 static void publishTglFramebufferPersonality(IOPCIDevice *gpu) {
 	auto *fbDict = OSDictionary::withCapacity(8);
 	if (!fbDict) {
@@ -243,9 +247,13 @@ static void seedIGPUPropertiesEarly() {
 void NGreen::init() {
     callback = this;
 
+	SYSLOG("ngreen", "============================================================");
+	SYSLOG("ngreen", "NootedGreen V1.0.4 - STARTING");
     SYSLOG("ngreen", "============================================================");
-	SYSLOG("ngreen", "NootedGreen V1.0.3 - STARTING");
-    SYSLOG("ngreen", "============================================================");
+	SYSLOG("ngreen", "Acceleration gate: -allow3d=%d", hasAllow3DBootArg());
+	if (!hasAllow3DBootArg()) {
+		SYSLOG("ngreen", "Acceleration gate: boot is missing -allow3d; acceleration probe results are not authoritative");
+	}
 
     lilu.onKextLoadForce(&kextAGDP);
 	/*lilu.onKextLoadForce(&kextBacklight);

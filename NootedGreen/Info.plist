@@ -15,11 +15,11 @@
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.3</string>
+	<string>1.0.4</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>1.0.3</string>
+	<string>1.0.4</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>AppleIntelTGLGraphicsFramebuffer</key>
@@ -129,6 +129,8 @@
 			<string>IOKit</string>
 			<key>SchedulerType</key>
 			<integer>5</integer>
+			<key>AccelerationTestingRequiresAllow3D</key>
+			<true/>
 		</dict>
 	</dict>
 	<key>NootedGreenDriverProfileDefault</key>
