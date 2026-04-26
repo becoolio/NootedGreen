@@ -1300,6 +1300,9 @@ private:
 	mach_vm_address_t oDisplayMachineInit {};
 	mach_vm_address_t oDisplayMachineStart {};
 	mach_vm_address_t oDisplayMachineProbeDisplayPipes {};
+
+	static bool deviceStart(void *that);   // V111: force IGAccelDevice::deviceStart true on RPL
+	mach_vm_address_t odeviceStart {};
 	
 	static bool patchRCSCheck(mach_vm_address_t& start);  // bypass RCS engine check
 	static void forceWake(void *that, bool set, uint32_t dom, uint8_t ctx);  // custom forcewake
@@ -1595,7 +1598,7 @@ private:
 	static bool  initHardwareCaps(void *this_ptr);  // query HW capabilities
 	mach_vm_address_t oinitHardwareCaps {};
 	
-	static uint8_t IGMappedBuffergetMemory(void *that);
+	static void * IGMappedBuffergetMemory(void *that);
 	mach_vm_address_t oIGMappedBuffergetMemory {};
 	
 	static void *  IGHardwareBlit3DContextoperatornew(void *that,unsigned long param_1);

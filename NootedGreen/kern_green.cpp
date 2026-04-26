@@ -500,6 +500,16 @@ OSMetaClassBase *NGreen::wrapSafeMetaCast(const OSMetaClassBase *anObject, const
 	return ret;
 }
 
+bool NGreen::wrapIGAccelDeviceStart(void *that) {
+	auto ret = FunctionCast(wrapIGAccelDeviceStart, callback->orgIGAccelDeviceStart)(that);
+	if (!callback->isRealTGL && !ret) {
+		SYSLOG("NGreen", "IOAccelF2: forcing IGAccelDevice::deviceStart success on spoofed TGL path");
+		return true;
+	}
+	DBGLOG("NGreen", "IOAccelF2: IGAccelDevice::deviceStart returned %d", ret);
+	return ret;
+}
+
 void NGreen::setRMMIOIfNecessary() {
 	if (UNLIKELY(!this->rmmio || !this->rmmio->getLength())) {
 		this->rmmio = this->iGPU->mapDeviceMemoryWithRegister(kIOPCIConfigBaseAddress0);
@@ -542,6 +552,16 @@ bool NGreen::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
 		bool f1ok = p1.apply(patcher, address, size);
 		patcher.clearError();
 		SYSLOG("NGreen", "IOAccelF2 f1 (fixed): %s", f1ok ? "OK" : "FAILED");
+
+		RouteRequestPlus routes[] = {
+			{"__ZN13IGAccelDevice11deviceStartEv", wrapIGAccelDeviceStart, this->orgIGAccelDeviceStart},
+		};
+		if (RouteRequestPlus::routeAll(patcher, index, routes, address, size)) {
+			SYSLOG("NGreen", "IOAccelF2: hooked IGAccelDevice::deviceStart");
+		} else {
+			patcher.clearError();
+			SYSLOG("NGreen", "IOAccelF2: IGAccelDevice::deviceStart symbol not found");
+		}
 		
 	}  else if (kextIOGraphics.loadIndex == index) {
 		/*
