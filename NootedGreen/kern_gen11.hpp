@@ -1246,6 +1246,11 @@ private:
 	// ── GuC (Graphics micro-Controller) firmware ──
 	static unsigned long loadGuCBinary(void *that);  // route: intercept GuC FW load
 	mach_vm_address_t oloadGuCBinary {};
+	static bool patchEmbeddedTGLFirmware(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size);
+	static bool patchEmbeddedFirmwareAt(mach_vm_address_t symbol, const uint8_t *blob, size_t blobSize,
+		const char *label, size_t zeroFill = 0);
+	static bool patchEmbeddedFirmwareMatch(mach_vm_address_t address, size_t size, const uint8_t *needle, size_t needleSize,
+		const uint8_t *blob, size_t blobSize, const char *label);
 
 	static int alwaysReturnSuccess(void *that);  // stub: always returns 0 (success)
 	mach_vm_address_t oalwaysReturnSuccess {};

@@ -2,6 +2,7 @@
 //  details.
 #include "kern_gen11.hpp"
 #include <Headers/kern_api.hpp>
+#include "PrivateHeaders/IGFirmwareAssets.hpp"
 #include "kern_genx.hpp"
 #include "kern_green.hpp"
 #include <IOKit/IOCatalogue.h>
@@ -79,6 +80,29 @@ static bool isExperimentalMonitorEnabled() {
 	}
 
 	return checkKernelArgument("-ngreenexp");
+}
+
+static int getRequestedSchedulerType() {
+	int schedType = 5;
+	int bootArgSched = 0;
+	if (PE_parse_boot_argn("ngreenSched", &bootArgSched, sizeof(bootArgSched)) && bootArgSched >= 3 && bootArgSched <= 5) {
+		return bootArgSched;
+	}
+
+	return schedType;
+}
+
+static bool shouldPatchEmbeddedGuCFirmware() {
+	int enabled = 0;
+	if (PE_parse_boot_argn("ngreengucfw", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	if (checkKernelArgument("-ngreengucfw")) {
+		return true;
+	}
+
+	return getRequestedSchedulerType() == 3;
 }
 
 static bool isDisplayPipeForceDisabled() {
@@ -1106,6 +1130,12 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		}
 
 		if (!NGreen::callback->isRealTGL) {
+			SYSLOG("ngreen", "GuC firmware patch: skipped embedded TGL blob override on non-real TGL");
+		} else if (!patchEmbeddedTGLFirmware(patcher, index, address, size)) {
+			SYSLOG("ngreen", "GuC firmware patch: native embedded TGL firmware left unchanged");
+		}
+
+		if (!NGreen::callback->isRealTGL) {
 			// V111: Hook IGAccelDevice::deviceStart to force success on RPL.
 			// Binary pattern (f_devstart) may not match every Sonoma build variant.
 			// This symbol-based hook guarantees deviceStart returns true regardless of
@@ -1618,14 +1648,100 @@ IOReturn Gen11::wrapFBClientDoAttribute(void *fbclient, uint32_t attribute, unsi
 }
 
 unsigned long Gen11::loadGuCBinary(void *that) {
+	const int requestedScheduler = getRequestedSchedulerType();
+	const bool embeddedFirmwareRequested = shouldPatchEmbeddedGuCFirmware();
+
 	// V52: Real TGL can authenticate and load GuC firmware natively.
 	// RPL cannot — stub to return 1 and use host scheduling instead.
 	if (NGreen::callback->isRealTGL) {
-		SYSLOG("ngreen", "loadGuCBinary: real TGL — calling original for GuC firmware load");
+		SYSLOG("ngreen", "loadGuCBinary: real TGL sched=%d embedded-fw=%d — calling original", requestedScheduler,
+		       embeddedFirmwareRequested);
+		return FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+	}
+	if (requestedScheduler == 3 && embeddedFirmwareRequested) {
+		SYSLOG("ngreen", "loadGuCBinary: non-real TGL sched=3 requested, but embedded GuC path is only enabled on real TGL right now");
 		return FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
 	}
 	SYSLOG("ngreen", "loadGuCBinary: RPL — stubbed to return 1 (host scheduling)");
 	return 1;
+}
+
+bool Gen11::patchEmbeddedFirmwareAt(mach_vm_address_t symbol, const uint8_t *blob, size_t blobSize,
+	const char *label, size_t zeroFill) {
+	if (!symbol || !blob || blobSize == 0) {
+		return false;
+	}
+
+	auto status = MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock);
+	if (status != KERN_SUCCESS) {
+		SYSLOG("ngreen", "firmware patch[%s]: failed to enable kernel write (%d)", safeString(label), status);
+		return false;
+	}
+
+	lilu_os_memcpy(reinterpret_cast<void *>(symbol), blob, blobSize);
+	if (zeroFill > blobSize) {
+		memset(reinterpret_cast<uint8_t *>(symbol) + blobSize, 0, zeroFill - blobSize);
+	}
+
+	MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock);
+	SYSLOG("ngreen", "firmware patch[%s]: wrote %zu bytes @ 0x%llx", safeString(label), blobSize, symbol);
+	return true;
+}
+
+bool Gen11::patchEmbeddedFirmwareMatch(mach_vm_address_t address, size_t size, const uint8_t *needle, size_t needleSize,
+	const uint8_t *blob, size_t blobSize, const char *label) {
+	if (!address || !size || !needle || !needleSize || !blob || !blobSize) {
+		return false;
+	}
+
+	size_t offset = 0;
+	if (!KernelPatcher::findPattern(needle, nullptr, needleSize, reinterpret_cast<const void *>(address), size, &offset) || !offset) {
+		SYSLOG("ngreen", "firmware patch[%s]: pattern not found", safeString(label));
+		return false;
+	}
+
+	return patchEmbeddedFirmwareAt(address + offset, blob, blobSize, label);
+}
+
+bool Gen11::patchEmbeddedTGLFirmware(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size) {
+	if (!shouldPatchEmbeddedGuCFirmware()) {
+		SYSLOG("ngreen", "firmware patch: sched=%d did not request embedded GuC override", getRequestedSchedulerType());
+		return false;
+	}
+
+	mach_vm_address_t kmGuCSignature = patcher.solveSymbol(index, "__ZL13__KmGuCBinary");
+	mach_vm_address_t kmGuCSpringboardSignature = patcher.solveSymbol(index, "__ZL18__KmGuCSBBinarySig");
+	mach_vm_address_t kmGen12TGLGuCFirmware = patcher.solveSymbol(index, "__ZL21__KmGen12TGLGuCBinary");
+
+	bool patched = false;
+	if (kmGuCSignature && kmGuCSpringboardSignature && kmGuCSpringboardSignature > kmGuCSignature) {
+		patched |= patchEmbeddedFirmwareAt(kmGuCSignature, IGFirmwareAssets::kGuCFull,
+			IGFirmwareAssets::kGuCFullSize, "GuC.full", kmGuCSpringboardSignature - kmGuCSignature);
+	} else if (kmGuCSignature) {
+		patched |= patchEmbeddedFirmwareAt(kmGuCSignature, IGFirmwareAssets::kGuCFull,
+			IGFirmwareAssets::kGuCFullSize, "GuC.full");
+	}
+
+	if (kmGuCSpringboardSignature) {
+		patched |= patchEmbeddedFirmwareAt(kmGuCSpringboardSignature, IGFirmwareAssets::kGuCSignature,
+			IGFirmwareAssets::kGuCSignatureSize, "GuC.springboard-sig");
+	}
+
+	if (kmGen12TGLGuCFirmware) {
+		patched |= patchEmbeddedFirmwareAt(kmGen12TGLGuCFirmware, IGFirmwareAssets::kGuCFirmware,
+			IGFirmwareAssets::kGuCFirmwareSize, "GuC.firmware");
+	} else {
+		patched |= patchEmbeddedFirmwareMatch(address, size, IGFirmwareAssets::kGuCFirmware,
+			64, IGFirmwareAssets::kGuCFirmware, IGFirmwareAssets::kGuCFirmwareSize, "GuC.firmware-fallback");
+	}
+
+	const bool hucPatched = patchEmbeddedFirmwareMatch(address, size, IGFirmwareAssets::kHuCFirmware,
+		64, IGFirmwareAssets::kHuCFirmware, IGFirmwareAssets::kHuCFirmwareSize, "HuC.firmware");
+	if (!hucPatched) {
+		SYSLOG("ngreen", "firmware patch[HuC]: no stock HuC blob was found in AppleIntelTGLGraphics");
+	}
+
+	return patched;
 }
 
 UInt8 Gen11::wrapLoadGuCBinary(void *that) {
