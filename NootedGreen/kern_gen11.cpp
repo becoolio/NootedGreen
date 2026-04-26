@@ -105,6 +105,32 @@ static bool shouldPatchEmbeddedGuCFirmware() {
 	return getRequestedSchedulerType() == 3;
 }
 
+static bool isGuCDiagnosticsEnabled() {
+	int enabled = 0;
+	if (PE_parse_boot_argn("ngreengucdiag", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	return checkKernelArgument("-ngreengucdiag");
+}
+
+static void logGuCFirmwareState(const char *stage) {
+	if (!NGreen::callback) {
+		return;
+	}
+
+	const uint32_t gucStatus = NGreen::callback->readReg32(0xC000);
+	const uint32_t hucStatus = NGreen::callback->readReg32(0xD000);
+	const uint32_t renderReq = NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9);
+	const uint32_t renderAck = NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9);
+	const uint32_t blitterReq = NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9);
+	const uint32_t blitterAck = NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9);
+	const uint32_t errorGen6 = NGreen::callback->readReg32(ERROR_GEN6);
+
+	SYSLOG("ngreen", "GuC diag[%s]: GUC_STATUS=0x%x HUC_STATUS=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK_RENDER=0x%x FW_BLT=0x%x ACK_BLT=0x%x",
+	       stage ? stage : "<null>", gucStatus, hucStatus, errorGen6, renderReq, renderAck, blitterReq, blitterAck);
+}
+
 static bool isDisplayPipeForceDisabled() {
 	// Stage-3 baseline now has DYLD-side NULL guards for DisplayPipe path.
 	// Keep native DisplayPipe ON by default and use ngreendp0 only as an explicit
@@ -1134,6 +1160,9 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		} else if (!patchEmbeddedTGLFirmware(patcher, index, address, size)) {
 			SYSLOG("ngreen", "GuC firmware patch: native embedded TGL firmware left unchanged");
 		}
+		if (isGuCDiagnosticsEnabled()) {
+			logGuCFirmwareState("processKext post-patch");
+		}
 
 		if (!NGreen::callback->isRealTGL) {
 			// V111: Hook IGAccelDevice::deviceStart to force success on RPL.
@@ -1650,19 +1679,35 @@ IOReturn Gen11::wrapFBClientDoAttribute(void *fbclient, uint32_t attribute, unsi
 unsigned long Gen11::loadGuCBinary(void *that) {
 	const int requestedScheduler = getRequestedSchedulerType();
 	const bool embeddedFirmwareRequested = shouldPatchEmbeddedGuCFirmware();
+	const bool gucDiag = isGuCDiagnosticsEnabled();
+	if (gucDiag) {
+		logGuCFirmwareState("loadGuCBinary entry");
+	}
 
 	// V52: Real TGL can authenticate and load GuC firmware natively.
 	// RPL cannot — stub to return 1 and use host scheduling instead.
 	if (NGreen::callback->isRealTGL) {
 		SYSLOG("ngreen", "loadGuCBinary: real TGL sched=%d embedded-fw=%d — calling original", requestedScheduler,
 		       embeddedFirmwareRequested);
-		return FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+		auto ret = FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+		SYSLOG("ngreen", "loadGuCBinary: original returned %lu", ret);
+		if (gucDiag) {
+			logGuCFirmwareState("loadGuCBinary exit");
+		}
+		return ret;
 	}
 	if (requestedScheduler == 3 && embeddedFirmwareRequested) {
 		SYSLOG("ngreen", "loadGuCBinary: non-real TGL sched=3 requested, but embedded GuC path is only enabled on real TGL right now");
-		return FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+		auto ret = FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+		if (gucDiag) {
+			logGuCFirmwareState("loadGuCBinary non-real exit");
+		}
+		return ret;
 	}
 	SYSLOG("ngreen", "loadGuCBinary: RPL — stubbed to return 1 (host scheduling)");
+	if (gucDiag) {
+		logGuCFirmwareState("loadGuCBinary stub exit");
+	}
 	return 1;
 }
 
@@ -1707,6 +1752,10 @@ bool Gen11::patchEmbeddedTGLFirmware(KernelPatcher &patcher, size_t index, mach_
 	if (!shouldPatchEmbeddedGuCFirmware()) {
 		SYSLOG("ngreen", "firmware patch: sched=%d did not request embedded GuC override", getRequestedSchedulerType());
 		return false;
+	}
+	if (isGuCDiagnosticsEnabled()) {
+		SYSLOG("ngreen", "firmware patch: diag enabled host_if_rev=%u GuC=%zu HuC=%zu",
+		       IGUK_GUC_HOST_INTERFACE_REV, IGFirmwareAssets::kGuCFullSize, IGFirmwareAssets::kHuCFullSize);
 	}
 
 	mach_vm_address_t kmGuCSignature = patcher.solveSymbol(index, "__ZL13__KmGuCBinary");
