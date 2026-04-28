@@ -416,33 +416,7 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		static uint8_t accelProps[] = {0x01};
 		this->iGPU->setProperty("IOPCIAccelerationGpu", accelProps, 1);
 
-		auto *metalPluginName = OSString::withCString("AppleIntelTGLGraphics");
-		auto *accelScaleDict = OSString::withCString("IOAccelScaleFactorDict");
-		auto *accelShader = OSString::withCString("IOAccelTGLShaderBinary");
-		auto *pciMatch = OSString::withCString("0x9A498086");
-		auto *accelCategory = OSString::withCString("IOAccelGPU");
-
-		if (metalPluginName) this->iGPU->setProperty("MetalPluginName", metalPluginName);
-		if (accelScaleDict) this->iGPU->setProperty("IOAccelScaleFactorDict", accelScaleDict);
-		if (accelShader) this->iGPU->setProperty("IOAccelDeviceShaderBinary", accelShader);
-		if (pciMatch) this->iGPU->setProperty("IOPCIMatch", pciMatch);
-		if (accelCategory) this->iGPU->setProperty("IOAccelDriverConnectCategory", accelCategory);
-
-		OSSafeReleaseNULL(metalPluginName);
-		OSSafeReleaseNULL(accelScaleDict);
-		OSSafeReleaseNULL(accelShader);
-		OSSafeReleaseNULL(pciMatch);
-		OSSafeReleaseNULL(accelCategory);
-
-		static uint8_t accelCaps[] = {0x00, 0x00, 0x10, 0x00};
-		this->iGPU->setProperty("IOAccelCaps", accelCaps, 4);
-
-		SYSLOG("ngreen", "[Accelerator Props] Published MetalPluginName=AppleIntelTGLGraphics and IOAccel properties");
-
-		auto *metalPlugin = OSDynamicCast(OSString, this->iGPU->getProperty("MetalPluginName"));
-		if (metalPlugin) {
-			SYSLOG("ngreen", "[Accelerator Verify] MetalPluginName=%s", metalPlugin->getCStringNoCopy());
-		}
+		SYSLOG("ngreen", "[Accelerator Props] Only IOPCIAccelerationGpu set on IGPU parent — accelerator properties live on IntelAccelerator personality");
 
 		if (shouldEnableLegacyPllBringup()) {
 			setRMMIOIfNecessary();
@@ -502,11 +476,14 @@ OSMetaClassBase *NGreen::wrapSafeMetaCast(const OSMetaClassBase *anObject, const
 
 bool NGreen::wrapIGAccelDeviceStart(void *that) {
 	auto ret = FunctionCast(wrapIGAccelDeviceStart, callback->orgIGAccelDeviceStart)(that);
-	if (!callback->isRealTGL && !ret) {
-		SYSLOG("NGreen", "IOAccelF2: forcing IGAccelDevice::deviceStart success on spoofed TGL path");
+	if (!ret) {
+		if (callback->isRealTGL) {
+			SYSLOG("NGreen", "IOAccelF2: IGAccelDevice::deviceStart failed on real TGL — forcing true (firmware diagnostics will show why)");
+		} else {
+			SYSLOG("NGreen", "IOAccelF2: forcing IGAccelDevice::deviceStart success on spoofed TGL path");
+		}
 		return true;
 	}
-	DBGLOG("NGreen", "IOAccelF2: IGAccelDevice::deviceStart returned %d", ret);
 	return ret;
 }
 

@@ -119,13 +119,13 @@ static void logGuCFirmwareState(const char *stage) {
 		return;
 	}
 
-	const uint32_t gucStatus = NGreen::callback->readReg32(0xC000);
-	const uint32_t hucStatus = NGreen::callback->readReg32(0xD000);
-	const uint32_t renderReq = NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9);
-	const uint32_t renderAck = NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9);
-	const uint32_t blitterReq = NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9);
-	const uint32_t blitterAck = NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9);
-	const uint32_t errorGen6 = NGreen::callback->readReg32(ERROR_GEN6);
+	const uint32_t gucStatus = Gen11::tReadRegister32(0xC000);
+	const uint32_t hucStatus = Gen11::tReadRegister32(0xD000);
+	const uint32_t renderReq = Gen11::tReadRegister32(FORCEWAKE_RENDER_GEN9);
+	const uint32_t renderAck = Gen11::tReadRegister32(FORCEWAKE_ACK_RENDER_GEN9);
+	const uint32_t blitterReq = Gen11::tReadRegister32(FORCEWAKE_BLITTER_GEN9);
+	const uint32_t blitterAck = Gen11::tReadRegister32(FORCEWAKE_ACK_BLITTER_GEN9);
+	const uint32_t errorGen6 = Gen11::tReadRegister32(ERROR_GEN6);
 
 	SYSLOG("ngreen", "GuC diag[%s]: GUC_STATUS=0x%x HUC_STATUS=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK_RENDER=0x%x FW_BLT=0x%x ACK_BLT=0x%x",
 	       stage ? stage : "<null>", gucStatus, hucStatus, errorGen6, renderReq, renderAck, blitterReq, blitterAck);
@@ -1714,12 +1714,17 @@ unsigned long Gen11::loadGuCBinary(void *that) {
 bool Gen11::patchEmbeddedFirmwareAt(mach_vm_address_t symbol, const uint8_t *blob, size_t blobSize,
 	const char *label, size_t zeroFill) {
 	if (!symbol || !blob || blobSize == 0) {
+		SYSLOG("ngreen", "firmware patch[%s]: SKIP — null symbol/blob/size", safeString(label));
 		return false;
 	}
 
+	SYSLOG("ngreen", "firmware patch[%s]: attempting write %zu bytes @ 0x%llx",
+	       safeString(label), blobSize, symbol);
+
 	auto status = MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock);
 	if (status != KERN_SUCCESS) {
-		SYSLOG("ngreen", "firmware patch[%s]: failed to enable kernel write (%d)", safeString(label), status);
+		SYSLOG("ngreen", "firmware patch[%s]: FAILED to enable kernel write (rc=%d) — NOT writing",
+		       safeString(label), status);
 		return false;
 	}
 
@@ -1729,7 +1734,8 @@ bool Gen11::patchEmbeddedFirmwareAt(mach_vm_address_t symbol, const uint8_t *blo
 	}
 
 	MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock);
-	SYSLOG("ngreen", "firmware patch[%s]: wrote %zu bytes @ 0x%llx", safeString(label), blobSize, symbol);
+	SYSLOG("ngreen", "firmware patch[%s]: SUCCESS wrote %zu bytes @ 0x%llx",
+	       safeString(label), blobSize, symbol);
 	return true;
 }
 
@@ -1753,22 +1759,37 @@ bool Gen11::patchEmbeddedTGLFirmware(KernelPatcher &patcher, size_t index, mach_
 		SYSLOG("ngreen", "firmware patch: sched=%d did not request embedded GuC override", getRequestedSchedulerType());
 		return false;
 	}
-	if (isGuCDiagnosticsEnabled()) {
-		SYSLOG("ngreen", "firmware patch: diag enabled host_if_rev=%u GuC=%zu HuC=%zu",
-		       IGUK_GUC_HOST_INTERFACE_REV, IGFirmwareAssets::kGuCFullSize, IGFirmwareAssets::kHuCFullSize);
-	}
+
+	SYSLOG("ngreen", "firmware patch: ENTERING — kext base=0x%llx size=0x%zx", address, size);
+	SYSLOG("ngreen", "firmware patch: our GuC.full=%zu GuC.sig=%zu GuC.fw=%zu HuC.full=%zu HuC.fw=%zu",
+	       IGFirmwareAssets::kGuCFullSize, IGFirmwareAssets::kGuCSignatureSize,
+	       IGFirmwareAssets::kGuCFirmwareSize, IGFirmwareAssets::kHuCFullSize,
+	       IGFirmwareAssets::kHuCFirmwareSize);
 
 	mach_vm_address_t kmGuCSignature = patcher.solveSymbol(index, "__ZL13__KmGuCBinary");
 	mach_vm_address_t kmGuCSpringboardSignature = patcher.solveSymbol(index, "__ZL18__KmGuCSBBinarySig");
 	mach_vm_address_t kmGen12TGLGuCFirmware = patcher.solveSymbol(index, "__ZL21__KmGen12TGLGuCBinary");
 
+	SYSLOG("ngreen", "firmware patch: symbols — GuC.sig=0x%llx GuC.SB.sig=0x%llx TGL.GuC=0x%llx",
+	       kmGuCSignature, kmGuCSpringboardSignature, kmGen12TGLGuCFirmware);
+
+	if (!kmGuCSignature && !kmGen12TGLGuCFirmware) {
+		SYSLOG("ngreen", "firmware patch: CRITICAL — no embedded GuC symbols found in this kext binary");
+		return false;
+	}
+
 	bool patched = false;
 	if (kmGuCSignature && kmGuCSpringboardSignature && kmGuCSpringboardSignature > kmGuCSignature) {
-		patched |= patchEmbeddedFirmwareAt(kmGuCSignature, IGFirmwareAssets::kGuCFull,
-			IGFirmwareAssets::kGuCFullSize, "GuC.full", kmGuCSpringboardSignature - kmGuCSignature);
+		size_t regionSize = kmGuCSpringboardSignature - kmGuCSignature;
+		SYSLOG("ngreen", "firmware patch: GuC.full region size=%zu vs our blob=%zu", regionSize, IGFirmwareAssets::kGuCFullSize);
+		if (regionSize < IGFirmwareAssets::kGuCFullSize) {
+			SYSLOG("ngreen", "firmware patch: SKIP GuC.full — embedded region too small (%zu < %zu)", regionSize, IGFirmwareAssets::kGuCFullSize);
+		} else {
+			patched |= patchEmbeddedFirmwareAt(kmGuCSignature, IGFirmwareAssets::kGuCFull,
+				IGFirmwareAssets::kGuCFullSize, "GuC.full", regionSize);
+		}
 	} else if (kmGuCSignature) {
-		patched |= patchEmbeddedFirmwareAt(kmGuCSignature, IGFirmwareAssets::kGuCFull,
-			IGFirmwareAssets::kGuCFullSize, "GuC.full");
+		SYSLOG("ngreen", "firmware patch: GuC.sig-only mode, no springboard-sig — GuC.full patch deferred");
 	}
 
 	if (kmGuCSpringboardSignature) {
@@ -1790,6 +1811,7 @@ bool Gen11::patchEmbeddedTGLFirmware(KernelPatcher &patcher, size_t index, mach_
 		SYSLOG("ngreen", "firmware patch[HuC]: no stock HuC blob was found in AppleIntelTGLGraphics");
 	}
 
+	SYSLOG("ngreen", "firmware patch: EXITING — patched=%d", patched);
 	return patched;
 }
 
@@ -4816,6 +4838,11 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 					if (gIOCatalogue) {
 						bool ok = gIOCatalogue->addDrivers(array, true);
 						SYSLOG("ngreen", "FBController: addDrivers to gIOCatalogue returned %d", ok);
+						if (ok) {
+							SYSLOG("ngreen", "FBController: addDrivers succeeded — IGPU provider=%s state=0x%llx",
+							       provider->getName(), (unsigned long long)provider->getState());
+							SYSLOG("ngreen", "FBController: note — IntelAccelerator matching is driven by IOService::probe() on the next IGPU start cycle");
+						}
 					} else {
 						SYSLOG("ngreen", "FBController: gIOCatalogue is null!");
 					}
