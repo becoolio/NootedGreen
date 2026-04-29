@@ -89,6 +89,38 @@ static bool hasAllow3DBootArg() {
 	return checkKernelArgument("-allow3d");
 }
 
+static void logStampTimeoutTriage(const char *stage, int stampIndex, uint64_t stampValue, uint64_t gpuStamp) {
+	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
+		return;
+	}
+
+	SYSLOG("ngreen", "STAMP_TIMEOUT_TRIAGE[%s] idx=%d stamp=0x%llx gpu=0x%llx RCS[HEAD=0x%x TAIL=0x%x CTL=0x%x START=0x%x HWS=0x%x CTX_SIZE=0x%x CTX_CTRL=0x%x CCID=0x%x EXEC=0x%x CSB=0x%x] BCS[HEAD=0x%x TAIL=0x%x CTL=0x%x START=0x%x HWS=0x%x EXEC=0x%x CSB=0x%x] IRQ[MSTR=0x%x RC=0x%x RCS_MASK=0x%x BCS_MASK=0x%x ERR=0x%x]",
+	       stage ? stage : "<null>", stampIndex,
+	       static_cast<unsigned long long>(stampValue), static_cast<unsigned long long>(gpuStamp),
+	       NGreen::callback->readMMIO32(RING_HEAD(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_TAIL(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_CTL(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_START(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_HWS_PGA(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_CTX_SIZE(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_CTX_CTRL(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_CCID(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_EXECLIST_STATUS(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_CONTEXT_STATUS_PTR(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_HEAD(BLT_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_TAIL(BLT_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_CTL(BLT_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_START(BLT_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_HWS_PGA(BLT_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_EXECLIST_STATUS(BLT_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_CONTEXT_STATUS_PTR(BLT_RING_BASE)),
+	       NGreen::callback->readMMIO32(GEN11_GFX_MSTR_IRQ),
+	       NGreen::callback->readMMIO32(GEN11_RENDER_COPY_INTR_ENABLE),
+	       NGreen::callback->readMMIO32(GEN11_RCS0_RSVD_INTR_MASK),
+	       NGreen::callback->readMMIO32(GEN11_BCS_RSVD_INTR_MASK),
+	       NGreen::callback->readMMIO32(ERROR_GEN6));
+}
+
 static void publishTglFramebufferPersonality(IOPCIDevice *gpu) {
 	auto *fbDict = OSDictionary::withCapacity(8);
 	if (!fbDict) {
@@ -542,6 +574,58 @@ bool NGreen::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
 		bool f1ok = p1.apply(patcher, address, size);
 		patcher.clearError();
 		SYSLOG("NGreen", "IOAccelF2 f1 (fixed): %s", f1ok ? "OK" : "FAILED");
+
+		if (isIOAccelStampTraceEnabled()) {
+			RouteRequestPlus stampRoutes[] = {
+				{"__ZN22IOAccelEventMachineFast213setEventStampElPy", wrapSetEventStamp, callback->orgSetEventStamp},
+				{"__ZN22IOAccelEventMachineFast217setEventStampWaitEiPym", wrapSetEventStampWait, callback->orgSetEventStampWait},
+				{"__ZN22IOAccelEventMachineFast211finishStampEl", wrapFinishStamp, callback->orgFinishStamp},
+				{"__ZN22IOAccelEventMachineFast215finishAllStampsEl", wrapFinishAllStamps, callback->orgFinishAllStamps},
+				{"__ZN22IOAccelEventMachineFast29testStampEi", wrapTestStamp, callback->orgTestStamp},
+				{"__ZN22IOAccelEventMachineFast213testAllStampsEv", wrapTestAllStamps, callback->orgTestAllStamps},
+				{"__ZN22IOAccelEventMachineFast215waitForAnyStampEmm", wrapWaitForAnyStamp, callback->orgWaitForAnyStamp},
+				{"__ZN22IOAccelEventMachineFast217getSubmittedStampEi", wrapGetSubmittedStamp, callback->orgGetSubmittedStamp},
+			};
+			const bool stampOk = RouteRequestPlus::routeAll(patcher, index, stampRoutes, address, size);
+			patcher.clearError();
+			SYSLOG("NGreen", "IOAccelF2 stamp tracing routes: %s", stampOk ? "active" : "partial/unavailable");
+			bool fallbackAny = false;
+			{
+				RouteRequestPlus req0 {"__ZN20IOAccelEventMachine212waitForStampEijPj", wrapWaitForStamp2, callback->orgWaitForStamp2};
+				RouteRequestPlus req1 {"__ZN20IOAccelEventMachine212waitForStampEixPj", wrapWaitForStamp2, callback->orgWaitForStamp2};
+				RouteRequestPlus req2 {"__ZN20IOAccelEventMachine212waitForStampExiPj", wrapWaitForStamp2, callback->orgWaitForStamp2};
+				if (req0.route(patcher, index, address, size) || req1.route(patcher, index, address, size) || req2.route(patcher, index, address, size)) {
+					SYSLOG("NGreen", "IOAccelF2 fallback route waitForStamp active");
+					fallbackAny = true;
+				} else {
+					patcher.clearError();
+					SYSLOG("NGreen", "IOAccelF2 fallback route waitForStamp unavailable");
+				}
+			}
+			{
+				RouteRequestPlus req0 {"__ZN20IOAccelEventMachine226handleFinishChannelRestartEiij", wrapHandleFinishChannelRestart, callback->orgHandleFinishChannelRestart};
+				RouteRequestPlus req1 {"__ZN20IOAccelEventMachine226handleFinishChannelRestartExjj", wrapHandleFinishChannelRestart, callback->orgHandleFinishChannelRestart};
+				RouteRequestPlus req2 {"__ZN20IOAccelEventMachine226handleFinishChannelRestartExij", wrapHandleFinishChannelRestart, callback->orgHandleFinishChannelRestart};
+				if (req0.route(patcher, index, address, size) || req1.route(patcher, index, address, size) || req2.route(patcher, index, address, size)) {
+					SYSLOG("NGreen", "IOAccelF2 fallback route handleFinishChannelRestart active");
+					fallbackAny = true;
+				} else {
+					patcher.clearError();
+					SYSLOG("NGreen", "IOAccelF2 fallback route handleFinishChannelRestart unavailable");
+				}
+			}
+			{
+				RouteRequestPlus req0 {"__ZN20IOAccelEventMachine215restart_channelEv", wrapRestartChannel2, callback->orgRestartChannel2};
+				if (req0.route(patcher, index, address, size)) {
+					SYSLOG("NGreen", "IOAccelF2 fallback route restart_channel active");
+					fallbackAny = true;
+				} else {
+					patcher.clearError();
+					SYSLOG("NGreen", "IOAccelF2 fallback route restart_channel unavailable");
+				}
+			}
+			SYSLOG("NGreen", "IOAccelF2 EventMachine2 fallback tracing: %s", fallbackAny ? "active" : "unavailable");
+		}
 		
 	}  else if (kextIOGraphics.loadIndex == index) {
 		/*
@@ -587,6 +671,103 @@ bool NGreen::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
 		DBGLOG("ngreen", "Processed AppleGFXHDA");
 	}*/
     return true;
+}
+
+bool NGreen::isIOAccelStampTraceEnabled() {
+	return checkKernelArgument("-NGreenDebug") || checkKernelArgument("-liludbg");
+}
+
+void NGreen::logIOAccelStampTrace(const char *func, void *that, int stampIndex, uint64_t submittedStamp,
+	uint64_t finishedStamp, uint64_t auxValue, const char *ownerClass) {
+	if (!callback || !isIOAccelStampTraceEnabled()) {
+		return;
+	}
+
+	const uint32_t rcsHead = callback->readReg32(RING_HEAD(RENDER_RING_BASE));
+	const uint32_t rcsTail = callback->readReg32(RING_TAIL(RENDER_RING_BASE));
+	const uint32_t rcsCtl = callback->readReg32(RING_CTL(RENDER_RING_BASE));
+	const uint32_t bcsHead = callback->readReg32(RING_HEAD(BLT_RING_BASE));
+	const uint32_t bcsTail = callback->readReg32(RING_TAIL(BLT_RING_BASE));
+	const uint32_t bcsCtl = callback->readReg32(RING_CTL(BLT_RING_BASE));
+	SYSLOG("ngreen", "STAMP %s obj=0x%llx class=%s idx=%d submitted=0x%llx finished=0x%llx aux=0x%llx RCS[h=0x%x t=0x%x c=0x%x] BCS[h=0x%x t=0x%x c=0x%x] IRQ[m=0x%x rc=0x%x err=0x%x]",
+	       func ? func : "<null>", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(that)),
+	       ownerClass ? ownerClass : "<unknown>", stampIndex,
+	       static_cast<unsigned long long>(submittedStamp), static_cast<unsigned long long>(finishedStamp),
+	       static_cast<unsigned long long>(auxValue),
+	       rcsHead, rcsTail, rcsCtl, bcsHead, bcsTail, bcsCtl,
+	       callback->readReg32(GEN11_GFX_MSTR_IRQ),
+	       callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
+	       callback->readReg32(ERROR_GEN6));
+}
+
+uint64_t NGreen::wrapSetEventStamp(void *that, uint64_t stampIndex, uint64_t *stampStorage) {
+	const uint64_t ret = FunctionCast(wrapSetEventStamp, callback->orgSetEventStamp)(that, stampIndex, stampStorage);
+	logIOAccelStampTrace("setEventStamp", that, static_cast<int>(stampIndex), stampStorage ? *stampStorage : 0, ret, 0);
+	return ret;
+}
+
+uint64_t NGreen::wrapSetEventStampWait(void *that, int stampIndex, uint64_t *stampStorage, unsigned int timeout) {
+	const uint64_t ret = FunctionCast(wrapSetEventStampWait, callback->orgSetEventStampWait)(that, stampIndex, stampStorage, timeout);
+	logIOAccelStampTrace("setEventStampWait", that, stampIndex, stampStorage ? *stampStorage : 0, ret, timeout);
+	return ret;
+}
+
+uint64_t NGreen::wrapWaitForStamp2(void *that, int stampIndex, uint64_t stampValue, uint32_t *gpuStampOut) {
+	const uint64_t ret = FunctionCast(wrapWaitForStamp2, callback->orgWaitForStamp2)(that, stampIndex, stampValue, gpuStampOut);
+	const uint64_t gpuStamp = gpuStampOut ? *gpuStampOut : 0;
+	logIOAccelStampTrace("waitForStamp2", that, stampIndex, stampValue, gpuStamp, ret);
+	if (ret != 0) {
+		logStampTimeoutTriage("waitForStamp timeout", stampIndex, stampValue, gpuStamp);
+	}
+	return ret;
+}
+
+void NGreen::wrapHandleFinishChannelRestart(void *that, uint64_t result, unsigned int stampIdx, unsigned int restartType) {
+	logIOAccelStampTrace("handleFinishChannelRestart", that, static_cast<int>(stampIdx), restartType, result, 0);
+	logStampTimeoutTriage("handleFinishChannelRestart", static_cast<int>(stampIdx), restartType, result);
+	FunctionCast(wrapHandleFinishChannelRestart, callback->orgHandleFinishChannelRestart)(that, result, stampIdx, restartType);
+}
+
+uint64_t NGreen::wrapRestartChannel2(void *that) {
+	logIOAccelStampTrace("restart_channel", that, -1, 0, 0, 0);
+	logStampTimeoutTriage("restart_channel", -1, 0, 0);
+	return FunctionCast(wrapRestartChannel2, callback->orgRestartChannel2)(that);
+}
+
+uint64_t NGreen::wrapFinishStamp(void *that, uint64_t stampIndex) {
+	const uint64_t ret = FunctionCast(wrapFinishStamp, callback->orgFinishStamp)(that, stampIndex);
+	logIOAccelStampTrace("finishStamp", that, static_cast<int>(stampIndex), ret, ret, 0);
+	return ret;
+}
+
+uint64_t NGreen::wrapFinishAllStamps(void *that, uint64_t value) {
+	const uint64_t ret = FunctionCast(wrapFinishAllStamps, callback->orgFinishAllStamps)(that, value);
+	logIOAccelStampTrace("finishAllStamps", that, -1, ret, ret, value);
+	return ret;
+}
+
+bool NGreen::wrapTestStamp(void *that, int stampIndex) {
+	const bool ret = FunctionCast(wrapTestStamp, callback->orgTestStamp)(that, stampIndex);
+	logIOAccelStampTrace("testStamp", that, stampIndex, ret, ret, 0);
+	return ret;
+}
+
+char NGreen::wrapTestAllStamps(void *that) {
+	const char ret = FunctionCast(wrapTestAllStamps, callback->orgTestAllStamps)(that);
+	logIOAccelStampTrace("testAllStamps", that, -1, ret, ret, 0);
+	return ret;
+}
+
+uint64_t NGreen::wrapWaitForAnyStamp(void *that, uint64_t stampMask, uint64_t timeout) {
+	const uint64_t ret = FunctionCast(wrapWaitForAnyStamp, callback->orgWaitForAnyStamp)(that, stampMask, timeout);
+	logIOAccelStampTrace("waitForAnyStamp", that, -1, stampMask, ret, timeout);
+	return ret;
+}
+
+uint64_t NGreen::wrapGetSubmittedStamp(void *that, int stampIndex) {
+	const uint64_t ret = FunctionCast(wrapGetSubmittedStamp, callback->orgGetSubmittedStamp)(that, stampIndex);
+	logIOAccelStampTrace("getSubmittedStamp", that, stampIndex, ret, ret, 0);
+	return ret;
 }
 
 

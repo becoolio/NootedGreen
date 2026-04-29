@@ -68,8 +68,36 @@ class NGreen {
 	
 	UInt32 stolen_size;
 	uint32_t framebufferId {0};
+	bool hasMMIO() const { return mmioValid(); }
+	UInt32 readMMIO32(unsigned long reg) { return readReg32(reg); }
+	void writeMMIO32(unsigned long reg, UInt32 val) { writeReg32(reg, val); }
 	
     private:
+	static bool isIOAccelStampTraceEnabled();
+	static void logIOAccelStampTrace(const char *func, void *that, int stampIndex, uint64_t submittedStamp,
+		uint64_t finishedStamp, uint64_t auxValue, const char *ownerClass = nullptr);
+	static uint64_t wrapSetEventStamp(void *that, uint64_t stampIndex, uint64_t *stampStorage);
+	static uint64_t wrapSetEventStampWait(void *that, int stampIndex, uint64_t *stampStorage, unsigned int timeout);
+	static uint64_t wrapWaitForStamp2(void *that, int stampIndex, uint64_t stampValue, uint32_t *gpuStampOut);
+	static void wrapHandleFinishChannelRestart(void *that, uint64_t result, unsigned int stampIdx, unsigned int restartType);
+	static uint64_t wrapRestartChannel2(void *that);
+	static uint64_t wrapFinishStamp(void *that, uint64_t stampIndex);
+	static uint64_t wrapFinishAllStamps(void *that, uint64_t value);
+	static bool wrapTestStamp(void *that, int stampIndex);
+	static char wrapTestAllStamps(void *that);
+	static uint64_t wrapWaitForAnyStamp(void *that, uint64_t stampMask, uint64_t timeout);
+	static uint64_t wrapGetSubmittedStamp(void *that, int stampIndex);
+	mach_vm_address_t orgSetEventStamp {0};
+	mach_vm_address_t orgSetEventStampWait {0};
+	mach_vm_address_t orgWaitForStamp2 {0};
+	mach_vm_address_t orgHandleFinishChannelRestart {0};
+	mach_vm_address_t orgRestartChannel2 {0};
+	mach_vm_address_t orgFinishStamp {0};
+	mach_vm_address_t orgFinishAllStamps {0};
+	mach_vm_address_t orgTestStamp {0};
+	mach_vm_address_t orgTestAllStamps {0};
+	mach_vm_address_t orgWaitForAnyStamp {0};
+	mach_vm_address_t orgGetSubmittedStamp {0};
 	
 	// Returns true when MMIO mapping is live and safe to access.
 	bool mmioValid() const { return rmmio != nullptr && rmmioPtr != nullptr; }
@@ -331,4 +359,3 @@ struct DPCDCap16 { // 16 bytes
 	// Detailed information can be found in the specification
 	uint8_t others[12] {};
 };
-

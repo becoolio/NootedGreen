@@ -1,2 +1,0 @@
-Unable to obtain kernel buffer: Operation not permitted
-usage: sudo dmesg

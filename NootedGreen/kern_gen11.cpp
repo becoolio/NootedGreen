@@ -112,15 +112,306 @@ static OSDictionary *createDisplayPipeCapabilityDict(bool enabled) {
 	return dpCaps;
 }
 
+struct NGreenTrackedEngine {
+	const char *name;
+	uint32_t ringBase;
+	int stampMin;
+	int stampMax;
+};
+
+struct NGreenContextImageInfo {
+	const char *name;
+	uint32_t ringBase;
+	uint32_t contextSize;
+	uint32_t lrca;
+	uint32_t ringStart;
+	uint32_t ringSize;
+	uint32_t head;
+	uint32_t tail;
+	uint32_t hwsp;
+	int stampMin;
+	int stampMax;
+	bool valid;
+};
+
+static const NGreenTrackedEngine gTrackedEngines[] = {
+	{"RCS0", RENDER_RING_BASE, 0, 23},
+	{"BCS0", BLT_RING_BASE, 32, 35},
+	{"VCS0", GEN11_BSD_RING_BASE, 36, 43},
+	{"VECS0", GEN11_VEBOX_RING_BASE, 52, 59},
+};
+
+static int gSelectedSchedulerType = 0;
+static const char *gSelectedSchedulerSource = "unset";
+static const char *gSelectedSchedulerReason = "unset";
+
+static bool isStrictModeEnabled() {
+	if (checkKernelArgument("-ngreenPermissive")) {
+		return false;
+	}
+
+	return checkKernelArgument("-ngreenStrict");
+}
+
+static bool isPermissiveModeEnabled() {
+	return !isStrictModeEnabled();
+}
+
+static bool isBCSTraceEnabled() {
+	return checkKernelArgument("-ngreenTraceBCS");
+}
+
+static bool isAllow3DEnabled() {
+	return checkKernelArgument("-allow3d");
+}
+
+static bool isBCSStrictEnabled() {
+	return checkKernelArgument("-ngreenBCSStrict") || isStrictModeEnabled();
+}
+
+static bool isNoBCSEnabled() {
+	return checkKernelArgument("-ngreenNoBCS");
+}
+
+static bool shouldContainBCSForAllow3D() {
+	return isAllow3DEnabled();
+}
+
+static bool isDisplayPipeTraceEnabled() {
+	return checkKernelArgument("-ngreenDisplayPipeTrace");
+}
+
+static bool isLegacyDisplayPipeModeEnabled() {
+	return checkKernelArgument("-ngreenLegacyDisplayPipe");
+}
+
+static bool isNoDisplayPipeEnabled() {
+	return checkKernelArgument("-ngreenNoDisplayPipe") || isDisplayPipeForceDisabled();
+}
+
+static bool isSingleDisplayPipeModeEnabled() {
+	return checkKernelArgument("-ngreenSingleDisplayPipe") || checkKernelArgument("-ngreenSinglePipe");
+}
+
+static const char *modeString(bool strict) {
+	return strict ? "strict" : "permissive";
+}
+
+static uint32_t engineInterruptMaskReg(uint32_t ringBase) {
+	switch (ringBase) {
+		case RENDER_RING_BASE: return GEN11_RCS0_RSVD_INTR_MASK;
+		case BLT_RING_BASE: return GEN11_BCS_RSVD_INTR_MASK;
+		case GEN11_BSD_RING_BASE: return GEN11_VCS0_VCS1_INTR_MASK;
+		case GEN11_VEBOX_RING_BASE: return GEN11_VECS0_VECS1_INTR_MASK;
+		default: return 0;
+	}
+}
+
+static uint32_t engineInterruptEnableReg(uint32_t ringBase) {
+	switch (ringBase) {
+		case RENDER_RING_BASE:
+		case BLT_RING_BASE:
+			return GEN11_RENDER_COPY_INTR_ENABLE;
+		case GEN11_BSD_RING_BASE:
+		case GEN11_VEBOX_RING_BASE:
+			return GEN11_VCS_VECS_INTR_ENABLE;
+		default:
+			return 0;
+	}
+}
+
+static bool isBCSReadyForUse() {
+	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
+		return false;
+	}
+
+	const uint32_t ctl = NGreen::callback->readMMIO32(RING_CTL(BLT_RING_BASE));
+	const uint32_t start = NGreen::callback->readMMIO32(RING_START(BLT_RING_BASE));
+	const uint32_t hws = NGreen::callback->readMMIO32(RING_HWS_PGA(BLT_RING_BASE));
+	return ctl != 0 && start != 0 && hws != 0 && ctl != 0xFFFFFFFF && start != 0xFFFFFFFF && hws != 0xFFFFFFFF;
+}
+
+static void dumpEngineState(const char *stage, const NGreenTrackedEngine &engine) {
+	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
+		return;
+	}
+
+	const uint32_t imrReg = engineInterruptMaskReg(engine.ringBase);
+	const uint32_t ierReg = engineInterruptEnableReg(engine.ringBase);
+	const uint32_t ctl = NGreen::callback->readMMIO32(RING_CTL(engine.ringBase));
+	const uint32_t head = NGreen::callback->readMMIO32(RING_HEAD(engine.ringBase));
+	const uint32_t tail = NGreen::callback->readMMIO32(RING_TAIL(engine.ringBase));
+	const uint32_t start = NGreen::callback->readMMIO32(RING_START(engine.ringBase));
+	const uint32_t hws = NGreen::callback->readMMIO32(RING_HWS_PGA(engine.ringBase));
+	const uint32_t mode = NGreen::callback->readMMIO32(RING_MODE(engine.ringBase));
+	const uint32_t imr = imrReg ? NGreen::callback->readMMIO32(imrReg) : 0;
+	const uint32_t iir = engine.ringBase == GEN11_VEBOX_RING_BASE ? NGreen::callback->readMMIO32(GEN11_GT_INTR_DW1) : NGreen::callback->readMMIO32(GEN11_GT_INTR_DW0);
+	const uint32_t ier = ierReg ? NGreen::callback->readMMIO32(ierReg) : 0;
+	const uint32_t emr = NGreen::callback->readMMIO32(RING_EMR(engine.ringBase));
+	const uint32_t ctxSize = NGreen::callback->readMMIO32(RING_CTX_SIZE(engine.ringBase));
+	const uint32_t ctxCtrl = NGreen::callback->readMMIO32(RING_CTX_CTRL(engine.ringBase));
+	const uint32_t ccid = NGreen::callback->readMMIO32(RING_CCID(engine.ringBase));
+	SYSLOG("ngreen", "GT[%s] %s CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS_PGA=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x CTX_SIZE=0x%x CTX_CTRL=0x%x CCID=0x%x stamp=[%d,%d]",
+	       stage ? stage : "<null>", engine.name, ctl, head, tail, start, hws, mode, imr, iir, ier, emr,
+	       ctxSize, ctxCtrl, ccid, engine.stampMin, engine.stampMax);
+}
+
+static void dumpInterruptState(const char *stage) {
+	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
+		return;
+	}
+
+	SYSLOG("ngreen", "GT[%s] IRQ GFX_MSTR_IRQ=0x%x RENDER_COPY_INTR_EN=0x%x RCS0_MASK=0x%x BCS_MASK=0x%x ERROR_GEN6=0x%x FW_RENDER_ACK=0x%x FW_BCS_ACK=0x%x GUC_STATUS=0x%x",
+	       stage ? stage : "<null>",
+	       NGreen::callback->readMMIO32(GEN11_GFX_MSTR_IRQ),
+	       NGreen::callback->readMMIO32(GEN11_RENDER_COPY_INTR_ENABLE),
+	       NGreen::callback->readMMIO32(GEN11_RCS0_RSVD_INTR_MASK),
+	       NGreen::callback->readMMIO32(GEN11_BCS_RSVD_INTR_MASK),
+	       NGreen::callback->readMMIO32(ERROR_GEN6),
+	       NGreen::callback->readMMIO32(FORCEWAKE_ACK_RENDER_GEN9),
+	       NGreen::callback->readMMIO32(FORCEWAKE_ACK_BLITTER_GEN9),
+	       NGreen::callback->readMMIO32(0xC000));
+}
+
+static void dumpSchedulerState(void *accel, const char *stage) {
+	if (!accel) {
+		return;
+	}
+
+	const uint64_t field1190 = getMember<uint64_t>(accel, 0x1190);
+	const uint32_t schedType = static_cast<uint32_t>((field1190 >> 23) & 0x7);
+	const uint64_t schedPtr0 = getMember<uint64_t>(accel, 0xe00);
+	const uint64_t schedPtr1 = getMember<uint64_t>(accel, 0xe08);
+	SYSLOG("ngreen", "GT[%s] scheduler selected=%d source=%s reason=%s field_1190=0x%llx bits=%u sched0=0x%llx sched1=0x%llx mode=%s",
+	       stage ? stage : "<null>", gSelectedSchedulerType, gSelectedSchedulerSource, gSelectedSchedulerReason,
+	       static_cast<unsigned long long>(field1190), schedType,
+	       static_cast<unsigned long long>(schedPtr0), static_cast<unsigned long long>(schedPtr1),
+	       modeString(isStrictModeEnabled()));
+}
+
+static void dumpDisplayPipeState(void *accel, const char *stage) {
+	if (!accel) {
+		return;
+	}
+
+	auto *svc = static_cast<IOService *>(accel);
+	auto *caps = OSDynamicCast(OSDictionary, svc->getProperty("IOAccelDisplayPipeCapabilities"));
+	auto *supported = caps ? caps->getObject("DisplayPipeSupported") : nullptr;
+	auto *transactions = caps ? caps->getObject("TransactionsSupported") : nullptr;
+	const bool bcsReady = isBCSReadyForUse();
+	SYSLOG("ngreen", "GT[%s] displaypipe accel=%s displayMachine=0x%llx caps=%u supported=%d transactions=%d single=%d legacy=%d noDP=%d bcsReady=%d",
+	       stage ? stage : "<null>", svc->getName() ? svc->getName() : "<null>",
+	       static_cast<unsigned long long>(getMember<uint64_t>(accel, 0x378)), caps ? caps->getCount() : 0,
+	       supported == kOSBooleanTrue, transactions == kOSBooleanTrue,
+	       isSingleDisplayPipeModeEnabled(), isLegacyDisplayPipeModeEnabled(), isNoDisplayPipeEnabled(), bcsReady);
+}
+
+static void dumpGTState(const char *stage, void *accel = nullptr) {
+	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
+		SYSLOG("ngreen", "GT[%s] skipped: MMIO unavailable", stage ? stage : "<null>");
+		return;
+	}
+
+	for (auto &engine : gTrackedEngines) {
+		dumpEngineState(stage, engine);
+	}
+	dumpInterruptState(stage);
+	if (accel) {
+		dumpSchedulerState(accel, stage);
+		dumpDisplayPipeState(accel, stage);
+	}
+}
+
+static bool prepareContextImageForEngine(const NGreenTrackedEngine &engine, NGreenContextImageInfo *out) {
+	if (!NGreen::callback || !out || !NGreen::callback->hasMMIO()) {
+		return false;
+	}
+
+	out->name = engine.name;
+	out->ringBase = engine.ringBase;
+	out->contextSize = NGreen::callback->readMMIO32(RING_CTX_SIZE(engine.ringBase));
+	out->lrca = NGreen::callback->readMMIO32(RING_ELSP(engine.ringBase));
+	out->ringStart = NGreen::callback->readMMIO32(RING_START(engine.ringBase));
+	out->ringSize = NGreen::callback->readMMIO32(RING_CTL(engine.ringBase)) & 0x001FF000U;
+	out->head = NGreen::callback->readMMIO32(RING_HEAD(engine.ringBase));
+	out->tail = NGreen::callback->readMMIO32(RING_TAIL(engine.ringBase));
+	out->hwsp = NGreen::callback->readMMIO32(RING_HWS_PGA(engine.ringBase));
+	out->stampMin = engine.stampMin;
+	out->stampMax = engine.stampMax;
+	out->valid = false;
+	return true;
+}
+
+static bool isGuCReadyForScheduler3() {
+	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
+		return false;
+	}
+
+	const uint32_t gucStatus = NGreen::callback->readMMIO32(0xC000);
+	const bool requested = checkKernelArgument("-ngreenGuC") || checkKernelArgument("-ngreenGuCSched");
+	return requested && gucStatus != 0 && gucStatus != 0xFFFFFFFF;
+}
+
+static bool validateContextImageForScheduler(uint32_t schedulerType, const NGreenTrackedEngine &engine) {
+	NGreenContextImageInfo info {};
+	if (!prepareContextImageForEngine(engine, &info)) {
+		return false;
+	}
+
+	const bool contextPtrOk = info.lrca != 0 && info.lrca != 0xFFFFFFFF;
+	const bool contextSizeOk = info.contextSize != 0 && info.contextSize != 0xFFFFFFFF;
+	const bool hwspOk = info.hwsp != 0 && info.hwsp != 0xFFFFFFFF;
+	const bool startOk = info.ringStart != 0 && info.ringStart != 0xFFFFFFFF;
+	const bool sizeOk = info.ringSize != 0;
+	const bool headTailOk = info.head != 0xFFFFFFFF && info.tail != 0xFFFFFFFF;
+	const bool stampOk = info.stampMin >= 0 && info.stampMax >= info.stampMin;
+	const bool schedulerCompat = schedulerType != 3 || isGuCReadyForScheduler3();
+	info.valid = contextPtrOk && contextSizeOk && hwspOk && startOk && sizeOk && headTailOk && stampOk && schedulerCompat;
+	SYSLOG("ngreen", "CTX[%s] scheduler=%u ctxSize=0x%x LRCA=0x%x ringStart=0x%x ringSize=0x%x HWSP=0x%x head=0x%x tail=0x%x stamp=[%d,%d] valid=%d",
+	       info.name, schedulerType, info.contextSize, info.lrca, info.ringStart, info.ringSize,
+	       info.hwsp, info.head, info.tail, info.stampMin, info.stampMax, info.valid);
+	return info.valid;
+}
+
+static void dumpAllContextValidation(uint32_t schedulerType) {
+	for (auto &engine : gTrackedEngines) {
+		validateContextImageForScheduler(schedulerType, engine);
+	}
+}
+
+static void ngreenDelayedGTDump(thread_call_param_t param0, thread_call_param_t) {
+	void *accel = reinterpret_cast<void *>(param0);
+	dumpGTState("T+3 seconds after accelerator start", accel);
+}
+
 static void applyDisplayPipePolicy(IORegistryEntry *entry, const char *stage) {
 	if (!entry) {
 		return;
 	}
 
-	const bool enabled = !isDisplayPipeForceDisabled();
+	bool enabled = !isNoDisplayPipeEnabled();
+	const bool bcsDead = !isBCSReadyForUse();
+	const bool containBCS = (isNoBCSEnabled() || shouldContainBCSForAllow3D()) && bcsDead;
+	if (enabled && containBCS) {
+		SYSLOG("ngreen", "DisplayPipe policy[%s]: suppressing BCS-dependent publication because BCS is not ready allow3d=%d noBCS=%d",
+		       stage ? stage : "<null>", isAllow3DEnabled(), isNoBCSEnabled());
+		if (isBCSStrictEnabled()) {
+			enabled = false;
+		}
+	}
 	auto *dpCaps = createDisplayPipeCapabilityDict(enabled);
 	if (!dpCaps) {
 		return;
+	}
+	if (isSingleDisplayPipeModeEnabled()) {
+		dpCaps->setObject("NGreenSingleDisplayPipe", kOSBooleanTrue);
+	}
+	if (isLegacyDisplayPipeModeEnabled()) {
+		dpCaps->setObject("NGreenLegacyDisplayPipe", kOSBooleanTrue);
+	}
+	if (containBCS) {
+		dpCaps->setObject("TransactionsSupported", kOSBooleanFalse);
+		dpCaps->setObject("NGreenBCSContained", kOSBooleanTrue);
 	}
 
 	entry->setProperty("IOAccelDisplayPipeCapabilities", dpCaps);
@@ -128,11 +419,21 @@ static void applyDisplayPipePolicy(IORegistryEntry *entry, const char *stage) {
 	       stage ? stage : "<null>", enabled,
 	       entry->getName() ? entry->getName() : "<null>",
 	       entry->getMetaClass() ? entry->getMetaClass()->getClassName() : "<null>");
+	dumpDisplayPipeState(entry, stage ? stage : "displaypipe-policy");
+	dumpGTState("after DisplayPipe capabilities publication", entry);
+	dumpAllContextValidation(static_cast<uint32_t>(gSelectedSchedulerType));
 	dpCaps->release();
 }
 
 static void publishBootDisplayProperties(IOService *framebuffer, uint32_t framebufferIndex) {
 	if (!framebuffer) {
+		return;
+	}
+
+	if (isSingleDisplayPipeModeEnabled() && framebufferIndex != 0) {
+		SYSLOG("ngreen", "Boot display publish: single-display-pipe suppressing fb=%s idx=%u",
+		       framebuffer->getName() ? framebuffer->getName() : "<null>", framebufferIndex);
+		framebuffer->setProperty("AAPL,DisplayPipeSuppressed", true);
 		return;
 	}
 
@@ -196,9 +497,15 @@ void Gen11::ensureDisplayPipeBacking(void *that) {
 	if (!displayMachine && callback->oNewDisplayMachine && callback->oDisplayMachineInit) {
 		displayMachine = reinterpret_cast<NewDisplayMachine>(callback->oNewDisplayMachine)(that);
 		SYSLOG("ngreen", "DisplayPipe backing: newDisplayMachine -> %p", displayMachine);
+		if (isDisplayPipeTraceEnabled()) {
+			dumpDisplayPipeState(that, "displayMachine-new");
+		}
 		if (displayMachine) {
 			const bool initOk = reinterpret_cast<DisplayMachineInit>(callback->oDisplayMachineInit)(displayMachine, that);
 			SYSLOG("ngreen", "DisplayPipe backing: displayMachine init -> %d", initOk);
+			if (isDisplayPipeTraceEnabled()) {
+				dumpDisplayPipeState(that, "displayMachine-init");
+			}
 			if (initOk) {
 				getMember<void *>(that, 0x378) = displayMachine;
 				createdDisplayMachine = true;
@@ -220,12 +527,21 @@ void Gen11::ensureDisplayPipeBacking(void *that) {
 	if (provider && callback->oDisplayMachineStart) {
 		const bool startOk = reinterpret_cast<DisplayMachineStart>(callback->oDisplayMachineStart)(displayMachine, provider);
 		SYSLOG("ngreen", "DisplayPipe backing: displayMachine start -> %d created=%d", startOk, createdDisplayMachine);
+		if (isDisplayPipeTraceEnabled()) {
+			dumpDisplayPipeState(that, "displayMachine-start");
+		}
 	}
 
 	if (callback->oDisplayMachineProbeDisplayPipes) {
 		reinterpret_cast<DisplayMachineProbeDisplayPipes>(callback->oDisplayMachineProbeDisplayPipes)(displayMachine);
 		SYSLOG("ngreen", "DisplayPipe backing: probeDisplayPipes forced for %p", displayMachine);
+		if (isDisplayPipeTraceEnabled()) {
+			dumpDisplayPipeState(that, "displayMachine-probe");
+		}
 	}
+
+	dumpGTState("after DisplayMachine init/start/probeDisplayPipes", that);
+	dumpAllContextValidation(static_cast<uint32_t>(gSelectedSchedulerType));
 
 	SYSLOG("ngreen", "DisplayPipe backing: post-rescue accel=%s displayMachine=%p created=%d",
 	       accelSvc && accelSvc->getName() ? accelSvc->getName() : "<null>",
@@ -1406,11 +1722,16 @@ bool  Gen11::getGPUInfo(void *that)
 	// On spoofed platforms in full-MTL mode, do not propagate a false return from
 	// the original path, otherwise accelerator bring-up may abort and CoreDisplay
 	// later receives a null Metal object in RunFullDisplayPipe.
-	if (!isRealTGL && forceFullMTL && !ret) {
+	if (!isRealTGL && forceFullMTL && !ret && isPermissiveModeEnabled()) {
 		SYSLOG("ngreen", "getGPUInfo: forcing success on spoofed CPU in full-MTL mode");
+		dumpGTState("after getGPUInfo", that);
 		return true;
 	}
+	if (!ret && forceFullMTL && isStrictModeEnabled()) {
+		SYSLOG("ngreen", "getGPUInfo: strict mode preserving failure from original path");
+	}
 
+	dumpGTState("after getGPUInfo", that);
 	return ret;
 }
 
@@ -1445,6 +1766,7 @@ bool Gen11::getGPUInfoICL(void *that)
 	SYSLOG("ngreen", "getGPUInfoICL: overridden topology → slices=%u subslices=%u maxEU/SS=%u totalEU=%u L3Banks=8",
 		   numSlices, numSubSlices, maxEUPerSubSlice, totalEU);
 	
+	dumpGTState("after getGPUInfo", that);
 	return ret;
 }
 
@@ -1691,8 +2013,29 @@ UInt64 Gen11::wrapIgBufferGetGpuVirtualAddress(void *that) {
 
 
 uint32_t Gen11::wrapReadRegister32(void *controller, uint32_t address) {
-	if (controller == nullptr)
-		return NGreen::callback->readReg32(address);  // readReg32 now takes byte offsets
+	static uint32_t bcsReadLogCount = 0;
+	if (controller == nullptr) {
+		uint32_t value = NGreen::callback->readReg32(address);
+		if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsReadLogCount < 64) {
+			bcsReadLogCount++;
+			SYSLOG("ngreen", "BCS_TRACE read[%u] reg=0x%x val=0x%x CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x",
+			       bcsReadLogCount, address, value,
+			       NGreen::callback->readReg32(RING_CTL(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_HEAD(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_TAIL(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_START(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_HWS_PGA(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_MODE(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(GEN11_BCS_RSVD_INTR_MASK),
+			       NGreen::callback->readReg32(GEN11_GT_INTR_DW0),
+			       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
+			       NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE)));
+		}
+		if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
+			SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN read reg=0x%x val=0x%x dead-bcs=1", address, value);
+		}
+		return value;
+	}
 
 	// Mirror Apple bounds logic, but keep a fallback path for the 2D-only dropped window.
 	auto partInfo = getMember<uint8_t *>(controller, 0xCF8);
@@ -1703,19 +2046,65 @@ uint32_t Gen11::wrapReadRegister32(void *controller, uint32_t address) {
 	bool dropped2DWindow = (address >= 0x2000U && address <= 0x23FFFFU);
 
 	if (twoDOnlyPart && dropped2DWindow) {
-		return NGreen::callback->readReg32(address);  // readReg32 now takes byte offsets
+		uint32_t value = NGreen::callback->readReg32(address);
+		if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsReadLogCount < 64) {
+			bcsReadLogCount++;
+			SYSLOG("ngreen", "BCS_TRACE read[%u] reg=0x%x val=0x%x CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x",
+			       bcsReadLogCount, address, value,
+			       NGreen::callback->readReg32(RING_CTL(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_HEAD(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_TAIL(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_START(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_HWS_PGA(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_MODE(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(GEN11_BCS_RSVD_INTR_MASK),
+			       NGreen::callback->readReg32(GEN11_GT_INTR_DW0),
+			       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
+			       NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE)));
+		}
+		if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
+			SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN read reg=0x%x val=0x%x dead-bcs=1", address, value);
+		}
+		return value;
 	}
 
 	if (mmioBase && mmioSize >= 4U && address < (mmioSize - 4U)) {
-		return *reinterpret_cast<volatile uint32_t *>(mmioBase + address);
+		uint32_t value = *reinterpret_cast<volatile uint32_t *>(mmioBase + address);
+		if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsReadLogCount < 64) {
+			bcsReadLogCount++;
+			SYSLOG("ngreen", "BCS_TRACE read[%u] reg=0x%x val=0x%x CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x",
+			       bcsReadLogCount, address, value,
+			       NGreen::callback->readReg32(RING_CTL(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_HEAD(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_TAIL(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_START(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_HWS_PGA(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(RING_MODE(BLT_RING_BASE)),
+			       NGreen::callback->readReg32(GEN11_BCS_RSVD_INTR_MASK),
+			       NGreen::callback->readReg32(GEN11_GT_INTR_DW0),
+			       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
+			       NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE)));
+		}
+		if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
+			SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN read reg=0x%x val=0x%x dead-bcs=1", address, value);
+		}
+		return value;
 	}
 
 	return FunctionCast(wrapReadRegister32, callback->owrapReadRegister32)(controller, address);
 }
 
 void Gen11::wrapWriteRegister32(void *controller, uint32_t address, uint32_t value) {
+	static uint32_t bcsWriteLogCount = 0;
 	if (controller == nullptr) {
 		NGreen::callback->writeReg32(address, value);
+		if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsWriteLogCount < 64) {
+			bcsWriteLogCount++;
+			SYSLOG("ngreen", "BCS_TRACE write[%u] reg=0x%x val=0x%x", bcsWriteLogCount, address, value);
+		}
+		if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
+			SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN write reg=0x%x val=0x%x deniedPath=dead-bcs", address, value);
+		}
 		return;
 	}
 
@@ -1750,6 +2139,25 @@ void Gen11::wrapWriteRegister32(void *controller, uint32_t address, uint32_t val
 				SYSLOG("ngreen", "V63W: rate limit reached (100 RCS writes logged)");
 			}
 		}
+	}
+
+	if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsWriteLogCount < 64) {
+		bcsWriteLogCount++;
+		SYSLOG("ngreen", "BCS_TRACE write[%u] reg=0x%x val=0x%x CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x",
+		       bcsWriteLogCount, address, value,
+		       NGreen::callback->readReg32(RING_CTL(BLT_RING_BASE)),
+		       NGreen::callback->readReg32(RING_HEAD(BLT_RING_BASE)),
+		       NGreen::callback->readReg32(RING_TAIL(BLT_RING_BASE)),
+		       NGreen::callback->readReg32(RING_START(BLT_RING_BASE)),
+		       NGreen::callback->readReg32(RING_HWS_PGA(BLT_RING_BASE)),
+		       NGreen::callback->readReg32(RING_MODE(BLT_RING_BASE)),
+		       NGreen::callback->readReg32(GEN11_BCS_RSVD_INTR_MASK),
+		       NGreen::callback->readReg32(GEN11_GT_INTR_DW0),
+		       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
+		       NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE)));
+	}
+	if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
+		SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN write reg=0x%x val=0x%x deniedPath=dead-bcs", address, value);
 	}
 
 	FunctionCast(wrapWriteRegister32, callback->owrapWriteRegister32)(controller,address,value);
@@ -2839,6 +3247,7 @@ void Gen11::v54IrqWatchdog(thread_call_param_t param0, thread_call_param_t) {
 
 bool Gen11::start(void *that,void  *param_1)
 {
+	dumpGTState("before IntelAccelerator::start", that);
 	// V44: Configurable scheduler type.
 	// populateAccelConfig reads "GraphicsSchedulerSelect" from the IORegistry.
 	// Types: 3=IGGuC (firmware), 4=IGScheduler4, 5=IGScheduler5 (host preemptive).
@@ -2846,38 +3255,64 @@ bool Gen11::start(void *that,void  *param_1)
 	// V52: Default depends on platform — real TGL uses GuC (3), RPL uses Host (5).
 	auto *service = static_cast<IOService *>(that);
 	{
-		int schedType = NGreen::callback->isRealTGL ? 3 : 5;
-		
-		// 1. Check boot-arg first (highest priority)
-		int bootArgSched = 0;
-		if (PE_parse_boot_argn("ngreenSched", &bootArgSched, sizeof(bootArgSched)) && bootArgSched >= 3 && bootArgSched <= 5) {
-			schedType = bootArgSched;
-			SYSLOG("ngreen", "V44: scheduler type %d from boot-arg ngreenSched", schedType);
+		int schedType = 5;
+		gSelectedSchedulerSource = "phase-default";
+		gSelectedSchedulerReason = "scheduler 5 selected for current bring-up phase";
+		char bootArgSched[16] = {};
+		if (PE_parse_boot_argn("ngreenSched", bootArgSched, sizeof(bootArgSched))) {
+			if (!strcmp(bootArgSched, "auto")) {
+				schedType = 5;
+				gSelectedSchedulerSource = "boot-arg";
+				gSelectedSchedulerReason = "ngreenSched=auto";
+			} else {
+				const int parsed = (bootArgSched[0] >= '0' && bootArgSched[0] <= '9' && bootArgSched[1] == '\0')
+					? (bootArgSched[0] - '0') : -1;
+				if (parsed >= 3 && parsed <= 5) {
+					schedType = parsed;
+					gSelectedSchedulerSource = "boot-arg";
+					gSelectedSchedulerReason = "ngreenSched explicit";
+				}
+			}
+		} else if (checkKernelArgument("-ngreenHostSched")) {
+			schedType = 5;
+			gSelectedSchedulerSource = "boot-flag";
+			gSelectedSchedulerReason = "-ngreenHostSched";
+		} else if (checkKernelArgument("-ngreenGuCSched")) {
+			schedType = 3;
+			gSelectedSchedulerSource = "boot-flag";
+			gSelectedSchedulerReason = "-ngreenGuCSched";
 		} else {
-			// 2. Check NootedGreen's own IORegistry properties (from Info.plist)
 			auto *myService = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(param_1));
 			if (myService) {
 				auto *stProp = OSDynamicCast(OSNumber, myService->getProperty("SchedulerType"));
 				if (stProp) {
-					int val = (int)stProp->unsigned32BitValue();
+					const int val = static_cast<int>(stProp->unsigned32BitValue());
 					if (val >= 3 && val <= 5) {
 						schedType = val;
-						SYSLOG("ngreen", "V44: scheduler type %d from Info.plist SchedulerType", schedType);
+						gSelectedSchedulerSource = "Info.plist";
+						gSelectedSchedulerReason = "SchedulerType property";
 					}
 				}
 			}
-			if (schedType == 5) {
-				SYSLOG("ngreen", "V44: using default scheduler type 5 (host preemptive)");
-			}
 		}
+
+		if (schedType == 3 && !isGuCReadyForScheduler3()) {
+			SYSLOG("ngreen", "V44: scheduler 3 requested but GuC readiness validation failed, falling back to scheduler 5");
+			schedType = 5;
+			gSelectedSchedulerReason = "scheduler 3 denied: GuC not ready";
+		}
+
+		gSelectedSchedulerType = schedType;
 		
 		auto *schedNum = OSNumber::withNumber(static_cast<unsigned long long>(schedType), 32);
 		if (schedNum) {
 			service->setProperty("GraphicsSchedulerSelect", schedNum);
 			schedNum->release();
-			SYSLOG("ngreen", "V44: injected GraphicsSchedulerSelect=%d", schedType);
+			SYSLOG("ngreen", "V44: injected GraphicsSchedulerSelect=%d source=%s reason=%s mode=%s",
+			       schedType, gSelectedSchedulerSource, gSelectedSchedulerReason, modeString(isStrictModeEnabled()));
 		}
 	}
+	dumpGTState("after scheduler mode injection", that);
 
 	// Inject MultiForceWakeSelect=1 into Development dictionary.
 	// This tells the accelerator to use SafeForceWakeMultithreaded (which we hook)
@@ -3045,6 +3480,7 @@ bool Gen11::start(void *that,void  *param_1)
 	}
 	
 	auto ret= FunctionCast(start, callback->ostart)(that,param_1);
+	dumpGTState("after IntelAccelerator::start", that);
 	ensureDisplayPipeBacking(that);
 	
 	// V65: IMMEDIATELY after original start() returns, re-enable RCS0 interrupts.
@@ -3075,6 +3511,7 @@ bool Gen11::start(void *that,void  *param_1)
 	IODelay(1000);
 	
 	SYSLOG("ngreen", "start() returned %d", ret);
+	dumpAllContextValidation(static_cast<uint32_t>(gSelectedSchedulerType));
 	
 	// V43: Scheduler type diagnostic — read field_1190 bits 23-25
 	{
@@ -3418,6 +3855,16 @@ bool Gen11::start(void *that,void  *param_1)
 			} else {
 				SYSLOG("ngreen", "V110: V60 health monitor disabled — DisplayPipe will not be terminated (use -ngreenexp to enable)");
 			}
+		}
+	}
+
+	{
+		auto delayedDump = thread_call_allocate(ngreenDelayedGTDump, static_cast<thread_call_param_t>(that));
+		if (delayedDump) {
+			uint64_t deadline;
+			clock_interval_to_deadline(3, kSecondScale, &deadline);
+			thread_call_enter_delayed(delayedDump, deadline);
+			SYSLOG("ngreen", "GT dump armed for T+3 seconds after accelerator start");
 		}
 	}
 	
@@ -4656,12 +5103,18 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 					if ((clientName && !strcmp(clientName, "IntelAccelerator")) ||
 					    (clientClass && !strcmp(clientClass, "IntelAccelerator"))) {
 						sawIntelAccelerator = true;
+						dumpGTState("fbcontroller saw IntelAccelerator child", client);
+						dumpAllContextValidation(static_cast<uint32_t>(gSelectedSchedulerType));
 					}
 				}
 				clientIter->release();
 				SYSLOG("ngreen", "FBController: post-publish IntelAccelerator visible=%d", sawIntelAccelerator);
+				if (!sawIntelAccelerator) {
+					dumpGTState("fbcontroller no IntelAccelerator child yet", service);
+				}
 			} else {
 				SYSLOG("ngreen", "FBController: post-publish child scan unavailable");
+				dumpGTState("fbcontroller child scan unavailable", service);
 			}
 		}
 	}

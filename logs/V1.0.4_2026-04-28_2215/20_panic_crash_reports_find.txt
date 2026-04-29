@@ -1,4 +1,0 @@
-/Library/Logs/DiagnosticReports/WindowServer_2026-04-28-145025_becoolios-MacBook-Pro.cpu_resource.diag
-/Library/Logs/DiagnosticReports/WindowServer_2026-04-28-102445_becoolios-MacBook-Pro.cpu_resource.diag
-/Library/Logs/DiagnosticReports/WindowServer_2026-04-28-142604_becoolios-MacBook-Pro.cpu_resource.diag
-/Library/Logs/DiagnosticReports/WindowServer_2026-04-28-125930_becoolios-MacBook-Pro.cpu_resource.diag

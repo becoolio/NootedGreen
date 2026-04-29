@@ -1,0 +1,52 @@
+# BOOT INVESTIGATION COMMANDS RUN
+
+## Date: 2026-04-29 00:28
+
+## Version: V1.0.4_2026-04-29_0022
+
+### System Identity Commands
+- sw_vers
+- uname -a
+- hostname
+- uptime
+- whoami
+- date
+- sysctl kern.boottime
+- sysctl hw.model
+- csrutil status
+- csrutil authenticated-root status
+- nvram -p
+
+### Git and Build State
+- git branch --show-current
+- git log -1 --oneline
+- /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" (Info.plist)
+- /usr/libexec/PlistBuddy -c "Print CFBundleVersion" (Info.plist)
+- /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" (Info.plist)
+
+### Kext Loading
+- kmutil showloaded
+- kmutil showloaded | grep -Ei "Lilu|Nooted|NootedGreen|AppleIntel"
+- kextstat
+
+### Kernel Logs
+- log show --last boot --style syslog --info --debug
+- log show --last boot --style syslog --info --debug | grep -iE "nooted|lilu|igpu|intel"
+
+### Dmesg
+- sudo dmesg
+
+### IORegistry
+- ioreg -lw0
+- ioreg -lw0 -p IOService | grep -Ei "Nooted|AppleIntel|Intel|IGPU"
+- ioreg -lw0 -p IOService -n IGPU
+- ioreg -lw0 -p IODeviceTree | grep -Ei "IGPU|GFX0|display"
+
+### System Profiler
+- system_profiler SPDisplaysDataType
+
+### WindowServer/CoreDisplay
+- log show --last boot --predicate 'process == "WindowServer"'
+
+### Graphics Logs
+- log show --last boot --style syslog --info --debug | grep -iE "AppleIntel|BCS|RCS|VCS|VECS|forcewake|powerwell"
