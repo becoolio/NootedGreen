@@ -145,6 +145,100 @@ static int gSelectedSchedulerType = 0;
 static const char *gSelectedSchedulerSource = "unset";
 static const char *gSelectedSchedulerReason = "unset";
 
+static uint32_t gRcsProgCtlWrites = 0;
+static uint32_t gRcsProgStartWrites = 0;
+static uint32_t gRcsProgHwsWrites = 0;
+static uint32_t gRcsProgElspWrites = 0;
+static uint32_t gRcsProgCtxCtrlWrites = 0;
+static uint32_t gRcsProgCcidWrites = 0;
+static uint32_t gRcsProgCsbWrites = 0;
+static uint32_t gRcsProgExeclistSeq = 0;
+static bool gRcsProbeTriggered = false;
+
+static void dumpGTState(const char *stage, void *accel);
+
+static bool isRCSProbeEnabled() {
+	return checkKernelArgument("-ngreenRCSProbe");
+}
+
+static void logFakeIrisDescriptorExpectation(const char *stage, const unsigned int *words, unsigned int availableWords) {
+	if (!words || availableWords < 2) {
+		SYSLOG("ngreen", "RCS_DESC[%s] unavailable", stage ? stage : "<null>");
+		return;
+	}
+
+	const uint32_t descLo = words[0];
+	const uint32_t descHi = words[1];
+	const bool valid = (descLo & (1u << 0)) != 0;
+	const bool forceRestore = (descLo & (1u << 2)) != 0;
+	const uint32_t addrMode = (descLo >> 3) & 0x7;
+	const bool privilege = (descLo & (1u << 8)) != 0;
+	const uint32_t swCtxId = (descHi >> 5) & 0x7FFu;
+	const uint32_t engineInstance = (descHi >> 16) & 0x3Fu;
+	const uint32_t engineClass = (descHi >> 29) & 0x7u;
+	const uint32_t lrcBase = descLo & 0xFFFFF000u;
+	SYSLOG("ngreen", "RCS_DESC[%s] lo=0x%x hi=0x%x lrcBase=0x%x valid=%d forceRestore=%d privilege=%d addrMode=%u swCtxId=%u engineClass=%u engineInstance=%u expected48b=%d",
+	       stage ? stage : "<null>", descLo, descHi, lrcBase, valid, forceRestore, privilege,
+	       addrMode, swCtxId, engineClass, engineInstance, addrMode == 4);
+}
+
+static void logRCSProbeState(const char *stage, void *owner, void *hwContext, const unsigned int *words, unsigned int wordCount) {
+	SYSLOG("ngreen", "RCS_PROBE[%s] owner=0x%llx hwctx=0x%llx words=%u summary ctl=%u start=%u hws=%u elsp=%u ctx=%u ccid=%u csb=%u",
+	       stage ? stage : "<null>",
+	       static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(owner)),
+	       static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(hwContext)),
+	       wordCount, gRcsProgCtlWrites, gRcsProgStartWrites, gRcsProgHwsWrites,
+	       gRcsProgElspWrites, gRcsProgCtxCtrlWrites, gRcsProgCcidWrites, gRcsProgCsbWrites);
+	Gen11::logRCSProgrammingSummary(stage ? stage : "RCS_PROBE");
+	if (words) {
+		logFakeIrisDescriptorExpectation(stage, words, wordCount);
+	}
+	if (owner && NGreen::callback) {
+		dumpGTState(stage ? stage : "RCS_PROBE", owner);
+	}
+}
+
+static const char *classifyRCSProgramRegister(uint32_t address) {
+	if (address == RING_CTL(RENDER_RING_BASE)) return "RCS_CTL";
+	if (address == RING_START(RENDER_RING_BASE)) return "RCS_START";
+	if (address == RING_HWS_PGA(RENDER_RING_BASE)) return "RCS_HWS_PGA";
+	if (address == RING_ELSP(RENDER_RING_BASE)) return "RCS_ELSP";
+	if (address == RING_CTX_CTRL(RENDER_RING_BASE)) return "RCS_CTX_CTRL";
+	if (address == RING_CCID(RENDER_RING_BASE)) return "RCS_CCID";
+	if (address == RING_CONTEXT_STATUS_PTR(RENDER_RING_BASE)) return "RCS_CSB_PTR";
+	return nullptr;
+}
+
+static void recordRCSProgramRegisterWrite(uint32_t address, uint32_t value, const char *source) {
+	const char *kind = classifyRCSProgramRegister(address);
+	if (!kind || !NGreen::callback) {
+		return;
+	}
+
+	if (!strcmp(kind, "RCS_CTL")) gRcsProgCtlWrites++;
+	else if (!strcmp(kind, "RCS_START")) gRcsProgStartWrites++;
+	else if (!strcmp(kind, "RCS_HWS_PGA")) gRcsProgHwsWrites++;
+	else if (!strcmp(kind, "RCS_ELSP")) { gRcsProgElspWrites++; gRcsProgExeclistSeq++; }
+	else if (!strcmp(kind, "RCS_CTX_CTRL")) gRcsProgCtxCtrlWrites++;
+	else if (!strcmp(kind, "RCS_CCID")) gRcsProgCcidWrites++;
+	else if (!strcmp(kind, "RCS_CSB_PTR")) gRcsProgCsbWrites++;
+
+	const bool verbose = gRcsProgExeclistSeq <= 16 || address != RING_ELSP(RENDER_RING_BASE);
+	if (!verbose) {
+		return;
+	}
+
+	SYSLOG("ngreen", "RCS_PROG[%s] src=%s reg=0x%x val=0x%x seq=%u HEAD=0x%x TAIL=0x%x CTL=0x%x START=0x%x HWS=0x%x EXEC=0x%x CSB=0x%x",
+	       kind, source ? source : "<null>", address, value, gRcsProgExeclistSeq,
+	       NGreen::callback->readMMIO32(RING_HEAD(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_TAIL(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_CTL(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_START(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_HWS_PGA(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_EXECLIST_STATUS(RENDER_RING_BASE)),
+	       NGreen::callback->readMMIO32(RING_CONTEXT_STATUS_PTR(RENDER_RING_BASE)));
+}
+
 static bool isStrictModeEnabled() {
 	if (checkKernelArgument("-ngreenPermissive")) {
 		return false;
@@ -382,6 +476,75 @@ static void dumpAllContextValidation(uint32_t schedulerType) {
 static void ngreenDelayedGTDump(thread_call_param_t param0, thread_call_param_t) {
 	void *accel = reinterpret_cast<void *>(param0);
 	dumpGTState("T+3 seconds after accelerator start", accel);
+}
+
+void Gen11::resetRCSProgrammingTrace() {
+	gRcsProgCtlWrites = 0;
+	gRcsProgStartWrites = 0;
+	gRcsProgHwsWrites = 0;
+	gRcsProgElspWrites = 0;
+	gRcsProgCtxCtrlWrites = 0;
+	gRcsProgCcidWrites = 0;
+	gRcsProgCsbWrites = 0;
+	gRcsProgExeclistSeq = 0;
+}
+
+void Gen11::logRCSProgrammingSummary(const char *stage) {
+	SYSLOG("ngreen", "RCS_PROG_SUMMARY[%s] ctl=%u start=%u hws=%u elsp=%u ctx_ctrl=%u ccid=%u csb=%u lastEXEC=0x%x lastCSB=0x%x",
+	       stage ? stage : "<null>",
+	       gRcsProgCtlWrites, gRcsProgStartWrites, gRcsProgHwsWrites, gRcsProgElspWrites,
+	       gRcsProgCtxCtrlWrites, gRcsProgCcidWrites, gRcsProgCsbWrites,
+	       NGreen::callback ? NGreen::callback->readMMIO32(RING_EXECLIST_STATUS(RENDER_RING_BASE)) : 0,
+	       NGreen::callback ? NGreen::callback->readMMIO32(RING_CONTEXT_STATUS_PTR(RENDER_RING_BASE)) : 0);
+}
+
+uint8_t Gen11::wrapIGScheduler5Push(void *that, void *hwContext, int a3, int a4, uint8_t a5, uint8_t a6) {
+	logRCSProbeState("IGScheduler5::push pre", that, hwContext, nullptr, 0);
+	const uint8_t ret = FunctionCast(wrapIGScheduler5Push, callback->oIGScheduler5Push)(that, hwContext, a3, a4, a5, a6);
+	logRCSProbeState("IGScheduler5::push post", that, hwContext, nullptr, 0);
+	return ret;
+}
+
+uint8_t Gen11::wrapIGScheduler5Bind(void *that, const char *label, uint64_t contextOrMeta, uint8_t engineToken) {
+	SYSLOG("ngreen", "RCS_PROBE[IGScheduler5::bind] sched=0x%llx label=%s ctxMeta=0x%llx engineToken=0x%x",
+	       static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(that)),
+	       label ? label : "<null>",
+	       static_cast<unsigned long long>(contextOrMeta), engineToken);
+	return FunctionCast(wrapIGScheduler5Bind, callback->oIGScheduler5Bind)(that, label, contextOrMeta, engineToken);
+}
+
+uint64_t Gen11::wrapIGScheduler5Rebind(void *that, void *hwContext, unsigned int token) {
+	logRCSProbeState("IGScheduler5::rebind pre", that, hwContext, nullptr, 0);
+	const uint64_t ret = FunctionCast(wrapIGScheduler5Rebind, callback->oIGScheduler5Rebind)(that, hwContext, token);
+	logRCSProbeState("IGScheduler5::rebind post", that, hwContext, nullptr, 0);
+	return ret;
+}
+
+uint64_t Gen11::wrapSubmitExecList(void *that, int slot) {
+	SYSLOG("ngreen", "RCS_PROBE[submitExecList pre] cs=0x%llx slot=%d", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(that)), slot);
+	logRCSProbeState("submitExecList pre", that, nullptr, nullptr, 0);
+	const uint64_t ret = FunctionCast(wrapSubmitExecList, callback->oSubmitExecList)(that, slot);
+	logRCSProbeState("submitExecList post", that, nullptr, nullptr, 0);
+	return ret;
+}
+
+uint64_t Gen11::wrapPrepareExecListAndSubmit(void *that, char *scratch, int count, const unsigned int *words) {
+	logRCSProbeState("prepareExecListAndSubmit pre", that, nullptr, words, count > 0 ? static_cast<unsigned int>(count) : 0u);
+	if (isRCSProbeEnabled() && !gRcsProbeTriggered) {
+		gRcsProbeTriggered = true;
+		SYSLOG("ngreen", "RCS_PROBE armed on first Apple submit path");
+	}
+	const uint64_t ret = FunctionCast(wrapPrepareExecListAndSubmit, callback->oPrepareExecListAndSubmit)(that, scratch, count, words);
+	logRCSProbeState("prepareExecListAndSubmit post", that, nullptr, words, count > 0 ? static_cast<unsigned int>(count) : 0u);
+	return ret;
+}
+
+uint64_t Gen11::wrapProcessContextStatusBuffer(void *that, int reason) {
+	SYSLOG("ngreen", "RCS_PROBE[processContextStatusBuffer] cs=0x%llx reason=%d", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(that)), reason);
+	logRCSProbeState("processContextStatusBuffer pre", that, nullptr, nullptr, 0);
+	const uint64_t ret = FunctionCast(wrapProcessContextStatusBuffer, callback->oProcessContextStatusBuffer)(that, reason);
+	logRCSProbeState("processContextStatusBuffer post", that, nullptr, nullptr, 0);
+	return ret;
 }
 
 static void applyDisplayPipePolicy(IORegistryEntry *entry, const char *stage) {
@@ -1407,6 +1570,27 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route loadGuCBinary");
 		}
 
+		if (isRCSProbeEnabled()) {
+			SolveRequestPlus probeSolve[] = {
+				{"__ZN12IGScheduler54bindEPKcmy", this->oIGScheduler5Bind},
+				{"__ZN12IGScheduler54bindEPKcmh", this->oIGScheduler5Bind},
+				{"__ZN12IGScheduler54pushEP17IGHardwareContextiihh", this->oIGScheduler5Push},
+				{"__ZN12IGScheduler56rebindEP17IGHardwareContextj", this->oIGScheduler5Rebind},
+				{"__ZN25IGHardwareCommandStreamer514submitExecListEi", this->oSubmitExecList},
+				{"__ZN25IGHardwareCommandStreamer524prepareExecListAndSubmitEPciPKj", this->oPrepareExecListAndSubmit},
+				{"__ZN25IGHardwareCommandStreamer526processContextStatusBufferEi", this->oProcessContextStatusBuffer},
+			};
+			SolveRequestPlus::solveAll(patcher, index, probeSolve, address, size);
+			patcher.clearError();
+			SYSLOG("ngreen", "RCS_PROBE resolve IGScheduler5::bind=0x%llx push=0x%llx rebind=0x%llx submitExecList=0x%llx prepareExecListAndSubmit=0x%llx processCSB=0x%llx",
+			       static_cast<unsigned long long>(this->oIGScheduler5Bind),
+			       static_cast<unsigned long long>(this->oIGScheduler5Push),
+			       static_cast<unsigned long long>(this->oIGScheduler5Rebind),
+			       static_cast<unsigned long long>(this->oSubmitExecList),
+			       static_cast<unsigned long long>(this->oPrepareExecListAndSubmit),
+			       static_cast<unsigned long long>(this->oProcessContextStatusBuffer));
+		}
+
 		if (!wegCoexist || forceFullMTL) {
 			RouteRequestPlus coexistOffRoutes[] = {
 				// ForceWake: replace Apple's SafeForceWakeMultithreaded with i915-ported version.
@@ -2097,6 +2281,7 @@ uint32_t Gen11::wrapReadRegister32(void *controller, uint32_t address) {
 void Gen11::wrapWriteRegister32(void *controller, uint32_t address, uint32_t value) {
 	static uint32_t bcsWriteLogCount = 0;
 	if (controller == nullptr) {
+		recordRCSProgramRegisterWrite(address, value, "wrapWriteRegister32-null-controller");
 		NGreen::callback->writeReg32(address, value);
 		if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsWriteLogCount < 64) {
 			bcsWriteLogCount++;
@@ -2159,6 +2344,7 @@ void Gen11::wrapWriteRegister32(void *controller, uint32_t address, uint32_t val
 	if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
 		SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN write reg=0x%x val=0x%x deniedPath=dead-bcs", address, value);
 	}
+	recordRCSProgramRegisterWrite(address, value, "wrapWriteRegister32");
 
 	FunctionCast(wrapWriteRegister32, callback->owrapWriteRegister32)(controller,address,value);
 }
@@ -3247,7 +3433,9 @@ void Gen11::v54IrqWatchdog(thread_call_param_t param0, thread_call_param_t) {
 
 bool Gen11::start(void *that,void  *param_1)
 {
+	resetRCSProgrammingTrace();
 	dumpGTState("before IntelAccelerator::start", that);
+	logRCSProgrammingSummary("before IntelAccelerator::start");
 	// V44: Configurable scheduler type.
 	// populateAccelConfig reads "GraphicsSchedulerSelect" from the IORegistry.
 	// Types: 3=IGGuC (firmware), 4=IGScheduler4, 5=IGScheduler5 (host preemptive).
@@ -3481,6 +3669,7 @@ bool Gen11::start(void *that,void  *param_1)
 	
 	auto ret= FunctionCast(start, callback->ostart)(that,param_1);
 	dumpGTState("after IntelAccelerator::start", that);
+	logRCSProgrammingSummary("after IntelAccelerator::start");
 	ensureDisplayPipeBacking(that);
 	
 	// V65: IMMEDIATELY after original start() returns, re-enable RCS0 interrupts.
@@ -3511,6 +3700,7 @@ bool Gen11::start(void *that,void  *param_1)
 	IODelay(1000);
 	
 	SYSLOG("ngreen", "start() returned %d", ret);
+	logRCSProgrammingSummary("post-start pre-context-validation");
 	dumpAllContextValidation(static_cast<uint32_t>(gSelectedSchedulerType));
 	
 	// V43: Scheduler type diagnostic — read field_1190 bits 23-25
@@ -4610,6 +4800,7 @@ void Gen11::radWriteRegister32f(void *that,unsigned long param_1, UInt32 param_2
 
 void Gen11::raWriteRegister32(void *that,unsigned long param_1, UInt32 param_2)
 {
+	recordRCSProgramRegisterWrite(static_cast<uint32_t>(param_1 & 0xFFFFF), param_2, "raWriteRegister32");
 	// V93: optional plane SURF zero-write guard.
 	// Disabled by default due black-screen regressions; enable only with -ngreenv93.
 	struct V93PlaneSurfState {
@@ -5500,6 +5691,7 @@ void Gen11::hwConfigureCustomAUX(void *that,bool param_1)
 
 void Gen11::FastWriteRegister32(void *that,unsigned long param_1,uint32_t param_2)
 {
+	recordRCSProgramRegisterWrite(static_cast<uint32_t>(param_1), param_2, "FastWriteRegister32");
 	// ── V72: EMR write intercept — force all errors masked ──
 	if (param_1 == 0x20b4 || param_1 == 0x220b4) {
 		if (param_2 != 0xFFFFFFFF) {

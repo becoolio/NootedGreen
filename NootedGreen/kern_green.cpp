@@ -93,6 +93,7 @@ static void logStampTimeoutTriage(const char *stage, int stampIndex, uint64_t st
 	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
 		return;
 	}
+	Gen11::logRCSProgrammingSummary(stage ? stage : "stamp-timeout");
 
 	SYSLOG("ngreen", "STAMP_TIMEOUT_TRIAGE[%s] idx=%d stamp=0x%llx gpu=0x%llx RCS[HEAD=0x%x TAIL=0x%x CTL=0x%x START=0x%x HWS=0x%x CTX_SIZE=0x%x CTX_CTRL=0x%x CCID=0x%x EXEC=0x%x CSB=0x%x] BCS[HEAD=0x%x TAIL=0x%x CTL=0x%x START=0x%x HWS=0x%x EXEC=0x%x CSB=0x%x] IRQ[MSTR=0x%x RC=0x%x RCS_MASK=0x%x BCS_MASK=0x%x ERR=0x%x]",
 	       stage ? stage : "<null>", stampIndex,

@@ -1308,6 +1308,18 @@ private:
 	mach_vm_address_t oSafeForceWake {};
 	static bool pollRegister(uint32_t reg, uint32_t val, uint32_t mask, uint32_t timeout);
 	static bool forceWakeWaitAckFallback(uint32_t reqReg, uint32_t ackReg, uint32_t val, uint32_t mask);
+	static uint8_t wrapIGScheduler5Push(void *that, void *hwContext, int a3, int a4, uint8_t a5, uint8_t a6);
+	mach_vm_address_t oIGScheduler5Push {};
+	static uint8_t wrapIGScheduler5Bind(void *that, const char *label, uint64_t contextOrMeta, uint8_t engineToken);
+	mach_vm_address_t oIGScheduler5Bind {};
+	static uint64_t wrapIGScheduler5Rebind(void *that, void *hwContext, unsigned int token);
+	mach_vm_address_t oIGScheduler5Rebind {};
+	static uint64_t wrapSubmitExecList(void *that, int slot);
+	mach_vm_address_t oSubmitExecList {};
+	static uint64_t wrapPrepareExecListAndSubmit(void *that, char *scratch, int count, const unsigned int *words);
+	mach_vm_address_t oPrepareExecListAndSubmit {};
+	static uint64_t wrapProcessContextStatusBuffer(void *that, int reason);
+	mach_vm_address_t oProcessContextStatusBuffer {};
 	
 	static void * serviceInterrupts(void *param_1);  // GT interrupt handler
 	mach_vm_address_t oserviceInterrupts {};
@@ -1726,6 +1738,8 @@ public:
 	void init();  // register kextInfos with Lilu
 	static Gen11 *callback;  // singleton for Lilu static callbacks
 	bool processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size);
+	static void resetRCSProgrammingTrace();
+	static void logRCSProgrammingSummary(const char *stage);
 	
 	// Direct MMIO access helpers (bypass the kext's register methods)
 	static void tWriteRegister32(unsigned long a, unsigned int b);
