@@ -281,7 +281,7 @@ void NGreen::init() {
     callback = this;
 
 	SYSLOG("ngreen", "============================================================");
-	SYSLOG("ngreen", "NootedGreen V1.0.4 - STARTING");
+	SYSLOG("ngreen", "NootedGreen V1.0.5 - STARTING");
     SYSLOG("ngreen", "============================================================");
 	SYSLOG("ngreen", "Acceleration gate: -allow3d=%d", hasAllow3DBootArg());
 	if (!hasAllow3DBootArg()) {
