@@ -474,11 +474,7 @@
 					"APPLE_KEXT_ASSERTIONS=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/NootedGreen/PrivateHeaders",
-					"$(PROJECT_DIR)/../Materials/A/PrivateHeaders",
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = NootedGreen/Info.plist;
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -532,11 +528,7 @@
 					"MODULE_VERSION=$(MODULE_VERSION)",
 					"PRODUCT_NAME=$(PRODUCT_NAME)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/NootedGreen/PrivateHeaders",
-					"$(PROJECT_DIR)/../Materials/A/PrivateHeaders",
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = NootedGreen/Info.plist;
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",

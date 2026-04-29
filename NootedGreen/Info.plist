@@ -15,11 +15,11 @@
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.0.4</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>1.0.0</string>
+	<string>1.0.4</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>AppleIntelTGLGraphicsFramebuffer</key>
@@ -41,6 +41,62 @@
 			<key>IOSourceVersion</key>
 			<string>0.0.0.0.0</string>
 		</dict>
+		<key>AppleIntelTGLGraphicsAccelerator</key>
+		<dict>
+			<key>CFBundleIdentifier</key>
+			<string>com.xxxxx.driver.AppleIntelTGLGraphics</string>
+			<key>Development</key>
+			<dict>
+				<key>GraphicsSchedulerSelect</key>
+				<integer>5</integer>
+				<key>MultiForceWakeSelect</key>
+				<integer>1</integer>
+				<key>SchedulerFallbackOnFirmwareFail</key>
+				<integer>1</integer>
+				<key>PPGTT</key>
+				<integer>1</integer>
+			</dict>
+			<key>IOAccelDisplayPipeCapabilities</key>
+			<dict>
+				<key>DisplayPipeSupported</key>
+				<true/>
+				<key>TransactionsSupported</key>
+				<true/>
+			</dict>
+			<key>IOCFPlugInTypes</key>
+			<dict>
+				<key>ACCF0000-0000-0000-0000-000a2789904e</key>
+				<string>IOAccelerator2D.plugin</string>
+			</dict>
+			<key>IOClass</key>
+			<string>IntelAccelerator</string>
+			<key>IODVDBundleName</key>
+			<string>AppleIntelTGLGraphicsVADriver</string>
+			<key>IOGLBundleName</key>
+			<string>AppleIntelTGLGraphicsGLDriver</string>
+			<key>IOGVABGRAEnc</key>
+			<string>Gen10</string>
+			<key>IOGVACodec</key>
+			<string>Gen10</string>
+			<key>IOGVAScaler</key>
+			<string>Gen10</string>
+			<key>IOMatchCategory</key>
+			<string>IOAccelerator</string>
+			<key>IOPCIClassMatch</key>
+			<string>0x03000000&amp;0xff000000</string>
+			<key>IOPCIPrimaryMatch</key>
+			<string>0x9A498086</string>
+			<key>IOProbeScore</key>
+			<integer>1000</integer>
+			<key>IOProviderClass</key>
+			<string>IOPCIDevice</string>
+			<key>IOSourceVersion</key>
+			<string>0.0.0.0.0</string>
+			<key>IOVARendererID</key>
+			<integer>17301568</integer>
+			<key>MetalPluginName</key>
+			<string>AppleIntelTGLGraphicsMTLDriver</string>
+		</dict>
 		<key>DisplayAppleIDInjection</key>
 		<dict>
 			<key>CFBundleIdentifier</key>
@@ -51,14 +107,10 @@
 			<integer>17119999</integer>
 			<key>IOClass</key>
 			<string>DisplayMergeNub</string>
-			<key>IOProbeScore</key>
-			<integer>60000</integer>
 			<key>IOProviderClass</key>
-			<string>IODisplayConnect</string>
+			<string>AppleDisplay</string>
 			<key>IOProviderMergeProperties</key>
 			<dict>
-				<key>DisplayParameterHandlerUsesCharPtr</key>
-				<true/>
 				<key>IOClass</key>
 				<string>AppleBacklightDisplay</string>
 			</dict>
@@ -66,21 +118,60 @@
 		<key>com.StezzaPilot.NootedGreen</key>
 		<dict>
 			<key>CFBundleIdentifier</key>
-			<string>com.StezzaPilot.NootedGreen</string>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			<key>IOClass</key>
-			<string>NootedGreen</string>
+			<string>$(PRODUCT_NAME:rfc1034identifier)</string>
 			<key>IOMatchCategory</key>
-			<string>NootedGreen</string>
+			<string>$(PRODUCT_NAME:rfc1034identifier)</string>
 			<key>IOProviderClass</key>
 			<string>IOResources</string>
 			<key>IOResourceMatch</key>
 			<string>IOKit</string>
 			<key>SchedulerType</key>
 			<integer>5</integer>
+			<key>AccelerationTestingRequiresAllow3D</key>
+			<true/>
 		</dict>
 	</dict>
-	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<key>NootedGreenDriverProfileDefault</key>
+	<string>Auto</string>
+	<key>NootedGreenDriverProfiles</key>
+	<dict>
+		<key>Auto</key>
+		<dict>
+			<key>PreferredOrder</key>
+			<array>
+				<string>TGL</string>
+				<string>ICL</string>
+			</array>
+		</dict>
+		<key>ICL</key>
+		<dict>
+			<key>AcceleratorBundleIdentifier</key>
+			<string>com.apple.driver.AppleIntelICLGraphics</string>
+			<key>FramebufferBundleIdentifier</key>
+			<string>com.apple.driver.AppleIntelICLLPGraphicsFramebuffer</string>
+			<key>IOGLBundleName</key>
+			<string>AppleIntelICLGraphicsGLDriver</string>
+			<key>IODVDBundleName</key>
+			<string>AppleIntelICLGraphicsVADriver</string>
+			<key>MetalPluginName</key>
+			<string>AppleIntelICLGraphicsMTLDriver</string>
+		</dict>
+		<key>TGL</key>
+		<dict>
+			<key>AcceleratorBundleIdentifier</key>
+			<string>com.xxxxx.driver.AppleIntelTGLGraphics</string>
+			<key>FramebufferBundleIdentifier</key>
+			<string>com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer</string>
+			<key>IOGLBundleName</key>
+			<string>AppleIntelTGLGraphicsGLDriver</string>
+			<key>IODVDBundleName</key>
+			<string>AppleIntelTGLGraphicsVADriver</string>
+			<key>MetalPluginName</key>
+			<string>AppleIntelTGLGraphicsMTLDriver</string>
+		</dict>
+	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2023 ChefKiss Inc. All rights reserved.</string>
 	<key>OSBundleCompatibleVersion</key>
