@@ -1,0 +1,14 @@
+   57   14 0xffffff8003ce5000 0x8d000    0x8d000    as.vit9696.Lilu (1.7.3) C2310F3B-B155-3DE3-9D3F-922C2007B61F <9 7 6 3 2 1>
+   59    0 0xffffff8003f59000 0x57000    0x57000    com.StezzaPilot.NootedGreen (1.0.4) B4406036-19F1-319A-9654-74FF4A87CF4F <57 18 9 7 6 3 2 1>
+   67    0 0xffffff8005ba0000 0xb000     0xb000     com.zxystd.IntelBTPatcher (2.5.0) 6E452EF4-4BD3-36F2-8A67-37D25247A73F <57 38 9 7 6 3 2 1>
+   86    0 0xffffff8001985000 0x7000     0x7000     com.apple.driver.AppleIntelLpssGspi (3.0.60) BF6BAA8F-DA09-3045-968C-5FD237121BFD <18 17 9 7 6 3>
+   90    0 0xffffff80040c0000 0x35000    0x35000    com.insanelymac.IntelMausiEthernet (3.0.3) A2E7D50B-E684-3B1B-8E85-D183E24470B4 <53 18 7 6 3 1>
+  117    0 0xffffff80050a8000 0xaf8000   0xaf8000   com.zxystd.IntelBluetoothFirmware (2.5.0) EA4755DF-A909-35AF-B952-6994467464F4 <38 7 6 3>
+  130    0 0xffffff7f951fb000 0xfff      0xfff      com.apple.driver.AppleIntelSlowAdaptiveClocking (4.0.0) F1C609DC-0407-3D83-A000-45CFD02084D1 <129 6 3>
+  132   13 0xffffff7f95639000 0x2effa    0x2effa    com.apple.iokit.IOGraphicsFamily (598) 79F2F7E4-E451-35E1-BF22-1EFFA4192888 <18 9 7 6 3 1>
+  133    5 0xffffff7f94ad0000 0x4000     0x4000     com.apple.AppleGraphicsDeviceControl (8.1.9) 84CB0373-54F5-3BDF-A76B-6A9538BE7A90 <132 18 9 8 7 6 3 1>
+  139    1 0xffffff7f954a9000 0x6affc    0x6affc    com.apple.iokit.IOAcceleratorFamily2 (481.40.2) D4E64BC5-BB33-38C7-A445-932573231969 <132 108 49 27 18 9 8 7 6 3 1>
+  141    0 0xffffff7f96669000 0x138000   0x138000   com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer (16.0.0) B96A8448-9D17-3F78-B76D-15A0B359A9A0 <140 139 133 132 49 18 17 9 7 6 3 1>
+  151    0 0xffffff7f951f4000 0x3000     0x3000     com.apple.driver.AppleIntelPCHPMC (2.0.1) D9097257-9E3B-3CF6-B91D-DAFF8F591BB9 <135 19 18 17 6 3>
+  181    1 0xffffff7f94ab8000 0xfff      0xfff      com.apple.driver.AppleGraphicsControl (8.1.9) 33A942E7-9920-3635-8568-6DD95E7A0ED0 <9 7 6 3 1>
+  182    0 0xffffff7f94ad9000 0xd000     0xd000     com.apple.driver.AppleGraphicsDevicePolicy (8.1.9) 9C282EA8-7D37-3E88-9F78-C47C61C34DEC <181 133 132 18 17 9 8 7 6 3 1>

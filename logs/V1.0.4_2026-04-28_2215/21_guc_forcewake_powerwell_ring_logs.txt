@@ -1,0 +1,51 @@
+# GuC, Forcewake, Powerwell, and Ring Logs - V1.0.4_2026-04-28_2215
+
+## Data Collection Status
+
+**Collection result:** Not available in collected data
+
+The kernel log collection using `log show` encountered issues in the shell environment, and direct MMIO reading is not possible without kernel debugging. The following items were NOT captured in the collected logs:
+
+### GuC (Graphics microcontroller)
+- Status: UNKNOWN
+- Firmware loading: Not verified
+- Authentication status: Not verified
+
+### HuC (Heci microcontroller)  
+- Status: UNKNOWN
+- Firmware loading: Not verified
+
+### DMC (Display Controller Firmware)
+- Status: UNKNOWN
+- Firmware loading: Not verified
+
+### Forcewake
+- Status: UNKNOWN
+- Domain states: Not verified
+
+### Power Wells
+- Status: UNKNOWN
+- Power states: Not verified
+
+### Ring States (RCS, BCS, VCS, VECS)
+- RCS (Render Command Streamer): UNKNOWN
+- BCS (Blitter Command Streamer): UNKNOWN  
+- VCS (Video Command Streamer): UNKNOWN
+- VECS (Video Enhancement Command Streamer): UNKNOWN
+- Ring base addresses: Not verified
+- Ring head/tail: Not verified
+- Execlists state: Not verified
+
+## Conclusion
+
+While these firmware and hardware states are not verified in the collected data, the system is functioning correctly:
+- Display is online and working at 1920x1080
+- Metal is supported
+- System has been stable for 26+ minutes
+
+This suggests that the firmware and hardware initialization has completed successfully, even if the detailed states are not visible in the logs.
+
+To capture this data in future boots, consider:
+1. Adding explicit NootedGreen logging for these states
+2. Using verbose boot with additional debugging flags
+3. Adding specific property publication for ring/hardware states
