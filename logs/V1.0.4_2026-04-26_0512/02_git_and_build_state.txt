@@ -1,0 +1,52 @@
+# Git and Build State - V1.0.4_2026-04-26_0512
+
+Git Branch
+=========
+main
+
+Git Status
+=========
+(no uncommitted changes)
+?? logs/V1.0.4_2026-04-26_0512/
+
+Git Log
+======
+b71eba3 GUC firmware test
+
+Git Diff (stat)
+==============
+(No local changes from clean main branch)
+
+Source Info.plist Version (NootedGreen/Info.plist)
+===============================================
+CFBundleShortVersionString: 1.0.4
+CFBundleVersion: 1.0.4
+CFBundleIdentifier: com.StezzaPilot.NootedGreen
+
+Installed Kext Location
+======================
+NootedGreen.kext compiled locally in build/NootedGreen.kext/
+Lilu.kext present at project root Lilu.kext/
+
+Loaded Kext Versions (from kmutil showloaded)
+=========================================
+Index 57: as.vit9696.Lilu (1.7.3) - LOADED
+Index 59: com.StezzaPilot.NootedGreen (1.0.4) - LOADED
+
+Version Analysis
+==============
+- Source: 1.0.4 (from Info.plist)
+- Built: 1.0.4 (from build)
+- Loaded: 1.0.4 (from kmutil)
+- Status: ALL MATCH - source, built, and loaded versions match
+
+Build Verification
+==================
+- Build timestamp: Latest build at 04:56 (from build folder)
+- Git commit matches: b71eba3
+- Build is the latest for this boot session
+
+Stale Build Detection
+====================
+- No evidence of stale build being loaded
+- All version strings match between source, built, and loaded

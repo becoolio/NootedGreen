@@ -1246,6 +1246,11 @@ private:
 	// ── GuC (Graphics micro-Controller) firmware ──
 	static unsigned long loadGuCBinary(void *that);  // route: intercept GuC FW load
 	mach_vm_address_t oloadGuCBinary {};
+	static bool patchEmbeddedTGLFirmware(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size);
+	static bool patchEmbeddedFirmwareAt(mach_vm_address_t symbol, const uint8_t *blob, size_t blobSize,
+		const char *label, size_t zeroFill = 0);
+	static bool patchEmbeddedFirmwareMatch(mach_vm_address_t address, size_t size, const uint8_t *needle, size_t needleSize,
+		const uint8_t *blob, size_t blobSize, const char *label);
 
 	static int alwaysReturnSuccess(void *that);  // stub: always returns 0 (success)
 	mach_vm_address_t oalwaysReturnSuccess {};
@@ -1300,6 +1305,9 @@ private:
 	mach_vm_address_t oDisplayMachineInit {};
 	mach_vm_address_t oDisplayMachineStart {};
 	mach_vm_address_t oDisplayMachineProbeDisplayPipes {};
+
+	static bool deviceStart(void *that);   // V111: force IGAccelDevice::deviceStart true on RPL
+	mach_vm_address_t odeviceStart {};
 	
 	static bool patchRCSCheck(mach_vm_address_t& start);  // bypass RCS engine check
 	static void forceWake(void *that, bool set, uint32_t dom, uint8_t ctx);  // custom forcewake
@@ -1308,18 +1316,6 @@ private:
 	mach_vm_address_t oSafeForceWake {};
 	static bool pollRegister(uint32_t reg, uint32_t val, uint32_t mask, uint32_t timeout);
 	static bool forceWakeWaitAckFallback(uint32_t reqReg, uint32_t ackReg, uint32_t val, uint32_t mask);
-	static uint8_t wrapIGScheduler5Push(void *that, void *hwContext, int a3, int a4, uint8_t a5, uint8_t a6);
-	mach_vm_address_t oIGScheduler5Push {};
-	static uint8_t wrapIGScheduler5Bind(void *that, const char *label, uint64_t contextOrMeta, uint8_t engineToken);
-	mach_vm_address_t oIGScheduler5Bind {};
-	static uint64_t wrapIGScheduler5Rebind(void *that, void *hwContext, unsigned int token);
-	mach_vm_address_t oIGScheduler5Rebind {};
-	static uint64_t wrapSubmitExecList(void *that, int slot);
-	mach_vm_address_t oSubmitExecList {};
-	static uint64_t wrapPrepareExecListAndSubmit(void *that, char *scratch, int count, const unsigned int *words);
-	mach_vm_address_t oPrepareExecListAndSubmit {};
-	static uint64_t wrapProcessContextStatusBuffer(void *that, int reason);
-	mach_vm_address_t oProcessContextStatusBuffer {};
 	
 	static void * serviceInterrupts(void *param_1);  // GT interrupt handler
 	mach_vm_address_t oserviceInterrupts {};
@@ -1607,7 +1603,7 @@ private:
 	static bool  initHardwareCaps(void *this_ptr);  // query HW capabilities
 	mach_vm_address_t oinitHardwareCaps {};
 	
-	static uint8_t IGMappedBuffergetMemory(void *that);
+	static void * IGMappedBuffergetMemory(void *that);
 	mach_vm_address_t oIGMappedBuffergetMemory {};
 	
 	static void *  IGHardwareBlit3DContextoperatornew(void *that,unsigned long param_1);
@@ -1738,8 +1734,6 @@ public:
 	void init();  // register kextInfos with Lilu
 	static Gen11 *callback;  // singleton for Lilu static callbacks
 	bool processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size);
-	static void resetRCSProgrammingTrace();
-	static void logRCSProgrammingSummary(const char *stage);
 	
 	// Direct MMIO access helpers (bypass the kext's register methods)
 	static void tWriteRegister32(unsigned long a, unsigned int b);

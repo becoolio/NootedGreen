@@ -2,12 +2,13 @@
 //  details.
 #include "kern_gen11.hpp"
 #include <Headers/kern_api.hpp>
+#include "PrivateHeaders/IGFirmwareAssets.hpp"
 #include "kern_genx.hpp"
 #include "kern_green.hpp"
 #include <IOKit/IOCatalogue.h>
 #include <kern/thread_call.h>
 
-// ==== 4 kextInfos: TGL from /Library/Extensions, ICL fallback from /System/Library/Extensions ====
+// ==== kextInfos: ICL fallback from /System/Library/Extensions + TGL FB from /System/Library/Extensions (DTK) ====
 
 // ICL FB — com.apple (fallback path)
 static const char *pathsICLFB[] = {
@@ -23,19 +24,19 @@ static const char *pathsICLHW[] = {
 static KernelPatcher::KextInfo kextG11HW {"com.apple.driver.AppleIntelICLGraphics", pathsICLHW, 1, {}, {},
     KernelPatcher::KextInfo::Unloaded};
 
-// TGL FB — com.xxxxx (loaded from /Library/Extensions/)
+// TGL FB — com.apple (DTK, from /System/Library/Extensions/)
 static const char *pathsTGLFB[] = {
-    "/Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelTGLGraphicsFramebuffer",
+    "/System/Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelTGLGraphicsFramebuffer",
 };
-static KernelPatcher::KextInfo kextG11FBT {"com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer", pathsTGLFB, 1,
+static KernelPatcher::KextInfo kextTGLFB {"com.apple.driver.AppleIntelTGLGraphicsFramebuffer", pathsTGLFB, 1,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
-// TGL HW — com.xxxxx (loaded from /Library/Extensions/)
+// TGL HW — com.apple (loaded from /System/Library/Extensions/)
 static const char *pathsTGLHW[] = {
-    "/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
+    "/System/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
 };
-static KernelPatcher::KextInfo kextG11HWT {"com.xxxxx.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
+static KernelPatcher::KextInfo kextTGLHW {"com.apple.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
@@ -43,11 +44,11 @@ Gen11 *Gen11::callback = nullptr;
 
 void Gen11::init() {
 	callback = this;
-	// 4 kextInfos: ICL FB, ICL HW, TGL FB, TGL HW
+	// 4 kextInfos: ICL FB/HW from /S/L/E + TGL FB from /S/L/E + TGL HW from /S/L/E (DTK)
 	lilu.onKextLoadForce(&kextG11FB);
 	lilu.onKextLoadForce(&kextG11HW);
-	lilu.onKextLoadForce(&kextG11FBT);
-	lilu.onKextLoadForce(&kextG11HWT);
+	lilu.onKextLoadForce(&kextTGLFB);
+	lilu.onKextLoadForce(&kextTGLHW);
 	SYSLOG("ngreen", "Registered Gen11 kext watchers");
 }
 
@@ -67,6 +68,55 @@ static bool isExperimentalMonitorEnabled() {
 	}
 
 	return checkKernelArgument("-ngreenexp");
+}
+
+static int getRequestedSchedulerType() {
+	int schedType = 5;
+	int bootArgSched = 0;
+	if (PE_parse_boot_argn("ngreenSched", &bootArgSched, sizeof(bootArgSched)) && bootArgSched >= 3 && bootArgSched <= 5) {
+		return bootArgSched;
+	}
+
+	return schedType;
+}
+
+static bool shouldPatchEmbeddedGuCFirmware() {
+	int enabled = 0;
+	if (PE_parse_boot_argn("ngreengucfw", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	if (checkKernelArgument("-ngreengucfw")) {
+		return true;
+	}
+
+	return getRequestedSchedulerType() == 3;
+}
+
+static bool isGuCDiagnosticsEnabled() {
+	int enabled = 0;
+	if (PE_parse_boot_argn("ngreengucdiag", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	return checkKernelArgument("-ngreengucdiag");
+}
+
+static void logGuCFirmwareState(const char *stage) {
+	if (!NGreen::callback) {
+		return;
+	}
+
+	const uint32_t gucStatus = NGreen::callback->readReg32(0xC000);
+	const uint32_t hucStatus = NGreen::callback->readReg32(0xD000);
+	const uint32_t renderReq = NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9);
+	const uint32_t renderAck = NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9);
+	const uint32_t blitterReq = NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9);
+	const uint32_t blitterAck = NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9);
+	const uint32_t errorGen6 = NGreen::callback->readReg32(ERROR_GEN6);
+
+	SYSLOG("ngreen", "GuC diag[%s]: GUC_STATUS=0x%x HUC_STATUS=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK_RENDER=0x%x FW_BLT=0x%x ACK_BLT=0x%x",
+	       stage ? stage : "<null>", gucStatus, hucStatus, errorGen6, renderReq, renderAck, blitterReq, blitterAck);
 }
 
 static bool isDisplayPipeForceDisabled() {
@@ -112,469 +162,15 @@ static OSDictionary *createDisplayPipeCapabilityDict(bool enabled) {
 	return dpCaps;
 }
 
-struct NGreenTrackedEngine {
-	const char *name;
-	uint32_t ringBase;
-	int stampMin;
-	int stampMax;
-};
-
-struct NGreenContextImageInfo {
-	const char *name;
-	uint32_t ringBase;
-	uint32_t contextSize;
-	uint32_t lrca;
-	uint32_t ringStart;
-	uint32_t ringSize;
-	uint32_t head;
-	uint32_t tail;
-	uint32_t hwsp;
-	int stampMin;
-	int stampMax;
-	bool valid;
-};
-
-static const NGreenTrackedEngine gTrackedEngines[] = {
-	{"RCS0", RENDER_RING_BASE, 0, 23},
-	{"BCS0", BLT_RING_BASE, 32, 35},
-	{"VCS0", GEN11_BSD_RING_BASE, 36, 43},
-	{"VECS0", GEN11_VEBOX_RING_BASE, 52, 59},
-};
-
-static int gSelectedSchedulerType = 0;
-static const char *gSelectedSchedulerSource = "unset";
-static const char *gSelectedSchedulerReason = "unset";
-
-static uint32_t gRcsProgCtlWrites = 0;
-static uint32_t gRcsProgStartWrites = 0;
-static uint32_t gRcsProgHwsWrites = 0;
-static uint32_t gRcsProgElspWrites = 0;
-static uint32_t gRcsProgCtxCtrlWrites = 0;
-static uint32_t gRcsProgCcidWrites = 0;
-static uint32_t gRcsProgCsbWrites = 0;
-static uint32_t gRcsProgExeclistSeq = 0;
-static bool gRcsProbeTriggered = false;
-
-static void dumpGTState(const char *stage, void *accel);
-
-static bool isRCSProbeEnabled() {
-	return checkKernelArgument("-ngreenRCSProbe");
-}
-
-static void logFakeIrisDescriptorExpectation(const char *stage, const unsigned int *words, unsigned int availableWords) {
-	if (!words || availableWords < 2) {
-		SYSLOG("ngreen", "RCS_DESC[%s] unavailable", stage ? stage : "<null>");
-		return;
-	}
-
-	const uint32_t descLo = words[0];
-	const uint32_t descHi = words[1];
-	const bool valid = (descLo & (1u << 0)) != 0;
-	const bool forceRestore = (descLo & (1u << 2)) != 0;
-	const uint32_t addrMode = (descLo >> 3) & 0x7;
-	const bool privilege = (descLo & (1u << 8)) != 0;
-	const uint32_t swCtxId = (descHi >> 5) & 0x7FFu;
-	const uint32_t engineInstance = (descHi >> 16) & 0x3Fu;
-	const uint32_t engineClass = (descHi >> 29) & 0x7u;
-	const uint32_t lrcBase = descLo & 0xFFFFF000u;
-	SYSLOG("ngreen", "RCS_DESC[%s] lo=0x%x hi=0x%x lrcBase=0x%x valid=%d forceRestore=%d privilege=%d addrMode=%u swCtxId=%u engineClass=%u engineInstance=%u expected48b=%d",
-	       stage ? stage : "<null>", descLo, descHi, lrcBase, valid, forceRestore, privilege,
-	       addrMode, swCtxId, engineClass, engineInstance, addrMode == 4);
-}
-
-static void logRCSProbeState(const char *stage, void *owner, void *hwContext, const unsigned int *words, unsigned int wordCount) {
-	SYSLOG("ngreen", "RCS_PROBE[%s] owner=0x%llx hwctx=0x%llx words=%u summary ctl=%u start=%u hws=%u elsp=%u ctx=%u ccid=%u csb=%u",
-	       stage ? stage : "<null>",
-	       static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(owner)),
-	       static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(hwContext)),
-	       wordCount, gRcsProgCtlWrites, gRcsProgStartWrites, gRcsProgHwsWrites,
-	       gRcsProgElspWrites, gRcsProgCtxCtrlWrites, gRcsProgCcidWrites, gRcsProgCsbWrites);
-	Gen11::logRCSProgrammingSummary(stage ? stage : "RCS_PROBE");
-	if (words) {
-		logFakeIrisDescriptorExpectation(stage, words, wordCount);
-	}
-	if (owner && NGreen::callback) {
-		dumpGTState(stage ? stage : "RCS_PROBE", owner);
-	}
-}
-
-static const char *classifyRCSProgramRegister(uint32_t address) {
-	if (address == RING_CTL(RENDER_RING_BASE)) return "RCS_CTL";
-	if (address == RING_START(RENDER_RING_BASE)) return "RCS_START";
-	if (address == RING_HWS_PGA(RENDER_RING_BASE)) return "RCS_HWS_PGA";
-	if (address == RING_ELSP(RENDER_RING_BASE)) return "RCS_ELSP";
-	if (address == RING_CTX_CTRL(RENDER_RING_BASE)) return "RCS_CTX_CTRL";
-	if (address == RING_CCID(RENDER_RING_BASE)) return "RCS_CCID";
-	if (address == RING_CONTEXT_STATUS_PTR(RENDER_RING_BASE)) return "RCS_CSB_PTR";
-	return nullptr;
-}
-
-static void recordRCSProgramRegisterWrite(uint32_t address, uint32_t value, const char *source) {
-	const char *kind = classifyRCSProgramRegister(address);
-	if (!kind || !NGreen::callback) {
-		return;
-	}
-
-	if (!strcmp(kind, "RCS_CTL")) gRcsProgCtlWrites++;
-	else if (!strcmp(kind, "RCS_START")) gRcsProgStartWrites++;
-	else if (!strcmp(kind, "RCS_HWS_PGA")) gRcsProgHwsWrites++;
-	else if (!strcmp(kind, "RCS_ELSP")) { gRcsProgElspWrites++; gRcsProgExeclistSeq++; }
-	else if (!strcmp(kind, "RCS_CTX_CTRL")) gRcsProgCtxCtrlWrites++;
-	else if (!strcmp(kind, "RCS_CCID")) gRcsProgCcidWrites++;
-	else if (!strcmp(kind, "RCS_CSB_PTR")) gRcsProgCsbWrites++;
-
-	const bool verbose = gRcsProgExeclistSeq <= 16 || address != RING_ELSP(RENDER_RING_BASE);
-	if (!verbose) {
-		return;
-	}
-
-	SYSLOG("ngreen", "RCS_PROG[%s] src=%s reg=0x%x val=0x%x seq=%u HEAD=0x%x TAIL=0x%x CTL=0x%x START=0x%x HWS=0x%x EXEC=0x%x CSB=0x%x",
-	       kind, source ? source : "<null>", address, value, gRcsProgExeclistSeq,
-	       NGreen::callback->readMMIO32(RING_HEAD(RENDER_RING_BASE)),
-	       NGreen::callback->readMMIO32(RING_TAIL(RENDER_RING_BASE)),
-	       NGreen::callback->readMMIO32(RING_CTL(RENDER_RING_BASE)),
-	       NGreen::callback->readMMIO32(RING_START(RENDER_RING_BASE)),
-	       NGreen::callback->readMMIO32(RING_HWS_PGA(RENDER_RING_BASE)),
-	       NGreen::callback->readMMIO32(RING_EXECLIST_STATUS(RENDER_RING_BASE)),
-	       NGreen::callback->readMMIO32(RING_CONTEXT_STATUS_PTR(RENDER_RING_BASE)));
-}
-
-static bool isStrictModeEnabled() {
-	if (checkKernelArgument("-ngreenPermissive")) {
-		return false;
-	}
-
-	return checkKernelArgument("-ngreenStrict");
-}
-
-static bool isPermissiveModeEnabled() {
-	return !isStrictModeEnabled();
-}
-
-static bool isBCSTraceEnabled() {
-	return checkKernelArgument("-ngreenTraceBCS");
-}
-
-static bool isAllow3DEnabled() {
-	return checkKernelArgument("-allow3d");
-}
-
-static bool isBCSStrictEnabled() {
-	return checkKernelArgument("-ngreenBCSStrict") || isStrictModeEnabled();
-}
-
-static bool isNoBCSEnabled() {
-	return checkKernelArgument("-ngreenNoBCS");
-}
-
-static bool shouldContainBCSForAllow3D() {
-	return isAllow3DEnabled();
-}
-
-static bool isDisplayPipeTraceEnabled() {
-	return checkKernelArgument("-ngreenDisplayPipeTrace");
-}
-
-static bool isLegacyDisplayPipeModeEnabled() {
-	return checkKernelArgument("-ngreenLegacyDisplayPipe");
-}
-
-static bool isNoDisplayPipeEnabled() {
-	return checkKernelArgument("-ngreenNoDisplayPipe") || isDisplayPipeForceDisabled();
-}
-
-static bool isSingleDisplayPipeModeEnabled() {
-	return checkKernelArgument("-ngreenSingleDisplayPipe") || checkKernelArgument("-ngreenSinglePipe");
-}
-
-static const char *modeString(bool strict) {
-	return strict ? "strict" : "permissive";
-}
-
-static uint32_t engineInterruptMaskReg(uint32_t ringBase) {
-	switch (ringBase) {
-		case RENDER_RING_BASE: return GEN11_RCS0_RSVD_INTR_MASK;
-		case BLT_RING_BASE: return GEN11_BCS_RSVD_INTR_MASK;
-		case GEN11_BSD_RING_BASE: return GEN11_VCS0_VCS1_INTR_MASK;
-		case GEN11_VEBOX_RING_BASE: return GEN11_VECS0_VECS1_INTR_MASK;
-		default: return 0;
-	}
-}
-
-static uint32_t engineInterruptEnableReg(uint32_t ringBase) {
-	switch (ringBase) {
-		case RENDER_RING_BASE:
-		case BLT_RING_BASE:
-			return GEN11_RENDER_COPY_INTR_ENABLE;
-		case GEN11_BSD_RING_BASE:
-		case GEN11_VEBOX_RING_BASE:
-			return GEN11_VCS_VECS_INTR_ENABLE;
-		default:
-			return 0;
-	}
-}
-
-static bool isBCSReadyForUse() {
-	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
-		return false;
-	}
-
-	const uint32_t ctl = NGreen::callback->readMMIO32(RING_CTL(BLT_RING_BASE));
-	const uint32_t start = NGreen::callback->readMMIO32(RING_START(BLT_RING_BASE));
-	const uint32_t hws = NGreen::callback->readMMIO32(RING_HWS_PGA(BLT_RING_BASE));
-	return ctl != 0 && start != 0 && hws != 0 && ctl != 0xFFFFFFFF && start != 0xFFFFFFFF && hws != 0xFFFFFFFF;
-}
-
-static void dumpEngineState(const char *stage, const NGreenTrackedEngine &engine) {
-	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
-		return;
-	}
-
-	const uint32_t imrReg = engineInterruptMaskReg(engine.ringBase);
-	const uint32_t ierReg = engineInterruptEnableReg(engine.ringBase);
-	const uint32_t ctl = NGreen::callback->readMMIO32(RING_CTL(engine.ringBase));
-	const uint32_t head = NGreen::callback->readMMIO32(RING_HEAD(engine.ringBase));
-	const uint32_t tail = NGreen::callback->readMMIO32(RING_TAIL(engine.ringBase));
-	const uint32_t start = NGreen::callback->readMMIO32(RING_START(engine.ringBase));
-	const uint32_t hws = NGreen::callback->readMMIO32(RING_HWS_PGA(engine.ringBase));
-	const uint32_t mode = NGreen::callback->readMMIO32(RING_MODE(engine.ringBase));
-	const uint32_t imr = imrReg ? NGreen::callback->readMMIO32(imrReg) : 0;
-	const uint32_t iir = engine.ringBase == GEN11_VEBOX_RING_BASE ? NGreen::callback->readMMIO32(GEN11_GT_INTR_DW1) : NGreen::callback->readMMIO32(GEN11_GT_INTR_DW0);
-	const uint32_t ier = ierReg ? NGreen::callback->readMMIO32(ierReg) : 0;
-	const uint32_t emr = NGreen::callback->readMMIO32(RING_EMR(engine.ringBase));
-	const uint32_t ctxSize = NGreen::callback->readMMIO32(RING_CTX_SIZE(engine.ringBase));
-	const uint32_t ctxCtrl = NGreen::callback->readMMIO32(RING_CTX_CTRL(engine.ringBase));
-	const uint32_t ccid = NGreen::callback->readMMIO32(RING_CCID(engine.ringBase));
-	SYSLOG("ngreen", "GT[%s] %s CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS_PGA=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x CTX_SIZE=0x%x CTX_CTRL=0x%x CCID=0x%x stamp=[%d,%d]",
-	       stage ? stage : "<null>", engine.name, ctl, head, tail, start, hws, mode, imr, iir, ier, emr,
-	       ctxSize, ctxCtrl, ccid, engine.stampMin, engine.stampMax);
-}
-
-static void dumpInterruptState(const char *stage) {
-	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
-		return;
-	}
-
-	SYSLOG("ngreen", "GT[%s] IRQ GFX_MSTR_IRQ=0x%x RENDER_COPY_INTR_EN=0x%x RCS0_MASK=0x%x BCS_MASK=0x%x ERROR_GEN6=0x%x FW_RENDER_ACK=0x%x FW_BCS_ACK=0x%x GUC_STATUS=0x%x",
-	       stage ? stage : "<null>",
-	       NGreen::callback->readMMIO32(GEN11_GFX_MSTR_IRQ),
-	       NGreen::callback->readMMIO32(GEN11_RENDER_COPY_INTR_ENABLE),
-	       NGreen::callback->readMMIO32(GEN11_RCS0_RSVD_INTR_MASK),
-	       NGreen::callback->readMMIO32(GEN11_BCS_RSVD_INTR_MASK),
-	       NGreen::callback->readMMIO32(ERROR_GEN6),
-	       NGreen::callback->readMMIO32(FORCEWAKE_ACK_RENDER_GEN9),
-	       NGreen::callback->readMMIO32(FORCEWAKE_ACK_BLITTER_GEN9),
-	       NGreen::callback->readMMIO32(0xC000));
-}
-
-static void dumpSchedulerState(void *accel, const char *stage) {
-	if (!accel) {
-		return;
-	}
-
-	const uint64_t field1190 = getMember<uint64_t>(accel, 0x1190);
-	const uint32_t schedType = static_cast<uint32_t>((field1190 >> 23) & 0x7);
-	const uint64_t schedPtr0 = getMember<uint64_t>(accel, 0xe00);
-	const uint64_t schedPtr1 = getMember<uint64_t>(accel, 0xe08);
-	SYSLOG("ngreen", "GT[%s] scheduler selected=%d source=%s reason=%s field_1190=0x%llx bits=%u sched0=0x%llx sched1=0x%llx mode=%s",
-	       stage ? stage : "<null>", gSelectedSchedulerType, gSelectedSchedulerSource, gSelectedSchedulerReason,
-	       static_cast<unsigned long long>(field1190), schedType,
-	       static_cast<unsigned long long>(schedPtr0), static_cast<unsigned long long>(schedPtr1),
-	       modeString(isStrictModeEnabled()));
-}
-
-static void dumpDisplayPipeState(void *accel, const char *stage) {
-	if (!accel) {
-		return;
-	}
-
-	auto *svc = static_cast<IOService *>(accel);
-	auto *caps = OSDynamicCast(OSDictionary, svc->getProperty("IOAccelDisplayPipeCapabilities"));
-	auto *supported = caps ? caps->getObject("DisplayPipeSupported") : nullptr;
-	auto *transactions = caps ? caps->getObject("TransactionsSupported") : nullptr;
-	const bool bcsReady = isBCSReadyForUse();
-	SYSLOG("ngreen", "GT[%s] displaypipe accel=%s displayMachine=0x%llx caps=%u supported=%d transactions=%d single=%d legacy=%d noDP=%d bcsReady=%d",
-	       stage ? stage : "<null>", svc->getName() ? svc->getName() : "<null>",
-	       static_cast<unsigned long long>(getMember<uint64_t>(accel, 0x378)), caps ? caps->getCount() : 0,
-	       supported == kOSBooleanTrue, transactions == kOSBooleanTrue,
-	       isSingleDisplayPipeModeEnabled(), isLegacyDisplayPipeModeEnabled(), isNoDisplayPipeEnabled(), bcsReady);
-}
-
-static void dumpGTState(const char *stage, void *accel = nullptr) {
-	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
-		SYSLOG("ngreen", "GT[%s] skipped: MMIO unavailable", stage ? stage : "<null>");
-		return;
-	}
-
-	for (auto &engine : gTrackedEngines) {
-		dumpEngineState(stage, engine);
-	}
-	dumpInterruptState(stage);
-	if (accel) {
-		dumpSchedulerState(accel, stage);
-		dumpDisplayPipeState(accel, stage);
-	}
-}
-
-static bool prepareContextImageForEngine(const NGreenTrackedEngine &engine, NGreenContextImageInfo *out) {
-	if (!NGreen::callback || !out || !NGreen::callback->hasMMIO()) {
-		return false;
-	}
-
-	out->name = engine.name;
-	out->ringBase = engine.ringBase;
-	out->contextSize = NGreen::callback->readMMIO32(RING_CTX_SIZE(engine.ringBase));
-	out->lrca = NGreen::callback->readMMIO32(RING_ELSP(engine.ringBase));
-	out->ringStart = NGreen::callback->readMMIO32(RING_START(engine.ringBase));
-	out->ringSize = NGreen::callback->readMMIO32(RING_CTL(engine.ringBase)) & 0x001FF000U;
-	out->head = NGreen::callback->readMMIO32(RING_HEAD(engine.ringBase));
-	out->tail = NGreen::callback->readMMIO32(RING_TAIL(engine.ringBase));
-	out->hwsp = NGreen::callback->readMMIO32(RING_HWS_PGA(engine.ringBase));
-	out->stampMin = engine.stampMin;
-	out->stampMax = engine.stampMax;
-	out->valid = false;
-	return true;
-}
-
-static bool isGuCReadyForScheduler3() {
-	if (!NGreen::callback || !NGreen::callback->hasMMIO()) {
-		return false;
-	}
-
-	const uint32_t gucStatus = NGreen::callback->readMMIO32(0xC000);
-	const bool requested = checkKernelArgument("-ngreenGuC") || checkKernelArgument("-ngreenGuCSched");
-	return requested && gucStatus != 0 && gucStatus != 0xFFFFFFFF;
-}
-
-static bool validateContextImageForScheduler(uint32_t schedulerType, const NGreenTrackedEngine &engine) {
-	NGreenContextImageInfo info {};
-	if (!prepareContextImageForEngine(engine, &info)) {
-		return false;
-	}
-
-	const bool contextPtrOk = info.lrca != 0 && info.lrca != 0xFFFFFFFF;
-	const bool contextSizeOk = info.contextSize != 0 && info.contextSize != 0xFFFFFFFF;
-	const bool hwspOk = info.hwsp != 0 && info.hwsp != 0xFFFFFFFF;
-	const bool startOk = info.ringStart != 0 && info.ringStart != 0xFFFFFFFF;
-	const bool sizeOk = info.ringSize != 0;
-	const bool headTailOk = info.head != 0xFFFFFFFF && info.tail != 0xFFFFFFFF;
-	const bool stampOk = info.stampMin >= 0 && info.stampMax >= info.stampMin;
-	const bool schedulerCompat = schedulerType != 3 || isGuCReadyForScheduler3();
-	info.valid = contextPtrOk && contextSizeOk && hwspOk && startOk && sizeOk && headTailOk && stampOk && schedulerCompat;
-	SYSLOG("ngreen", "CTX[%s] scheduler=%u ctxSize=0x%x LRCA=0x%x ringStart=0x%x ringSize=0x%x HWSP=0x%x head=0x%x tail=0x%x stamp=[%d,%d] valid=%d",
-	       info.name, schedulerType, info.contextSize, info.lrca, info.ringStart, info.ringSize,
-	       info.hwsp, info.head, info.tail, info.stampMin, info.stampMax, info.valid);
-	return info.valid;
-}
-
-static void dumpAllContextValidation(uint32_t schedulerType) {
-	for (auto &engine : gTrackedEngines) {
-		validateContextImageForScheduler(schedulerType, engine);
-	}
-}
-
-static void ngreenDelayedGTDump(thread_call_param_t param0, thread_call_param_t) {
-	void *accel = reinterpret_cast<void *>(param0);
-	dumpGTState("T+3 seconds after accelerator start", accel);
-}
-
-void Gen11::resetRCSProgrammingTrace() {
-	gRcsProgCtlWrites = 0;
-	gRcsProgStartWrites = 0;
-	gRcsProgHwsWrites = 0;
-	gRcsProgElspWrites = 0;
-	gRcsProgCtxCtrlWrites = 0;
-	gRcsProgCcidWrites = 0;
-	gRcsProgCsbWrites = 0;
-	gRcsProgExeclistSeq = 0;
-}
-
-void Gen11::logRCSProgrammingSummary(const char *stage) {
-	SYSLOG("ngreen", "RCS_PROG_SUMMARY[%s] ctl=%u start=%u hws=%u elsp=%u ctx_ctrl=%u ccid=%u csb=%u lastEXEC=0x%x lastCSB=0x%x",
-	       stage ? stage : "<null>",
-	       gRcsProgCtlWrites, gRcsProgStartWrites, gRcsProgHwsWrites, gRcsProgElspWrites,
-	       gRcsProgCtxCtrlWrites, gRcsProgCcidWrites, gRcsProgCsbWrites,
-	       NGreen::callback ? NGreen::callback->readMMIO32(RING_EXECLIST_STATUS(RENDER_RING_BASE)) : 0,
-	       NGreen::callback ? NGreen::callback->readMMIO32(RING_CONTEXT_STATUS_PTR(RENDER_RING_BASE)) : 0);
-}
-
-uint8_t Gen11::wrapIGScheduler5Push(void *that, void *hwContext, int a3, int a4, uint8_t a5, uint8_t a6) {
-	logRCSProbeState("IGScheduler5::push pre", that, hwContext, nullptr, 0);
-	const uint8_t ret = FunctionCast(wrapIGScheduler5Push, callback->oIGScheduler5Push)(that, hwContext, a3, a4, a5, a6);
-	logRCSProbeState("IGScheduler5::push post", that, hwContext, nullptr, 0);
-	return ret;
-}
-
-uint8_t Gen11::wrapIGScheduler5Bind(void *that, const char *label, uint64_t contextOrMeta, uint8_t engineToken) {
-	SYSLOG("ngreen", "RCS_PROBE[IGScheduler5::bind] sched=0x%llx label=%s ctxMeta=0x%llx engineToken=0x%x",
-	       static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(that)),
-	       label ? label : "<null>",
-	       static_cast<unsigned long long>(contextOrMeta), engineToken);
-	return FunctionCast(wrapIGScheduler5Bind, callback->oIGScheduler5Bind)(that, label, contextOrMeta, engineToken);
-}
-
-uint64_t Gen11::wrapIGScheduler5Rebind(void *that, void *hwContext, unsigned int token) {
-	logRCSProbeState("IGScheduler5::rebind pre", that, hwContext, nullptr, 0);
-	const uint64_t ret = FunctionCast(wrapIGScheduler5Rebind, callback->oIGScheduler5Rebind)(that, hwContext, token);
-	logRCSProbeState("IGScheduler5::rebind post", that, hwContext, nullptr, 0);
-	return ret;
-}
-
-uint64_t Gen11::wrapSubmitExecList(void *that, int slot) {
-	SYSLOG("ngreen", "RCS_PROBE[submitExecList pre] cs=0x%llx slot=%d", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(that)), slot);
-	logRCSProbeState("submitExecList pre", that, nullptr, nullptr, 0);
-	const uint64_t ret = FunctionCast(wrapSubmitExecList, callback->oSubmitExecList)(that, slot);
-	logRCSProbeState("submitExecList post", that, nullptr, nullptr, 0);
-	return ret;
-}
-
-uint64_t Gen11::wrapPrepareExecListAndSubmit(void *that, char *scratch, int count, const unsigned int *words) {
-	logRCSProbeState("prepareExecListAndSubmit pre", that, nullptr, words, count > 0 ? static_cast<unsigned int>(count) : 0u);
-	if (isRCSProbeEnabled() && !gRcsProbeTriggered) {
-		gRcsProbeTriggered = true;
-		SYSLOG("ngreen", "RCS_PROBE armed on first Apple submit path");
-	}
-	const uint64_t ret = FunctionCast(wrapPrepareExecListAndSubmit, callback->oPrepareExecListAndSubmit)(that, scratch, count, words);
-	logRCSProbeState("prepareExecListAndSubmit post", that, nullptr, words, count > 0 ? static_cast<unsigned int>(count) : 0u);
-	return ret;
-}
-
-uint64_t Gen11::wrapProcessContextStatusBuffer(void *that, int reason) {
-	SYSLOG("ngreen", "RCS_PROBE[processContextStatusBuffer] cs=0x%llx reason=%d", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(that)), reason);
-	logRCSProbeState("processContextStatusBuffer pre", that, nullptr, nullptr, 0);
-	const uint64_t ret = FunctionCast(wrapProcessContextStatusBuffer, callback->oProcessContextStatusBuffer)(that, reason);
-	logRCSProbeState("processContextStatusBuffer post", that, nullptr, nullptr, 0);
-	return ret;
-}
-
 static void applyDisplayPipePolicy(IORegistryEntry *entry, const char *stage) {
 	if (!entry) {
 		return;
 	}
 
-	bool enabled = !isNoDisplayPipeEnabled();
-	const bool bcsDead = !isBCSReadyForUse();
-	const bool containBCS = (isNoBCSEnabled() || shouldContainBCSForAllow3D()) && bcsDead;
-	if (enabled && containBCS) {
-		SYSLOG("ngreen", "DisplayPipe policy[%s]: suppressing BCS-dependent publication because BCS is not ready allow3d=%d noBCS=%d",
-		       stage ? stage : "<null>", isAllow3DEnabled(), isNoBCSEnabled());
-		if (isBCSStrictEnabled()) {
-			enabled = false;
-		}
-	}
+	const bool enabled = !isDisplayPipeForceDisabled();
 	auto *dpCaps = createDisplayPipeCapabilityDict(enabled);
 	if (!dpCaps) {
 		return;
-	}
-	if (isSingleDisplayPipeModeEnabled()) {
-		dpCaps->setObject("NGreenSingleDisplayPipe", kOSBooleanTrue);
-	}
-	if (isLegacyDisplayPipeModeEnabled()) {
-		dpCaps->setObject("NGreenLegacyDisplayPipe", kOSBooleanTrue);
-	}
-	if (containBCS) {
-		dpCaps->setObject("TransactionsSupported", kOSBooleanFalse);
-		dpCaps->setObject("NGreenBCSContained", kOSBooleanTrue);
 	}
 
 	entry->setProperty("IOAccelDisplayPipeCapabilities", dpCaps);
@@ -582,21 +178,11 @@ static void applyDisplayPipePolicy(IORegistryEntry *entry, const char *stage) {
 	       stage ? stage : "<null>", enabled,
 	       entry->getName() ? entry->getName() : "<null>",
 	       entry->getMetaClass() ? entry->getMetaClass()->getClassName() : "<null>");
-	dumpDisplayPipeState(entry, stage ? stage : "displaypipe-policy");
-	dumpGTState("after DisplayPipe capabilities publication", entry);
-	dumpAllContextValidation(static_cast<uint32_t>(gSelectedSchedulerType));
 	dpCaps->release();
 }
 
 static void publishBootDisplayProperties(IOService *framebuffer, uint32_t framebufferIndex) {
 	if (!framebuffer) {
-		return;
-	}
-
-	if (isSingleDisplayPipeModeEnabled() && framebufferIndex != 0) {
-		SYSLOG("ngreen", "Boot display publish: single-display-pipe suppressing fb=%s idx=%u",
-		       framebuffer->getName() ? framebuffer->getName() : "<null>", framebufferIndex);
-		framebuffer->setProperty("AAPL,DisplayPipeSuppressed", true);
 		return;
 	}
 
@@ -660,15 +246,9 @@ void Gen11::ensureDisplayPipeBacking(void *that) {
 	if (!displayMachine && callback->oNewDisplayMachine && callback->oDisplayMachineInit) {
 		displayMachine = reinterpret_cast<NewDisplayMachine>(callback->oNewDisplayMachine)(that);
 		SYSLOG("ngreen", "DisplayPipe backing: newDisplayMachine -> %p", displayMachine);
-		if (isDisplayPipeTraceEnabled()) {
-			dumpDisplayPipeState(that, "displayMachine-new");
-		}
 		if (displayMachine) {
 			const bool initOk = reinterpret_cast<DisplayMachineInit>(callback->oDisplayMachineInit)(displayMachine, that);
 			SYSLOG("ngreen", "DisplayPipe backing: displayMachine init -> %d", initOk);
-			if (isDisplayPipeTraceEnabled()) {
-				dumpDisplayPipeState(that, "displayMachine-init");
-			}
 			if (initOk) {
 				getMember<void *>(that, 0x378) = displayMachine;
 				createdDisplayMachine = true;
@@ -690,21 +270,12 @@ void Gen11::ensureDisplayPipeBacking(void *that) {
 	if (provider && callback->oDisplayMachineStart) {
 		const bool startOk = reinterpret_cast<DisplayMachineStart>(callback->oDisplayMachineStart)(displayMachine, provider);
 		SYSLOG("ngreen", "DisplayPipe backing: displayMachine start -> %d created=%d", startOk, createdDisplayMachine);
-		if (isDisplayPipeTraceEnabled()) {
-			dumpDisplayPipeState(that, "displayMachine-start");
-		}
 	}
 
 	if (callback->oDisplayMachineProbeDisplayPipes) {
 		reinterpret_cast<DisplayMachineProbeDisplayPipes>(callback->oDisplayMachineProbeDisplayPipes)(displayMachine);
 		SYSLOG("ngreen", "DisplayPipe backing: probeDisplayPipes forced for %p", displayMachine);
-		if (isDisplayPipeTraceEnabled()) {
-			dumpDisplayPipeState(that, "displayMachine-probe");
-		}
 	}
-
-	dumpGTState("after DisplayMachine init/start/probeDisplayPipes", that);
-	dumpAllContextValidation(static_cast<uint32_t>(gSelectedSchedulerType));
 
 	SYSLOG("ngreen", "DisplayPipe backing: post-rescue accel=%s displayMachine=%p created=%d",
 	       accelSvc && accelSvc->getName() ? accelSvc->getName() : "<null>",
@@ -1032,10 +603,10 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		return true;
 		
 		
-	}	else if (kextG11FBT.loadIndex == index) {
+	}	else if (kextTGLFB.loadIndex == index) {
 		SYSLOG("ngreen", "[FB Tracer] AppleIntelTGLGraphicsFramebuffer LOADED");
 		this->tglFBLoaded = true;
-		auto *activeKext = &kextG11FBT;
+		auto *activeKext = &kextTGLFB;
 		NGreen::callback->setRMMIOIfNecessary();
 		SYSLOG("ngreen", "init AppleIntelTGLGraphicsFramebuffer");
 		
@@ -1328,7 +899,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				
 			};
 			
-			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesp , address, size), "ngreen", "kextG11FBT Failed to apply production patches!");
+			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesp , address, size), "ngreen", "kextTGLFB Failed to apply production patches!");
 		}
 		else {
 			const bool refProbeF2 = isReferenceF2ProbeEnabled();
@@ -1367,7 +938,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				
 			};
 			
-			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patches , address, size), "ngreen", "kextG11FBT Failed to apply dbg patches!");
+			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patches , address, size), "ngreen", "kextTGLFB Failed to apply dbg patches!");
 
 			if (refProbeF2 && !NGreen::callback->isRealTGL) {
 				// Reference probe: enable only old f2 topology/osinfo bypass on demand.
@@ -1376,7 +947,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 					{activeKext, f2, r2, arrsize(f2), 1},
 				};
 				PANIC_COND(!LookupPatchPlus::applyAll(patcher, probeF2Patch, address, size),
-					"ngreen", "kextG11FBT Failed to apply reference f2 probe patch!");
+					"ngreen", "kextTGLFB Failed to apply reference f2 probe patch!");
 				SYSLOG("ngreen", "V109: reference probe enabled (f2 osinfo patch active)");
 			} else if (refProbeF2) {
 				SYSLOG("ngreen", "V109: reference f2 probe requested but ignored on real TGL");
@@ -1422,7 +993,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				 {"__ZN16IntelAccelerator19PAVPCommandCallbackE22PAVPSessionCommandID_tjPjb", wrapPavpSessionCallback, this->orgPavpSessionCallback},
 				 // initHardwareCaps NOT routed: NBlue's wrapper reads TGL offset 0x1120 for SKU,
 				 // but ICL stores SKU at 0x1150. Let the original ICL code run — SKU gates are patched.
-				 // IGScheduler5resume NOT routed: kIGHwCsDesc is only resolved for kextG11HWT.
+				 // IGScheduler5resume NOT routed: kIGHwCsDesc is only resolved for kextTGLHW.
 				 // With -disablegfxfirmware, Host Preemptive scheduler is selected (not IGScheduler5).
 			//last	 {"__ZN12IGScheduler56resumeEv", IGScheduler5resume, this->oIGScheduler5resume},
 				 // resetGraphicsEngine NOT routed: NBlue wrapper applies TGL GT workarounds which
@@ -1502,10 +1073,10 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 
 		return true;
 
-    } else if (kextG11HWT.loadIndex == index) {
+	} else if (kextTGLHW.loadIndex == index) {
 		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics LOADED");
 		this->tglHWLoaded = true;
-		auto *activeKext = &kextG11HWT;
+		auto *activeKext = &kextTGLHW;
 		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics (HW accelerator) initializing");
 		NGreen::callback->setRMMIOIfNecessary();
 /*
@@ -1550,13 +1121,15 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 
 			// {"__ZN11IGAccelTask16getBlit3DContextEb", getBlit3DContext, this->ogetBlit3DContext},
 		
-			 //{"__Z31blit3d_initialize_scratch_spaceP16IGAccelSysMemory", blit3d_initialize_scratch_space, this->oblit3d_initialize_scratch_space},
-			 //{"__Z15blit3d_init_ctxP23IGHardwareBlit3DContext", blit3d_init_ctx, this->oblit3d_init_ctx},
+			 // V112: Resolve the NootedBlue Blit3D helpers so the fallback path can
+			 // initialize scratch/context state instead of leaving the blit object empty.
+			 {"__Z31blit3d_initialize_scratch_spaceP16IGAccelSysMemory", blit3d_initialize_scratch_space, this->oblit3d_initialize_scratch_space},
+			 {"__Z15blit3d_init_ctxP23IGHardwareBlit3DContext", blit3d_init_ctx, this->oblit3d_init_ctx},
 			 // V69: ENABLED — original crashes at +0x4c memcpy'ing 68 bytes to unmapped GPU buffer
 			 // at VA 0xfffffff034136000 (page 0xD of context buffer). Our replacement skips the
 			 // dangerous memcpy and logs diagnostic info about the mapping.
 			 {"__ZN23IGHardwareBlit3DContext10initializeEv", IGHardwareBlit3DContextinitialize, this->oIGHardwareBlit3DContextinitialize},
-			// {"__ZNK14IGMappedBuffer9getMemoryEv", IGMappedBuffergetMemory, this->oIGMappedBuffergetMemory},
+			 {"__ZNK14IGMappedBuffer9getMemoryEv", IGMappedBuffergetMemory, this->oIGMappedBuffergetMemory},
 			 
 		};
 		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route symbols");
@@ -1570,25 +1143,28 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route loadGuCBinary");
 		}
 
-		if (isRCSProbeEnabled()) {
-			SolveRequestPlus probeSolve[] = {
-				{"__ZN12IGScheduler54bindEPKcmy", this->oIGScheduler5Bind},
-				{"__ZN12IGScheduler54bindEPKcmh", this->oIGScheduler5Bind},
-				{"__ZN12IGScheduler54pushEP17IGHardwareContextiihh", this->oIGScheduler5Push},
-				{"__ZN12IGScheduler56rebindEP17IGHardwareContextj", this->oIGScheduler5Rebind},
-				{"__ZN25IGHardwareCommandStreamer514submitExecListEi", this->oSubmitExecList},
-				{"__ZN25IGHardwareCommandStreamer524prepareExecListAndSubmitEPciPKj", this->oPrepareExecListAndSubmit},
-				{"__ZN25IGHardwareCommandStreamer526processContextStatusBufferEi", this->oProcessContextStatusBuffer},
+		if (!NGreen::callback->isRealTGL) {
+			SYSLOG("ngreen", "GuC firmware patch: skipped embedded TGL blob override on non-real TGL");
+		} else if (!patchEmbeddedTGLFirmware(patcher, index, address, size)) {
+			SYSLOG("ngreen", "GuC firmware patch: native embedded TGL firmware left unchanged");
+		}
+		if (isGuCDiagnosticsEnabled()) {
+			logGuCFirmwareState("processKext post-patch");
+		}
+
+		if (!NGreen::callback->isRealTGL) {
+			// V111: Hook IGAccelDevice::deviceStart to force success on RPL.
+			// Binary pattern (f_devstart) may not match every Sonoma build variant.
+			// This symbol-based hook guarantees deviceStart returns true regardless of
+			// BCS ring state, so the accelerator device is always registered with IOKit.
+			RouteRequestPlus devStartRoute[] = {
+				{"__ZN13IGAccelDevice11deviceStartEv", deviceStart, this->odeviceStart},
 			};
-			SolveRequestPlus::solveAll(patcher, index, probeSolve, address, size);
-			patcher.clearError();
-			SYSLOG("ngreen", "RCS_PROBE resolve IGScheduler5::bind=0x%llx push=0x%llx rebind=0x%llx submitExecList=0x%llx prepareExecListAndSubmit=0x%llx processCSB=0x%llx",
-			       static_cast<unsigned long long>(this->oIGScheduler5Bind),
-			       static_cast<unsigned long long>(this->oIGScheduler5Push),
-			       static_cast<unsigned long long>(this->oIGScheduler5Rebind),
-			       static_cast<unsigned long long>(this->oSubmitExecList),
-			       static_cast<unsigned long long>(this->oPrepareExecListAndSubmit),
-			       static_cast<unsigned long long>(this->oProcessContextStatusBuffer));
+			if (RouteRequestPlus::routeAll(patcher, index, devStartRoute, address, size)) {
+				SYSLOG("ngreen", "V111: Hooked IGAccelDevice::deviceStart for RPL force-success");
+			} else {
+				SYSLOG("ngreen", "V111: IGAccelDevice::deviceStart symbol not found — relying on binary patch");
+			}
 		}
 
 		if (!wegCoexist || forceFullMTL) {
@@ -1740,7 +1316,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{activeKext, f3, r3, arrsize(f3),	1},
 			};
 			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesAlways, address, size), "ngreen",
-				"kextG11HWT Failed to apply base patches!");
+				"kextTGLHW Failed to apply base patches!");
 			
 			if (!NGreen::callback->isRealTGL) {
 				// RPL-only: hardcode topology and bypass BCS readiness check
@@ -1751,7 +1327,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 					{activeKext, f_devstart, m_devstart, r_devstart, rm_devstart, arrsize(f_devstart), 1}, // BCS bypass
 				};
 				PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesRPL, address, size), "ngreen",
-					"kextG11HWT Failed to apply RPL-specific patches!");
+					"kextTGLHW Failed to apply RPL-specific patches!");
 
 				// Optional secondary signature for Sonoma variants with long JE encoding.
 				LookupPatchPlus const patchRPLDevstartLong {
@@ -1851,6 +1427,23 @@ void  Gen11::setAsyncSliceCount(void *that,uint32_t configRaw)
 		0x00, 0xf0, 0x49, 0x02, 0x40, 0x78, 0x7d, 0x01
 	};
 
+bool Gen11::deviceStart(void *that)
+{
+	// V111: Force IGAccelDevice::deviceStart to succeed on spoofed RPL platform.
+	// The original checks encodeFailureStack[1] which is set when BCS ring fails to
+	// start. On RPL hardware with TGL driver, BCS init fails (RPL uses different
+	// ring programming). We allow the original to run and then force success if it
+	// returned false, preventing CoreDisplay from seeing a null accelerator device.
+	auto ret = FunctionCast(deviceStart, callback->odeviceStart)(that);
+	const bool isRealTGL = NGreen::callback && NGreen::callback->isRealTGL;
+	if (!isRealTGL && !ret) {
+		SYSLOG("ngreen", "V111: IGAccelDevice::deviceStart returned false on RPL — forcing true");
+		return true;
+	}
+	DBGLOG("ngreen", "V111: IGAccelDevice::deviceStart returned %d", ret);
+	return ret;
+}
+
 
 bool  Gen11::getGPUInfo(void *that)
 {
@@ -1906,16 +1499,11 @@ bool  Gen11::getGPUInfo(void *that)
 	// On spoofed platforms in full-MTL mode, do not propagate a false return from
 	// the original path, otherwise accelerator bring-up may abort and CoreDisplay
 	// later receives a null Metal object in RunFullDisplayPipe.
-	if (!isRealTGL && forceFullMTL && !ret && isPermissiveModeEnabled()) {
+	if (!isRealTGL && forceFullMTL && !ret) {
 		SYSLOG("ngreen", "getGPUInfo: forcing success on spoofed CPU in full-MTL mode");
-		dumpGTState("after getGPUInfo", that);
 		return true;
 	}
-	if (!ret && forceFullMTL && isStrictModeEnabled()) {
-		SYSLOG("ngreen", "getGPUInfo: strict mode preserving failure from original path");
-	}
 
-	dumpGTState("after getGPUInfo", that);
 	return ret;
 }
 
@@ -1950,7 +1538,6 @@ bool Gen11::getGPUInfoICL(void *that)
 	SYSLOG("ngreen", "getGPUInfoICL: overridden topology → slices=%u subslices=%u maxEU/SS=%u totalEU=%u L3Banks=8",
 		   numSlices, numSubSlices, maxEUPerSubSlice, totalEU);
 	
-	dumpGTState("after getGPUInfo", that);
 	return ret;
 }
 
@@ -2078,14 +1665,120 @@ IOReturn Gen11::wrapFBClientDoAttribute(void *fbclient, uint32_t attribute, unsi
 }
 
 unsigned long Gen11::loadGuCBinary(void *that) {
+	const int requestedScheduler = getRequestedSchedulerType();
+	const bool embeddedFirmwareRequested = shouldPatchEmbeddedGuCFirmware();
+	const bool gucDiag = isGuCDiagnosticsEnabled();
+	if (gucDiag) {
+		logGuCFirmwareState("loadGuCBinary entry");
+	}
+
 	// V52: Real TGL can authenticate and load GuC firmware natively.
 	// RPL cannot — stub to return 1 and use host scheduling instead.
 	if (NGreen::callback->isRealTGL) {
-		SYSLOG("ngreen", "loadGuCBinary: real TGL — calling original for GuC firmware load");
-		return FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+		SYSLOG("ngreen", "loadGuCBinary: real TGL sched=%d embedded-fw=%d — calling original", requestedScheduler,
+		       embeddedFirmwareRequested);
+		auto ret = FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+		SYSLOG("ngreen", "loadGuCBinary: original returned %lu", ret);
+		if (gucDiag) {
+			logGuCFirmwareState("loadGuCBinary exit");
+		}
+		return ret;
+	}
+	if (requestedScheduler == 3 && embeddedFirmwareRequested) {
+		SYSLOG("ngreen", "loadGuCBinary: non-real TGL sched=3 requested, but embedded GuC path is only enabled on real TGL right now");
+		auto ret = FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+		if (gucDiag) {
+			logGuCFirmwareState("loadGuCBinary non-real exit");
+		}
+		return ret;
 	}
 	SYSLOG("ngreen", "loadGuCBinary: RPL — stubbed to return 1 (host scheduling)");
+	if (gucDiag) {
+		logGuCFirmwareState("loadGuCBinary stub exit");
+	}
 	return 1;
+}
+
+bool Gen11::patchEmbeddedFirmwareAt(mach_vm_address_t symbol, const uint8_t *blob, size_t blobSize,
+	const char *label, size_t zeroFill) {
+	if (!symbol || !blob || blobSize == 0) {
+		return false;
+	}
+
+	auto status = MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock);
+	if (status != KERN_SUCCESS) {
+		SYSLOG("ngreen", "firmware patch[%s]: failed to enable kernel write (%d)", safeString(label), status);
+		return false;
+	}
+
+	lilu_os_memcpy(reinterpret_cast<void *>(symbol), blob, blobSize);
+	if (zeroFill > blobSize) {
+		memset(reinterpret_cast<uint8_t *>(symbol) + blobSize, 0, zeroFill - blobSize);
+	}
+
+	MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock);
+	SYSLOG("ngreen", "firmware patch[%s]: wrote %zu bytes @ 0x%llx", safeString(label), blobSize, symbol);
+	return true;
+}
+
+bool Gen11::patchEmbeddedFirmwareMatch(mach_vm_address_t address, size_t size, const uint8_t *needle, size_t needleSize,
+	const uint8_t *blob, size_t blobSize, const char *label) {
+	if (!address || !size || !needle || !needleSize || !blob || !blobSize) {
+		return false;
+	}
+
+	size_t offset = 0;
+	if (!KernelPatcher::findPattern(needle, nullptr, needleSize, reinterpret_cast<const void *>(address), size, &offset) || !offset) {
+		SYSLOG("ngreen", "firmware patch[%s]: pattern not found", safeString(label));
+		return false;
+	}
+
+	return patchEmbeddedFirmwareAt(address + offset, blob, blobSize, label);
+}
+
+bool Gen11::patchEmbeddedTGLFirmware(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size) {
+	if (!shouldPatchEmbeddedGuCFirmware()) {
+		SYSLOG("ngreen", "firmware patch: sched=%d did not request embedded GuC override", getRequestedSchedulerType());
+		return false;
+	}
+	if (isGuCDiagnosticsEnabled()) {
+		SYSLOG("ngreen", "firmware patch: diag enabled host_if_rev=%u GuC=%zu HuC=%zu",
+		       IGUK_GUC_HOST_INTERFACE_REV, IGFirmwareAssets::kGuCFullSize, IGFirmwareAssets::kHuCFullSize);
+	}
+
+	mach_vm_address_t kmGuCSignature = patcher.solveSymbol(index, "__ZL13__KmGuCBinary");
+	mach_vm_address_t kmGuCSpringboardSignature = patcher.solveSymbol(index, "__ZL18__KmGuCSBBinarySig");
+	mach_vm_address_t kmGen12TGLGuCFirmware = patcher.solveSymbol(index, "__ZL21__KmGen12TGLGuCBinary");
+
+	bool patched = false;
+	if (kmGuCSignature && kmGuCSpringboardSignature && kmGuCSpringboardSignature > kmGuCSignature) {
+		patched |= patchEmbeddedFirmwareAt(kmGuCSignature, IGFirmwareAssets::kGuCFull,
+			IGFirmwareAssets::kGuCFullSize, "GuC.full", kmGuCSpringboardSignature - kmGuCSignature);
+	} else if (kmGuCSignature) {
+		patched |= patchEmbeddedFirmwareAt(kmGuCSignature, IGFirmwareAssets::kGuCFull,
+			IGFirmwareAssets::kGuCFullSize, "GuC.full");
+	}
+
+	if (kmGuCSpringboardSignature) {
+		patched |= patchEmbeddedFirmwareAt(kmGuCSpringboardSignature, IGFirmwareAssets::kGuCSignature,
+			IGFirmwareAssets::kGuCSignatureSize, "GuC.springboard-sig");
+	}
+
+	if (kmGen12TGLGuCFirmware) {
+		patched |= patchEmbeddedFirmwareAt(kmGen12TGLGuCFirmware, IGFirmwareAssets::kGuCFirmware,
+			IGFirmwareAssets::kGuCFirmwareSize, "GuC.firmware");
+	} else {
+		patched |= patchEmbeddedFirmwareMatch(address, size, IGFirmwareAssets::kGuCFirmware,
+			64, IGFirmwareAssets::kGuCFirmware, IGFirmwareAssets::kGuCFirmwareSize, "GuC.firmware-fallback");
+	}
+
+	const bool hucPatched = patchEmbeddedFirmwareMatch(address, size, IGFirmwareAssets::kHuCFirmware,
+		64, IGFirmwareAssets::kHuCFirmware, IGFirmwareAssets::kHuCFirmwareSize, "HuC.firmware");
+	if (!hucPatched) {
+		SYSLOG("ngreen", "firmware patch[HuC]: no stock HuC blob was found in AppleIntelTGLGraphics");
+	}
+
+	return patched;
 }
 
 UInt8 Gen11::wrapLoadGuCBinary(void *that) {
@@ -2197,29 +1890,8 @@ UInt64 Gen11::wrapIgBufferGetGpuVirtualAddress(void *that) {
 
 
 uint32_t Gen11::wrapReadRegister32(void *controller, uint32_t address) {
-	static uint32_t bcsReadLogCount = 0;
-	if (controller == nullptr) {
-		uint32_t value = NGreen::callback->readReg32(address);
-		if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsReadLogCount < 64) {
-			bcsReadLogCount++;
-			SYSLOG("ngreen", "BCS_TRACE read[%u] reg=0x%x val=0x%x CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x",
-			       bcsReadLogCount, address, value,
-			       NGreen::callback->readReg32(RING_CTL(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_HEAD(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_TAIL(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_START(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_HWS_PGA(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_MODE(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(GEN11_BCS_RSVD_INTR_MASK),
-			       NGreen::callback->readReg32(GEN11_GT_INTR_DW0),
-			       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
-			       NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE)));
-		}
-		if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
-			SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN read reg=0x%x val=0x%x dead-bcs=1", address, value);
-		}
-		return value;
-	}
+	if (controller == nullptr)
+		return NGreen::callback->readReg32(address);  // readReg32 now takes byte offsets
 
 	// Mirror Apple bounds logic, but keep a fallback path for the 2D-only dropped window.
 	auto partInfo = getMember<uint8_t *>(controller, 0xCF8);
@@ -2230,66 +1902,19 @@ uint32_t Gen11::wrapReadRegister32(void *controller, uint32_t address) {
 	bool dropped2DWindow = (address >= 0x2000U && address <= 0x23FFFFU);
 
 	if (twoDOnlyPart && dropped2DWindow) {
-		uint32_t value = NGreen::callback->readReg32(address);
-		if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsReadLogCount < 64) {
-			bcsReadLogCount++;
-			SYSLOG("ngreen", "BCS_TRACE read[%u] reg=0x%x val=0x%x CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x",
-			       bcsReadLogCount, address, value,
-			       NGreen::callback->readReg32(RING_CTL(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_HEAD(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_TAIL(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_START(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_HWS_PGA(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_MODE(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(GEN11_BCS_RSVD_INTR_MASK),
-			       NGreen::callback->readReg32(GEN11_GT_INTR_DW0),
-			       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
-			       NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE)));
-		}
-		if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
-			SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN read reg=0x%x val=0x%x dead-bcs=1", address, value);
-		}
-		return value;
+		return NGreen::callback->readReg32(address);  // readReg32 now takes byte offsets
 	}
 
 	if (mmioBase && mmioSize >= 4U && address < (mmioSize - 4U)) {
-		uint32_t value = *reinterpret_cast<volatile uint32_t *>(mmioBase + address);
-		if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsReadLogCount < 64) {
-			bcsReadLogCount++;
-			SYSLOG("ngreen", "BCS_TRACE read[%u] reg=0x%x val=0x%x CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x",
-			       bcsReadLogCount, address, value,
-			       NGreen::callback->readReg32(RING_CTL(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_HEAD(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_TAIL(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_START(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_HWS_PGA(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(RING_MODE(BLT_RING_BASE)),
-			       NGreen::callback->readReg32(GEN11_BCS_RSVD_INTR_MASK),
-			       NGreen::callback->readReg32(GEN11_GT_INTR_DW0),
-			       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
-			       NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE)));
-		}
-		if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
-			SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN read reg=0x%x val=0x%x dead-bcs=1", address, value);
-		}
-		return value;
+		return *reinterpret_cast<volatile uint32_t *>(mmioBase + address);
 	}
 
 	return FunctionCast(wrapReadRegister32, callback->owrapReadRegister32)(controller, address);
 }
 
 void Gen11::wrapWriteRegister32(void *controller, uint32_t address, uint32_t value) {
-	static uint32_t bcsWriteLogCount = 0;
 	if (controller == nullptr) {
-		recordRCSProgramRegisterWrite(address, value, "wrapWriteRegister32-null-controller");
 		NGreen::callback->writeReg32(address, value);
-		if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsWriteLogCount < 64) {
-			bcsWriteLogCount++;
-			SYSLOG("ngreen", "BCS_TRACE write[%u] reg=0x%x val=0x%x", bcsWriteLogCount, address, value);
-		}
-		if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
-			SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN write reg=0x%x val=0x%x deniedPath=dead-bcs", address, value);
-		}
 		return;
 	}
 
@@ -2325,26 +1950,6 @@ void Gen11::wrapWriteRegister32(void *controller, uint32_t address, uint32_t val
 			}
 		}
 	}
-
-	if (isBCSTraceEnabled() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF && bcsWriteLogCount < 64) {
-		bcsWriteLogCount++;
-		SYSLOG("ngreen", "BCS_TRACE write[%u] reg=0x%x val=0x%x CTL=0x%x HEAD=0x%x TAIL=0x%x START=0x%x HWS=0x%x MODE=0x%x IMR=0x%x IIR=0x%x IER=0x%x EMR=0x%x",
-		       bcsWriteLogCount, address, value,
-		       NGreen::callback->readReg32(RING_CTL(BLT_RING_BASE)),
-		       NGreen::callback->readReg32(RING_HEAD(BLT_RING_BASE)),
-		       NGreen::callback->readReg32(RING_TAIL(BLT_RING_BASE)),
-		       NGreen::callback->readReg32(RING_START(BLT_RING_BASE)),
-		       NGreen::callback->readReg32(RING_HWS_PGA(BLT_RING_BASE)),
-		       NGreen::callback->readReg32(RING_MODE(BLT_RING_BASE)),
-		       NGreen::callback->readReg32(GEN11_BCS_RSVD_INTR_MASK),
-		       NGreen::callback->readReg32(GEN11_GT_INTR_DW0),
-		       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE),
-		       NGreen::callback->readReg32(RING_EMR(BLT_RING_BASE)));
-	}
-	if (shouldContainBCSForAllow3D() && !isBCSReadyForUse() && address >= BLT_RING_BASE && address <= BLT_RING_BASE + 0x3FF) {
-		SYSLOG("ngreen", "BCS_ALLOW3D_CONTAIN write reg=0x%x val=0x%x deniedPath=dead-bcs", address, value);
-	}
-	recordRCSProgramRegisterWrite(address, value, "wrapWriteRegister32");
 
 	FunctionCast(wrapWriteRegister32, callback->owrapWriteRegister32)(controller,address,value);
 }
@@ -3433,9 +3038,6 @@ void Gen11::v54IrqWatchdog(thread_call_param_t param0, thread_call_param_t) {
 
 bool Gen11::start(void *that,void  *param_1)
 {
-	resetRCSProgrammingTrace();
-	dumpGTState("before IntelAccelerator::start", that);
-	logRCSProgrammingSummary("before IntelAccelerator::start");
 	// V44: Configurable scheduler type.
 	// populateAccelConfig reads "GraphicsSchedulerSelect" from the IORegistry.
 	// Types: 3=IGGuC (firmware), 4=IGScheduler4, 5=IGScheduler5 (host preemptive).
@@ -3443,64 +3045,38 @@ bool Gen11::start(void *that,void  *param_1)
 	// V52: Default depends on platform — real TGL uses GuC (3), RPL uses Host (5).
 	auto *service = static_cast<IOService *>(that);
 	{
-		int schedType = 5;
-		gSelectedSchedulerSource = "phase-default";
-		gSelectedSchedulerReason = "scheduler 5 selected for current bring-up phase";
-		char bootArgSched[16] = {};
-		if (PE_parse_boot_argn("ngreenSched", bootArgSched, sizeof(bootArgSched))) {
-			if (!strcmp(bootArgSched, "auto")) {
-				schedType = 5;
-				gSelectedSchedulerSource = "boot-arg";
-				gSelectedSchedulerReason = "ngreenSched=auto";
-			} else {
-				const int parsed = (bootArgSched[0] >= '0' && bootArgSched[0] <= '9' && bootArgSched[1] == '\0')
-					? (bootArgSched[0] - '0') : -1;
-				if (parsed >= 3 && parsed <= 5) {
-					schedType = parsed;
-					gSelectedSchedulerSource = "boot-arg";
-					gSelectedSchedulerReason = "ngreenSched explicit";
-				}
-			}
-		} else if (checkKernelArgument("-ngreenHostSched")) {
-			schedType = 5;
-			gSelectedSchedulerSource = "boot-flag";
-			gSelectedSchedulerReason = "-ngreenHostSched";
-		} else if (checkKernelArgument("-ngreenGuCSched")) {
-			schedType = 3;
-			gSelectedSchedulerSource = "boot-flag";
-			gSelectedSchedulerReason = "-ngreenGuCSched";
+		int schedType = NGreen::callback->isRealTGL ? 3 : 5;
+		
+		// 1. Check boot-arg first (highest priority)
+		int bootArgSched = 0;
+		if (PE_parse_boot_argn("ngreenSched", &bootArgSched, sizeof(bootArgSched)) && bootArgSched >= 3 && bootArgSched <= 5) {
+			schedType = bootArgSched;
+			SYSLOG("ngreen", "V44: scheduler type %d from boot-arg ngreenSched", schedType);
 		} else {
+			// 2. Check NootedGreen's own IORegistry properties (from Info.plist)
 			auto *myService = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(param_1));
 			if (myService) {
 				auto *stProp = OSDynamicCast(OSNumber, myService->getProperty("SchedulerType"));
 				if (stProp) {
-					const int val = static_cast<int>(stProp->unsigned32BitValue());
+					int val = (int)stProp->unsigned32BitValue();
 					if (val >= 3 && val <= 5) {
 						schedType = val;
-						gSelectedSchedulerSource = "Info.plist";
-						gSelectedSchedulerReason = "SchedulerType property";
+						SYSLOG("ngreen", "V44: scheduler type %d from Info.plist SchedulerType", schedType);
 					}
 				}
 			}
+			if (schedType == 5) {
+				SYSLOG("ngreen", "V44: using default scheduler type 5 (host preemptive)");
+			}
 		}
-
-		if (schedType == 3 && !isGuCReadyForScheduler3()) {
-			SYSLOG("ngreen", "V44: scheduler 3 requested but GuC readiness validation failed, falling back to scheduler 5");
-			schedType = 5;
-			gSelectedSchedulerReason = "scheduler 3 denied: GuC not ready";
-		}
-
-		gSelectedSchedulerType = schedType;
 		
 		auto *schedNum = OSNumber::withNumber(static_cast<unsigned long long>(schedType), 32);
 		if (schedNum) {
 			service->setProperty("GraphicsSchedulerSelect", schedNum);
 			schedNum->release();
-			SYSLOG("ngreen", "V44: injected GraphicsSchedulerSelect=%d source=%s reason=%s mode=%s",
-			       schedType, gSelectedSchedulerSource, gSelectedSchedulerReason, modeString(isStrictModeEnabled()));
+			SYSLOG("ngreen", "V44: injected GraphicsSchedulerSelect=%d", schedType);
 		}
 	}
-	dumpGTState("after scheduler mode injection", that);
 
 	// Inject MultiForceWakeSelect=1 into Development dictionary.
 	// This tells the accelerator to use SafeForceWakeMultithreaded (which we hook)
@@ -3668,8 +3244,6 @@ bool Gen11::start(void *that,void  *param_1)
 	}
 	
 	auto ret= FunctionCast(start, callback->ostart)(that,param_1);
-	dumpGTState("after IntelAccelerator::start", that);
-	logRCSProgrammingSummary("after IntelAccelerator::start");
 	ensureDisplayPipeBacking(that);
 	
 	// V65: IMMEDIATELY after original start() returns, re-enable RCS0 interrupts.
@@ -3700,8 +3274,6 @@ bool Gen11::start(void *that,void  *param_1)
 	IODelay(1000);
 	
 	SYSLOG("ngreen", "start() returned %d", ret);
-	logRCSProgrammingSummary("post-start pre-context-validation");
-	dumpAllContextValidation(static_cast<uint32_t>(gSelectedSchedulerType));
 	
 	// V43: Scheduler type diagnostic — read field_1190 bits 23-25
 	{
@@ -4045,16 +3617,6 @@ bool Gen11::start(void *that,void  *param_1)
 			} else {
 				SYSLOG("ngreen", "V110: V60 health monitor disabled — DisplayPipe will not be terminated (use -ngreenexp to enable)");
 			}
-		}
-	}
-
-	{
-		auto delayedDump = thread_call_allocate(ngreenDelayedGTDump, static_cast<thread_call_param_t>(that));
-		if (delayedDump) {
-			uint64_t deadline;
-			clock_interval_to_deadline(3, kSecondScale, &deadline);
-			thread_call_enter_delayed(delayedDump, deadline);
-			SYSLOG("ngreen", "GT dump armed for T+3 seconds after accelerator start");
 		}
 	}
 	
@@ -4800,7 +4362,6 @@ void Gen11::radWriteRegister32f(void *that,unsigned long param_1, UInt32 param_2
 
 void Gen11::raWriteRegister32(void *that,unsigned long param_1, UInt32 param_2)
 {
-	recordRCSProgramRegisterWrite(static_cast<uint32_t>(param_1 & 0xFFFFF), param_2, "raWriteRegister32");
 	// V93: optional plane SURF zero-write guard.
 	// Disabled by default due black-screen regressions; enable only with -ngreenv93.
 	struct V93PlaneSurfState {
@@ -5294,18 +4855,12 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 					if ((clientName && !strcmp(clientName, "IntelAccelerator")) ||
 					    (clientClass && !strcmp(clientClass, "IntelAccelerator"))) {
 						sawIntelAccelerator = true;
-						dumpGTState("fbcontroller saw IntelAccelerator child", client);
-						dumpAllContextValidation(static_cast<uint32_t>(gSelectedSchedulerType));
 					}
 				}
 				clientIter->release();
 				SYSLOG("ngreen", "FBController: post-publish IntelAccelerator visible=%d", sawIntelAccelerator);
-				if (!sawIntelAccelerator) {
-					dumpGTState("fbcontroller no IntelAccelerator child yet", service);
-				}
 			} else {
 				SYSLOG("ngreen", "FBController: post-publish child scan unavailable");
-				dumpGTState("fbcontroller child scan unavailable", service);
 			}
 		}
 	}
@@ -5367,7 +4922,9 @@ void Gen11::disableCDClock(void *that)
 
 bool Gen11::AppleIntelFramebufferinit(void *frame,void *cont,uint32_t param_2)
 {
-	
+	// Framebuffer live-cont fix disabled for boot-blocker isolation.
+	// getMember<void *>(frame, 0x4a40) = cont;
+	// getMember<void *>(frame, 0xc40) = cont;
 	auto ret=FunctionCast(AppleIntelFramebufferinit, callback->oAppleIntelFramebufferinit)(frame,cont,param_2 );
 	getMember<void *>(frame, 0x4a40) = ccont;
 	auto *fbService = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(frame));
@@ -5691,7 +5248,6 @@ void Gen11::hwConfigureCustomAUX(void *that,bool param_1)
 
 void Gen11::FastWriteRegister32(void *that,unsigned long param_1,uint32_t param_2)
 {
-	recordRCSProgramRegisterWrite(static_cast<uint32_t>(param_1), param_2, "FastWriteRegister32");
 	// ── V72: EMR write intercept — force all errors masked ──
 	if (param_1 == 0x20b4 || param_1 == 0x220b4) {
 		if (param_2 != 0xFFFFFFFF) {
@@ -5916,21 +5472,30 @@ void Gen11::IGHardwareBlit3DContextinitialize(void *that)
 
 	// V106: On spoofed paths, default to skip Apple's original init.
 	// The original still faults at +0x4c on some boots (page fault in SecurityAgent path).
-	// Preserve a diagnostic opt-in only: -ngreenV69AllowOriginal.
+	// In full-MTL mode, keep skip-by-default for stability; allow original only via opt-in arg.
+	// Use -ngreenV69AllowOriginal to test original init, and -ngreenV69SkipOriginal to hard-disable it.
 	const bool allowOriginal = checkKernelArgument("-ngreenV69AllowOriginal");
+	const bool forceFullMTL = shouldForceFullMetalPath();
+	const bool skipOriginal = checkKernelArgument("-ngreenV69SkipOriginal");
 	uint64_t gpuBufBase = mappedBufPtr ? getMember<uint64_t>(mappedBufPtr, 0x18) : 0;
 	uint64_t gpuBufSize = mappedBufPtr ? getMember<uint64_t>(mappedBufPtr, 0x20) : 0;
 	bool safeForOriginal = mappedBufPtr && gpuBufBase != 0 && gpuBufSize >= 0xD040;
-	if (allowOriginal && safeForOriginal) {
-		SYSLOG("ngreen", "V105: calling original Blit3D init (base=0x%llx size=0x%llx)",
+	const bool shouldTryOriginal = allowOriginal && !skipOriginal && safeForOriginal;
+	if (shouldTryOriginal) {
+		SYSLOG("ngreen", "V111B: calling original Blit3D init (opt-in, fullMTL=%d allow=%d skip=%d base=0x%llx size=0x%llx)",
+		       forceFullMTL, allowOriginal, skipOriginal,
 		       (unsigned long long)gpuBufBase, (unsigned long long)gpuBufSize);
 		FunctionCast(IGHardwareBlit3DContextinitialize, callback->oIGHardwareBlit3DContextinitialize)(that);
-		SYSLOG("ngreen", "V105: original Blit3D init completed");
+		SYSLOG("ngreen", "V111B: original Blit3D init completed");
 		return;
 	}
 	if (allowOriginal && !safeForOriginal) {
 		SYSLOG("ngreen", "V106: -ngreenV69AllowOriginal requested but rejected (base=0x%llx size=0x%llx)",
 		       (unsigned long long)gpuBufBase, (unsigned long long)gpuBufSize);
+	} else if (!NGreen::callback->isRealTGL && forceFullMTL && skipOriginal) {
+		SYSLOG("ngreen", "V111B: full-MTL active and original Blit3D init disabled by -ngreenV69SkipOriginal");
+	} else if (!NGreen::callback->isRealTGL && forceFullMTL && !allowOriginal) {
+		SYSLOG("ngreen", "V111B: full-MTL active; original Blit3D init remains disabled by default (use -ngreenV69AllowOriginal to test)");
 	} else if (v69Verbose || v69CallCount == 16 || v69CallCount == 64 || v69CallCount == 256) {
 		SYSLOG("ngreen", "V106: skip original Blit3D init on non-real TGL (base=0x%llx size=0x%llx)",
 		       (unsigned long long)gpuBufBase, (unsigned long long)gpuBufSize);
@@ -5954,9 +5519,15 @@ void Gen11::IGHardwareBlit3DContextinitialize(void *that)
 	getMember<uint64_t>(that, 0x108) = 0;
 	getMember<uint32_t>(that, 0x110) = 0;
 
-	// DO NOT call original — crashes at initialize()+0x4c writing to unmapped page 0xD
-	// DO NOT call blit3d_initialize_scratch_space / blit3d_init_ctx — their hooks are not
-	// connected so oblit3d_init_ctx=0 → FunctionCast to addr 0 → instant crash
+	// V113: Both blit3d_initialize_scratch_space and blit3d_init_ctx write 0x44 bytes
+	// to GPU context buffer+0xD000. That page is unmapped in the signed com.apple TGL
+	// kext regardless of CPU (same root cause as the original initialize crash).
+	// Skip both helper calls unconditionally — the zero-init above is sufficient.
+	if (v69Verbose)
+		SYSLOG("ngreen", "V113: skipped blit3d scratch/ctx helpers — GPU ctx page 0xD unmapped in signed TGL kext");
+
+	// DO NOT call original here — it still faults on some spoofed boots.
+	// If helper routing is unavailable, keep the zero-init fallback rather than crash.
 	if (v69Verbose)
 		SYSLOG("ngreen", "V69: initialize complete (SKIPPED original — crash prevention)");
 
@@ -5967,7 +5538,7 @@ int Gen11::blit3d_supported(void *param_1,void *param_2)
 	return 0;
 }
 
-uint8_t Gen11::IGMappedBuffergetMemory(void *that)
+void * Gen11::IGMappedBuffergetMemory(void *that)
 {
 	auto ret=FunctionCast(IGMappedBuffergetMemory, callback->oIGMappedBuffergetMemory)(that);
 	return ret;

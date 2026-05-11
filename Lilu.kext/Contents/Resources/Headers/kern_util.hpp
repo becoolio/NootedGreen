@@ -396,7 +396,6 @@ enum KernelVersion {
 	Ventura       = 22,
 	Sonoma        = 23,
 	Sequoia       = 24,
-	Tahoe         = 25,
 };
 
 /**
@@ -749,7 +748,7 @@ public:
 				values[i] = {};
 				thread_t nullThread = nullptr;
 				return atomic_compare_exchange_strong_explicit(&threads[i], &currThread,
-					nullThread, memory_order_acq_rel, memory_order_acquire);
+					nullThread, memory_order_acq_rel, memory_order_acq_rel);
 			}
 		}
 
