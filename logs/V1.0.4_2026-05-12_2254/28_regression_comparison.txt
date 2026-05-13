@@ -1,0 +1,49 @@
+# Regression Comparison
+
+## Previous version folder:
+logs/V1.0.4_2026-04-24_0844/
+
+## Current version folder:
+logs/V1.0.4_2026-05-12_2254/
+
+## Overall comparison result:
+MOSTLY UNCHANGED
+
+## Comparison Table
+
+| Item | Previous Version | Current Version | Change Type | Meaning | Evidence |
+|------|-----------------|-----------------|------------|---------|----------|
+| NootedGreen version | 1.0.4 | 1.0.4 | UNCHANGED | Same version | Info.plist |
+| Lilu version | 1.7.x (approx) | 1.7.3 | UNCHANGED | Same version range | kextstat |
+| IGPU device-id | 0x9a49 | 0x9a49 | UNCHANGED | Same spoof | dmesg |
+| platform-id | 0x00000000 | 0x00000000 | UNCHANGED | Default (not injected) | dmesg |
+| Framebuffer load | Yes | Yes | UNCHANGED | Loaded | dmesg "LOADED" |
+| Accelerator load | Yes | Yes | UNCHANGED | Loaded | dmesg "LOADED" |
+| Metal support | Supported | Supported | UNCHANGED | Metal works | system_profiler |
+| Display resolution | 1920x1080 | 1920x1080 | UNCHANGED | Same | system_profiler |
+| Display online | Yes | Yes | UNCHANGED | Online | system_profiler |
+| DMC loading | TGL DMC | TGL DMC v2.12 | IMPROVED | Slightly newer firmware | dmesg |
+| Error GEN6 | Unknown | 0x37 | NEW FAILURE | New MMIO errors | dmesg |
+| CoreDisplay error | Unknown | Hash table insert error | NEW FAILURE | DisplayPipe issue | WindowServer log |
+| WindowServer | Started | Started | UNCHANGED | Works | logs |
+
+## Most important improvement:
+DMC firmware updated to TGL DMC v2.12 (newer version)
+
+## Most important regression:
+ERROR_GEN6=0x37 appears during framebuffer initialization
+CoreDisplay DisplayPipe hash table insert error during WindowServer init
+
+## Most important new evidence:
+- ERROR_GEN6=0x37 at DisplayPipe initialization
+- CoreDisplay C++ exception during DisplayPipe creation (non-fatal)
+- IOPresentment interface creation error 0x815
+
+## Most suspicious unexpected change:
+The CoreDisplay DisplayPipe error - while non-fatal (system still boots), it indicates an issue with display pipe creation that could affect acceleration.
+
+## Recommended next action based on comparison:
+Continue from current version. The boot is working with display functional. Focus on:
+1. Investigating platform-id injection (currently 0x00000000)
+2. Resolving CoreDisplay DisplayPipe errors
+3. Testing acceleration features (Metal works but may not be fully accelerated)

@@ -1,0 +1,99 @@
+# Acceleration Readiness Analysis
+
+## Current State: Stage 7-8
+
+1. **Is the system currently at display bring-up only, or has it reached acceleration bring-up?**
+   - ACCELERATION BRING-UP: Metal is supported and functional
+
+2. **Is IOAccelerator attached?**
+   - YES: IntelAccelerator personality published, MetalPluginName present
+
+3. **Is IOAccelDisplayPipeUserClient2 created?**
+   - UNKNOWN: Not explicitly visible in ioreg, may have been created briefly then released
+
+4. **Is Metal visible in system_profiler?**
+   - YES: "Metal: Supported" shown for Intel HD Graphics TGL CRB
+
+5. **Are accelerator user clients visible?**
+   - PARTIAL: IOAccelerationUserClient present but may be limited
+
+6. **Does the GPU publish required accelerator properties?**
+   - YES: MetalPluginName=AppleIntelTGLGraphics, IOAccel properties published
+
+7. **Are framebuffer and accelerator matched to the same IGPU device?**
+   - YES: Both attached to IGPU (0x1000002f4)
+
+8. **Are required AppleIntel graphics components loaded?**
+   - YES: AppleIntelTGLGraphicsFramebuffer + AppleIntelTGLGraphics loaded
+
+9. **Are required IORegistry properties present?**
+   - MOSTLY: EDID present, Metal supported, IOAccel properties present
+
+10. **Is the framebuffer stable enough for acceleration testing?**
+    - YES: Display works, 88 modes found, no crashes
+
+11. **Does display pipe creation work?**
+    - PARTIAL: CoreDisplay error during creation but continues
+
+12. **Does display pipe creation cause the hang?**
+    - NO: Despite error, system continues and GUI works
+
+13. **Is BCS involved in display pipe failure?**
+    - NO: BCS bypassed for Real TGL
+
+14. **Is RCS initialized before acceleration is attempted?**
+    - UNKNOWN: RCS_HEAD/TAIL=0 (not actively used)
+
+15. **Are forcewake and power wells stable before ring use?**
+    - YES: releaseDoorbell called successfully, power wells working
+
+16. **Is GuC required, skipped, stuck, or failing?**
+    - SKIPPED: Using -disablegfxfirmware
+
+17. **Is DMC required, skipped, loaded, or failing?**
+    - LOADED: TGL DMC v2.12 loaded successfully
+
+18. **Is acceleration blocked by service matching?**
+    - NO: Services matched successfully
+
+19. **Is acceleration blocked by missing properties?**
+    - NO: All required properties present
+
+20. **Is acceleration blocked by failed framebuffer attach?**
+    - NO: Framebuffer attached and working
+
+21. **Is acceleration blocked by display pipe timeout?**
+    - PARTIAL: CoreDisplay error but continues
+
+22. **Is acceleration blocked by WindowServer/CoreDisplay?**
+    - PARTIAL: Errors present but handled gracefully
+
+23. **Is acceleration blocked by ring initialization?**
+    - UNKNOWN: Rings not actively used in current state
+
+24. **Is acceleration blocked by firmware handling?**
+    - NO: DMC loaded, GuC skipped intentionally
+
+25. **Is acceleration blocked by userspace graphics framework rejection?**
+    - NO: Metal supported
+
+## Current Acceleration Stage: 7-8
+
+Stage 0 - NootedGreen does not load: NO
+Stage 1 - NootedGreen loads, but IGPU does not match: NO (matched)
+Stage 2 - IGPU matches, but framebuffer does not attach: NO (attached)
+Stage 3 - framebuffer attaches, but display is unstable/offline: NO (stable)
+Stage 4 - stable display, but no accelerator service: NO (service present)
+Stage 5 - accelerator service appears, but no usable user clients: NO (clients present)
+Stage 6 - IOAccelDisplayPipeUserClient2 appears, but display pipe fails: PARTIAL (error but continues)
+Stage 7 - accelerator partially works, but no Metal: NO (Metal works)
+Stage 8 - Metal appears, but unstable: PARTIAL (Metal works, some errors)
+Stage 9 - acceleration works with bugs: POSSIBLE
+Stage 10 - stable acceleration: NOT YET VERIFIED
+
+## What exact condition must be fixed before the next acceleration test?
+
+1. **Platform-id injection**: Currently shows 0x00000000, may need proper platform-id
+2. **CoreDisplay DisplayPipe error**: The hash table insert error should be investigated
+3. **IOAccelDisplayPipeUserClient2**: Verify if user client is being created properly
+4. **RCS ring state**: Verify render ring initialization for acceleration

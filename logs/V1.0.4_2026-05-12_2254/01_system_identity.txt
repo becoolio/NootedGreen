@@ -1,0 +1,39 @@
+# System Identity
+
+## OS Version
+ProductName: macOS
+ProductVersion: 14.8.3
+BuildVersion: 23J220
+
+## Kernel
+Darwin macbook-pro 23.6.0 Darwin Kernel Version 23.6.0: Wed Nov  5 21:49:21 PST 2025; root:xnu-10063.141.1.708.2~1/RELEASE_X86_64 x86_64
+
+## Host
+hostname: macbook-pro
+uptime: 22:54  up 10 mins, 1 user, load averages: 3.26 8.84 9.20
+
+## Boot Time
+kern.boottime: { sec = 1778643861, usec = 4986 } Tue May 12 22:44:21 2026
+
+## Hardware
+hw.model: MacBookPro16,2
+
+## SIP Status
+System Integrity Protection status: unknown (Custom Configuration).
+Configuration:
+    Apple Internal: disabled
+    Kext Signing: disabled
+    Filesystem Protections: disabled
+    Debugging Restrictions: disabled
+    DTrace Restrictions: disabled
+    NVRAM Protections: disabled
+    BaseSystem Verification: disabled
+
+## Authenticated Root
+Authenticated Root status: disabled
+
+## NVRAM Boot Args
+boot-args: itlwm_cc=US -v keepsyms=1 debug=0x100 -NGreenDebug ngreen-dmc=tgl -disablegfxfirmware ngreenSched=5
+
+## Current User
+root (executed via sudo)

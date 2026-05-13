@@ -1,0 +1,60 @@
+# Raw Command List
+
+## Commands Executed
+
+### System Identity
+1. sw_vers
+2. uname -a
+3. hostname
+4. uptime
+5. whoami
+6. date
+7. sysctl kern.boottime
+8. sysctl hw.model
+9. csrutil status
+10. csrutil authenticated-root
+11. nvram -p
+12. nvram boot-args
+
+### Git and Build
+13. git branch --show-current
+14. git log -1 --oneline
+15. git status --short
+
+### Kernel Logs
+16. log show --last boot --style syslog --info --debug (saved to file)
+17. dmesg (saved to file)
+18. dmesg | grep -iE "Lilu|Nooted|NGreen"
+
+### Kexts
+19. kmutil showloaded
+20. kmutil showloaded | grep -iE "Lilu|Nooted|NGreen"
+21. kextstat
+22. kextstat | grep -iE "Lilu|Nooted|NGreen"
+
+### IORegistry
+23. ioreg -lw0 -p IOService (graphics tree - saved to file)
+24. ioreg -l (lite - saved to file)
+
+### System Profiler
+25. system_profiler SPDisplaysDataType
+
+### WindowServer Logs
+26. log show --last boot --predicate 'process == "WindowServer"' --style syslog --info --debug
+
+### Output Files Created
+- 00_README_BOOT_CONTEXT.txt
+- 01_system_identity.txt
+- 02_git_and_build_state.txt
+- 03_loaded_kexts_filtered.txt
+- 05_kernel_log_filtered_graphics.txt
+- 14_system_profiler_graphics.txt
+- 16_windowserver_coredisplay_combined.txt
+- 23_failure_matrix.txt
+- 24_success_matrix.txt
+- 25_next_10_implementations.md
+- 26_implementation_plan.md
+- 27_summary_report.md
+- 28_regression_comparison.txt
+- 29_acceleration_readiness_analysis.txt
+- 30_raw_command_list.txt

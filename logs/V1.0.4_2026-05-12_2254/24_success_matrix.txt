@@ -1,0 +1,58 @@
+# Success Matrix - What Worked in This Boot
+
+## System Boot
+- macOS booted successfully
+- Login screen reached (user can interact with system)
+- No kernel panic
+- No immediate reboot
+- No black screen
+
+## Lilu
+- Lilu loaded (version 1.7.3)
+- Lilu providing plugin API for NootedGreen
+
+## NootedGreen
+- NootedGreen loaded (version 1.0.4)
+- Version matches source (1.0.4)
+- All 5 initialization stages completed successfully
+- IGPU matched (GFX0 with device-id 0x9a49)
+- Framebuffer personality published
+- Accelerator properties published
+- MetalPluginName: AppleIntelTGLGraphics
+- Real Tiger Lake detected
+
+## Graphics Stack
+- IGPU present in IORegistry (GFX0 -> IGPU)
+- Device ID spoofed correctly (0x9a49)
+- AppleIntelTGLGraphicsFramebuffer loaded
+- AppleIntelTGLGraphics (accelerator) loaded
+- 3 framebuffer instances published
+- Framebuffer 0 is boot display (AAPL,boot-display=Yes)
+
+## Display
+- Internal display detected
+- Display online (Online=Yes in system_profiler)
+- Resolution: 1920x1080 (1080p)
+- Main display: Yes
+- EDID present and parsed
+- 88 display modes found
+
+## Metal
+- Metal supported (system_profiler shows "Metal: Supported")
+- MetalPluginName published (AppleIntelTGLGraphicsMTLDriver)
+
+## Power Management
+- DMC firmware loaded (TGL DMC v2.12)
+- Power wells responding (releaseDoorbell called)
+- AUX communication working (V97AUX messages)
+- Link training successful (linkRate=24, bpp=10, laneCount=2)
+
+## WindowServer
+- WindowServer started
+- No crash during initialization
+- Display configuration applied (88 modes)
+
+## Error Recovery
+- Despite CoreDisplay DisplayPipe error, system continued
+- Despite ERROR_GEN6=0x37, display worked
+- Despite IOPresentment error 0x815, GUI available

@@ -1,0 +1,113 @@
+# NootedGreen and Graphics Kernel Log (Filtered from dmesg)
+
+## NootedGreen Boot Messages
+
+[    0.655191]: NootedGreen    ngreen: @ ============================================================
+[    0.655193]: NootedGreen    ngreen: @ NootedGreen V1.0.4 - STARTING
+[    0.655194]: NootedGreen    ngreen: @ ============================================================
+[    0.655196]: NootedGreen    ngreen: @ Acceleration gate: -allow3d=0
+[    0.655197]: NootedGreen    ngreen: @ Acceleration gate: boot is missing -allow3d; acceleration probe results are not authoritative
+[    0.655201]: NootedGreen    ngreen: @ Registered Gen11 kext watchers
+
+[    1.711042]: NootedGreen    ngreen: @ [Stage 1] Starting processPatcher
+[    1.711206]: NootedGreen    ngreen: @ [Stage 2] IGPU property seeding: seedIGPUProps=0 autoSeed=0
+[    1.711209]: NootedGreen    ngreen: @ compat mode: legacy IGPU property seeding disabled (use -ngreenforceprops to enable)
+
+[    2.823481]: NootedGreen    ngreen: @ [Stage 3] IGPU matched: name=GFX0 device-id=0x9a49
+[    2.823579]: NootedGreen    ngreen: @ [IGPU Props After Injection] device-id=0x9a49 platform-id=0x00000000 vendor-id=0x8086
+[    2.823583]: NootedGreen    ngreen: @ V52: CPU family=0x6 model=0x8c stepping=1 isRealTGL=1
+[    2.823586]: NootedGreen    ngreen: @ stolen_size 0xa000000
+[    2.823593]: NootedGreen    ngreen: @ Publishing TGL framebuffer personality IOClass=AppleIntelFramebufferController provider=IOPCIDevice pciMatch=0x9A498086 count=8
+[    2.823622]: NootedGreen    ngreen: @ Published TGL framebuffer personality for 0x9A49: 1
+[    2.823624]: NootedGreen    ngreen: @ Republishing IGPU after framebuffer personality: name=IGPU class=IOPCIDevice
+[    2.823642]: NootedGreen    ngreen: @ [Stage 4] Framebuffer personality published
+[    2.823652]: NootedGreen    ngreen: @ [Accelerator Props] Published MetalPluginName=AppleIntelTGLGraphics and IOAccel properties
+[    2.823654]: NootedGreen    ngreen: @ [Accelerator Verify] MetalPluginName=AppleIntelTGLGraphics
+[    2.823657]: NootedGreen    ngreen: @ [Stage 5] PCI config read routing complete
+[    2.823658]: NootedGreen    ngreen: @ [NootedGreen Init Complete] All stages finished successfully
+
+## Accelerator Tracer
+[    2.826373]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=13
+[    2.826444]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=12
+[    3.011320]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=16
+[   12.969117]: NootedGreen      DYLD: @ FULL_MTL_ACTIVE=1 (isRealTGL=1 forceFullMTL=0 noMetal=0 fullMTLStage=0 skylBypass=0)
+[   24.053783]: NootedGreen      DYLD: @ V50: Patched gpu_bundle_find_trusted: /Library/GPUBundles -> /Library/Extensions
+[   33.906849]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=6
+[   33.906852]: NootedGreen    NGreen: @ IOAccelF2: TEXT 0xffffff7f986a9000 size 0x86000
+[   33.907024]: NootedGreen    NGreen: @ IOAccelF2 f2 (fixed): OK
+[   33.907807]: NootedGreen    NGreen: @ IOAccelF2 f1 (fixed): OK
+[   33.919696]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=10
+[   33.919702]: NootedGreen    ngreen: @ [FB Tracer] AppleIntelTGLGraphicsFramebuffer LOADED
+[   33.919709]: NootedGreen    ngreen: @ init AppleIntelTGLGraphicsFramebuffer
+[   33.946729]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=15
+[   33.949006]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=14
+[   33.961697]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=11
+[   33.961702]: NootedGreen    ngreen: @ [HW Tracer] AppleIntelTGLGraphics LOADED
+[   33.961704]: NootedGreen    ngreen: @ [HW Tracer] AppleIntelTGLGraphics (HW accelerator) initializing
+[   33.962339]: NootedGreen    ngreen: @ V52: Real TGL \M-b\M^@\M^T skipping topology hardcodes and BCS bypass
+[   33.962341]: NootedGreen    ngreen: @ Loaded AppleIntelTGLGraphics! Real TGL \M-b\M^@\M^T native topology
+
+## Framebuffer and Display
+[   33.963905]: NootedGreen    ngreen: @ AppleIntelBaseControllerstart: applying display workarounds
+[   33.963942]: NootedGreen    ngreen: @ AppleIntelBaseControllerstart: display workarounds applied
+[   33.963944]: NootedGreen    ngreen: @ FBController::start() entering...
+[   33.967952]: NootedGreen    ngreen: @ [PowerWell] releaseDoorbell called (count=1)
+[   33.968031]: NootedGreen    ngreen: @ FB triage publish: restored FB_Triage on IOResources
+[   33.968034]: NootedGreen    ngreen: @ Boot display publish: fb=AppleIntelFramebufferDiags idx=0 boot=1
+[   33.968044]: NootedGreen    ngreen: @ DisplayPipe MMIO[fb-init boot]: RCS_HEAD=0x0 RCS_TAIL=0x0 RCS_CTL=0x0 ERROR_GEN6=0x0 FW_RENDER=0x0 ACK=0x0 FW_BLT=0x10000 ACK=0x0
+[   33.968077]: NootedGreen    ngreen: @ Boot display publish: fb=AppleIntelFramebufferDiags idx=1 boot=0
+[   33.968086]: NootedGreen    ngreen: @ DisplayPipe MMIO[fb-init aux]: RCS_HEAD=0x0 RCS_TAIL=0x0 RCS_CTL=0x0 ERROR_GEN6=0x0 FW_RENDER=0x0 ACK=0x0 FW_BLT=0x10000 ACK=0x0
+[   33.970443]: NootedGreen    ngreen: @ NB-BUILD-V50-ALLOW-METAL
+[   33.970446]: NootedGreen    ngreen: @ hwInitCState B48=1 CE4=1
+[   33.970448]: NootedGreen    ngreen: @ hwInitCState: ngreen-dmc=tgl, loading TGL DMC v2.12 (18976 bytes)
+[   33.970961]: NootedGreen    ngreen: @ hwInitCState: TGL DMC loaded
+[   33.970962]: NootedGreen    ngreen: @ hwInitCState: done
+[   33.970970]: NootedGreen    ngreen: @ hwAUX p1=1 CE4=1
+[   33.986172]: AppleSunriseHALDeviceStartingAppleSunriseHALDeviceStarted
+[   33.998480]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=5
+[   33.999931]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=3
+[   34.001367]: NootedGreen    ngreen: @ [Accelerator Tracer] processKext index=4
+[   34.001367]: NootedGreen    ngreen: @ FBController::start() returned 1
+
+## Accelerator Personality
+[   34.001370]: NootedGreen    ngreen: @ FBController: injecting IntelAccelerator personality into IOCatalogue
+[   34.001389]: NootedGreen    ngreen: @ V78A: default native DisplayPipeSupported (dp1 default ON)
+[   34.001394]: NootedGreen    ngreen: @ V44: IntelAccelerator personality bundle=com.xxxxx.driver.AppleIntelTGLGraphics match=0x9A498086 metal=AppleIntelTGLGraphicsMTLDriver gl=AppleIntelTGLGraphicsGLDriver va=AppleIntelTGLGraphicsVADriver props=17
+[   34.001458]: NootedGreen    ngreen: @ FBController: addDrivers to gIOCatalogue returned 1
+[   34.001460]: NootedGreen    ngreen: @ FBController: calling registerService() to trigger accelerator matching for IntelAccelerator
+[   34.001467]: NootedGreen    ngreen: @ V78A: default native DisplayPipeSupported (dp1 default ON)
+[   34.001471]: NootedGreen    ngreen: @ DisplayPipe policy[fbcontroller registerService]: enabled=1 service=AppleIntelFramebufferController class=AppleIntelFramebufferController
+[   34.001486]: NootedGreen    ngreen: @ DisplayPipe MMIO[fbcontroller pre-registerService]: RCS_HEAD=0x0 RCS_TAIL=0x0 RCS_CTL=0x0 ERROR_GEN6=0x37 FW_RENDER=0x10000 ACK=0x0 FW_BLT=0x10000 ACK=0x0
+[   34.001490]: NootedGreen    ngreen: @ V111[1] fbcontroller post-registerService root name=AppleIntelFramebufferController class=AppleIntelFramebufferController state=0xa open=0
+[   34.001493]: NootedGreen    ngreen: @ V111[1] fbcontroller post-registerService provider name=IGPU class=IOPCIDevice state=0xa
+[   34.001520]: NootedGreen    ngreen: @ DisplayPipe MMIO[fbcontroller post-registerService]: RCS_HEAD=0x0 RCS_TAIL=0x0 RCS_CTL=0x0 ERROR_GEN6=0x37 FW_RENDER=0x10000 ACK=0x0 FW_BLT=0x10000 ACK=0x0
+[   34.001522]: NootedGreen    ngreen: @ FBController: post-publish child name=IntelFBClientControl class=IntelFBClientControl state=0xa
+[   34.001524]: NootedGreen    ngreen: @ FBController: post-publish child name=AppleIntelMEClientController class=AppleIntelMEClientController state=0x0
+
+## Power Well and AUX
+[   38.663570]: NootedGreen    ngreen: @ [PowerWell] releaseDoorbell called (count=2)
+[   38.672402]: NootedGreen    ngreen: @ V97AUX[1]: addr=0x0600 len=1 ret=0x0
+[   38.690730]: NootedGreen    ngreen: @ V96: getOnlineInfo: orig=1 forced=1 (fb=0xffffffc8badbe000 dp=0xffffff8c04f69000)
+
+## Link Training
+[   38.710452]: NootedGreen    ngreen: @ V90L4R[1]: realTGL linkRate=24 bpp=10 laneCount=2
+[   38.732526]: NootedGreen    ngreen: @ V90L4R[2]: realTGL linkRate=24 bpp=10 laneCount=2
+[   38.738162]: NootedGreen    ngreen: @ V90L4R[3]: realTGL linkRate=24 bpp=10 laneCount=2
+[   38.919011]: NootedGreen    ngreen: @ V90L4R[4]: realTGL linkRate=24 bpp=10 laneCount=2
+
+## Boot Args
+[   36.477448]: Boot args: itlwm_cc=US -v keepsyms=1 debug=0x100 -NGreenDebug ngreen-dmc=tgl -disablegfxfirmware ngreenSched=5
+
+## Analysis
+- NootedGreen loaded and initialized successfully
+- All 5 stages completed
+- IGPU matched: GFX0 with device-id 0x9a49
+- platform-id = 0x00000000 (may need injection)
+- Real TGL (Tiger Lake) detected
+- DMC loaded: TGL DMC v2.12
+- Framebuffer personality published
+- MetalPluginName: AppleIntelTGLGraphics
+- Display pipe enabled by default
+- ERROR_GEN6=0x37 at registerService time (some errors present)
+- Link training successful (linkRate=24, bpp=10, laneCount=2)
+- Power wells working (releaseDoorbell called)

@@ -1,0 +1,55 @@
+# WindowServer and CoreDisplay Combined Logs
+
+## WindowServer Key Events
+
+### WindowServer Started
+2026-05-12 22:44:55 - WindowServer[167] started
+
+### CoreDisplay Initialization
+(CoreDisplay) [INFO] - init_page_flip: page flip mode is on
+(CoreDisplay) [INFO] - Start crash log message timer
+(CoreDisplay) [INFO] - IOBacklight module is not in use
+
+### GPUWrangler Registration
+(GPUWrangler) [INFO] - gpu 0xf909 flags 0x10 (IG) vid.did=8086.9a49 b:d:f=0:2:0
+(GPUWrangler) [INFO] - gpu 0xf909 pci 0x1000002f4 IOService:/AppleACPIPlatformExpert/PC00@0/AppleACPIPCI/IGPU@2
+(GPUWrangler) [INFO] - GPUWrangler Add event: Begin
+
+### Display Configuration
+(CoreDisplay) [WARN] - Creating FB 1 of 3
+(CoreDisplay) [INFO] - InstallTimingWithWireFormats - SDR_RGB__8_Native succeeded for mode 0x80001000 (1920x1080 to 1920x1080@60.0) for 0x1000004f8
+
+### Errors Detected
+(CoreDisplay) [ERROR] - isBroadwellOrLater_block_invoke: sysctlbyname fail with error status 0x00000000
+(IOPresentment) Error: Interface creation error: 0x815
+
+### CRITICAL ERROR - DisplayPipe Creation
+(CoreDisplay) [ERROR] - 
+    0   std::__1::unique_ptr<std::__1::__hash_node<...>> std::__1::__hash_table<...>::__construct_node<...>() + 2965
+    1   std::__1::pair<...> std::__1::__hash_table<...>::__emplace_unique_impl<...>() + 52
+    2   CoreDisplay::Framebuffer::Framebuffer(unsigned int, unsigned long long, unsigned int, unsigned long long) + 3627
+    3   CoreDisplay::GPU::GPU(__GPUWranglerGPU*, dispatch_queue_s*) + 747
+    4   invocation function for block in CoreDisplay::GPUController::GPUController() + 2545
+    5   GPUWranglerRegisterEventBlock + 1077
+    6   CGXMappedDisplayStart + 4985
+    7   CGXDisplayDriverInitialize + 947
+    8   WS::Displays::CoreDisplayManager::initialize() + 43
+    9   WSInitialize + 3833
+   10  SLXServer + 1254
+   11     WindowServer 0x00000001073da48c WindowServer + 5260
+
+## IOFBSetDisplayModeAndDepth Failures
+(CoreDisplay) [WARN] - IOFBSetDisplayModeAndDepth: Setting mode 0x0 with depth 0x0 on displayID: 0x0 fbRegID: 0x1000004f8
+(CoreDisplay) [WARN] - IOFBSetDisplayModeAndDepth: Failed to obtain mode info from IOFBGetDisplayModeInformation()
+
+## Display Pipe Info
+(CoreDisplay) - IOAccelDisplayPipeCapabilities: DisplayPipeSupported=Yes, TransactionsSupported=Yes
+
+## Analysis
+- WindowServer started successfully
+- CoreDisplay initialized
+- Display modes found: 88 modes for main display
+- ERROR: C++ exception during DisplayPipe hash table construction
+- ERROR: Interface creation error 0x815 in IOPresentment
+- Despite errors, system appears to be running (GUI accessible)
+- The DisplayPipe creation error may be non-fatal or handled gracefully

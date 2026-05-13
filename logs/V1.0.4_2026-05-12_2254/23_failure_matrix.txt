@@ -1,0 +1,43 @@
+# Failure Matrix
+
+| Component | Expected | Observed | Status | Evidence | Likely Meaning |
+|-----------|----------|----------|--------|----------|----------------|
+| OpenCore boot-args | Custom args | itlwm_cc=US -v keepsyms=1 debug=0x100 -NGreenDebug ngreen-dmc=tgl -disablegfxfirmware ngreenSched=5 | PASS | NVRAM boot-args | Correct debug flags present |
+| Lilu load | Loaded | Loaded v1.7.3 | PASS | kextstat index 56 | Lilu working |
+| NootedGreen load | Loaded | Loaded v1.0.4 | PASS | kextstat index 58 | NootedGreen working |
+| NootedGreen version | 1.0.4 | 1.0.4 | PASS | Info.plist vs loaded | Version matches |
+| NootedGreen patch application | All stages | Stages 1-5 complete | PASS | dmesg "[Stage X]" messages | All patches applied |
+| NootedGreen function routing | Routes exist | Routes complete | PASS | processKext tracer messages | Functions routed |
+| IGPU IORegistry presence | GFX0/IGPU | GFX0 then IGPU | PASS | ioreg output | Both present |
+| IGPU device-id | 0x9a49 | 0x9a49 | PASS | dmesg "device-id=0x9a49" | Spoof working |
+| IGPU platform-id | Injected | 0x00000000 | PARTIAL | dmesg "platform-id=0x00000000" | May need injection |
+| AppleIntel graphics kext load | Multiple | AppleIntelTGLGraphicsFramebuffer + AppleIntelTGLGraphics | PASS | dmesg "LOADED" messages | Kexts loaded |
+| AppleIntel framebuffer attach | Attached | AppleIntelFramebufferController active | PASS | ioreg | Attached |
+| AppleIntel accelerator attach | Attached | IntelAccelerator personality published | PASS | dmesg "IntelAccelerator personality" | Published |
+| framebuffer service publication | Published | AppleIntelFramebufferDiags@0 active | PASS | ioreg | Published |
+| IOFramebuffer availability | Available | IOFramebufferUserClient present | PASS | ioreg | Available |
+| EDID present | Present | IODisplayEDID present | PASS | ioreg | Present |
+| VBT present | Present | Not explicitly visible | UNKNOWN | - | May need verification |
+| OpRegion present | Present | Not explicitly visible | UNKNOWN | - | May need verification |
+| display online | Online | Online=Yes | PASS | system_profiler | Display online |
+| display mode publication | Modes | 88 modes found | PASS | WindowServer logs | Modes published |
+| backlight service | Present | IOBacklight module not in use | PARTIAL | WindowServer log | Backlight control working |
+| WindowServer startup | Started | Started at 22:44:55 | PASS | WindowServer logs | Started |
+| CoreDisplay transaction | Transactions | TransactionsSupported=Yes | PASS | ioreg IOAccelDisplayPipeCapabilities | Enabled |
+| IOAccelDisplayPipeUserClient2 | May appear | Not explicitly in ioreg | UNKNOWN | - | May not be created |
+| IOAccelerator attach | Attached | MetalPluginName published | PASS | ioreg | Metal available |
+| Metal support | Supported | Metal: Supported | PASS | system_profiler | Metal works |
+| GuC firmware | Skipped/Loaded | Not explicitly logged | UNKNOWN | - | Using -disablegfxfirmware |
+| HuC firmware | Skipped/Loaded | Not explicitly logged | UNKNOWN | - | May be skipped |
+| DMC firmware | Loaded | TGL DMC v2.12 loaded | PASS | dmesg "TGL DMC loaded" | DMC working |
+| forcewake | Active | releaseDoorbell called | PASS | dmesg | Power wells working |
+| power wells | Active | releaseDoorbell called | PASS | dmesg | Power wells OK |
+| MMIO BAR0 | Accessible | MMIO reads returning | PASS | dmesg V97AUX messages | Accessible |
+| RCS ring | May init | RCS_HEAD/TAIL=0 | PARTIAL | dmesg "RCS_HEAD=0x0" | Not actively used |
+| BCS ring | Bypassed | BCS bypass for Real TGL | PASS | dmesg "BCS bypass" | Bypassed |
+| VCS ring | Present | Not explicitly logged | UNKNOWN | - | Not verified |
+| VECS ring | Present | Not explicitly logged | UNKNOWN | - | Not verified |
+| execlists | May init | Not explicitly logged | UNKNOWN | - | Not verified |
+| stamp advancement | Advancing | Not explicitly logged | UNKNOWN | - | Not verified |
+| panic status | No panic | No panic | PASS | dmesg/syslog | No panic |
+| crash reports | None | None found | PASS | DiagnosticReports | No crashes |

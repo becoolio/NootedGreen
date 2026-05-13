@@ -1,0 +1,33 @@
+# Git and Build State
+
+## Git Branch
+main
+
+## Latest Commit
+2425a85 revert to 1.0.4
+
+## Git Status
+(no uncommitted changes)
+
+## Source Version (Info.plist)
+- CFBundleIdentifier: com.StezzaPilot.NootedGreen
+- CFBundleShortVersionString: 1.0.4
+- CFBundleVersion: 1.0.4
+
+## Loaded Kext Versions
+- Lilu: 1.7.3 (as.vit9696.Lilu)
+- NootedGreen: 1.0.4 (com.StezzaPilot.NootedGreen)
+
+## Version Comparison
+Source Version: 1.0.4
+Loaded Version: 1.0.4
+Match: YES
+
+## Lilu Version Comparison
+Source Info.plist requires: 1.6.4
+Loaded version: 1.7.3
+Note: System has newer Lilu than source specifies (may be from EFI partition)
+
+## Build Artifacts
+- Build folder: /Users/becoolio/Documents/Current/NootedGreen/build/Build/Products/Release/
+- Kext path in EFI: /Volumes/EFI/EFI/OC/Kexts/NootedGreen.kext

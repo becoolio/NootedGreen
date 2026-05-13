@@ -1,0 +1,14 @@
+# Loaded Kexts (Filtered)
+
+## Kextstat Output
+   56   14 0xffffff8003cb0000 0x8a000    0x8a000    as.vit9696.Lilu (1.7.3) 2B7E9132-B413-3A5C-B822-D8BC4A80D2CD <9 7 6 3 2 1>
+   58    0 0xffffff8003f21000 0x57000    0x57000    com.StezzaPilot.NootedGreen (1.0.4) 2AD91788-33D4-362A-9D9C-9B2E973DAB66 <56 18 9 7 6 3 2 1>
+
+## kmutil showloaded Output
+(as.vit9696.Lilu): Loaded, Version 1.7.3
+(com.StezzaPilot.NootedGreen): Loaded, Version 1.0.4
+
+## Analysis
+- Lilu: LOADED
+- NootedGreen: LOADED
+- Both kexts loading correctly
