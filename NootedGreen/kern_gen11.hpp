@@ -1246,11 +1246,6 @@ private:
 	// ── GuC (Graphics micro-Controller) firmware ──
 	static unsigned long loadGuCBinary(void *that);  // route: intercept GuC FW load
 	mach_vm_address_t oloadGuCBinary {};
-	static bool patchEmbeddedTGLFirmware(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size);
-	static bool patchEmbeddedFirmwareAt(mach_vm_address_t symbol, const uint8_t *blob, size_t blobSize,
-		const char *label, size_t zeroFill = 0);
-	static bool patchEmbeddedFirmwareMatch(mach_vm_address_t address, size_t size, const uint8_t *needle, size_t needleSize,
-		const uint8_t *blob, size_t blobSize, const char *label);
 
 	static int alwaysReturnSuccess(void *that);  // stub: always returns 0 (success)
 	mach_vm_address_t oalwaysReturnSuccess {};
@@ -1305,9 +1300,6 @@ private:
 	mach_vm_address_t oDisplayMachineInit {};
 	mach_vm_address_t oDisplayMachineStart {};
 	mach_vm_address_t oDisplayMachineProbeDisplayPipes {};
-
-	static bool deviceStart(void *that);   // V111: force IGAccelDevice::deviceStart true on RPL
-	mach_vm_address_t odeviceStart {};
 	
 	static bool patchRCSCheck(mach_vm_address_t& start);  // bypass RCS engine check
 	static void forceWake(void *that, bool set, uint32_t dom, uint8_t ctx);  // custom forcewake
@@ -1603,7 +1595,7 @@ private:
 	static bool  initHardwareCaps(void *this_ptr);  // query HW capabilities
 	mach_vm_address_t oinitHardwareCaps {};
 	
-	static void * IGMappedBuffergetMemory(void *that);
+	static uint8_t IGMappedBuffergetMemory(void *that);
 	mach_vm_address_t oIGMappedBuffergetMemory {};
 	
 	static void *  IGHardwareBlit3DContextoperatornew(void *that,unsigned long param_1);

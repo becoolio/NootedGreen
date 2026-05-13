@@ -2,13 +2,12 @@
 //  details.
 #include "kern_gen11.hpp"
 #include <Headers/kern_api.hpp>
-#include "PrivateHeaders/IGFirmwareAssets.hpp"
 #include "kern_genx.hpp"
 #include "kern_green.hpp"
 #include <IOKit/IOCatalogue.h>
 #include <kern/thread_call.h>
 
-// ==== kextInfos: ICL fallback from /System/Library/Extensions + TGL FB from /System/Library/Extensions (DTK) ====
+// ==== 4 kextInfos: TGL from /Library/Extensions, ICL fallback from /System/Library/Extensions ====
 
 // ICL FB — com.apple (fallback path)
 static const char *pathsICLFB[] = {
@@ -24,19 +23,19 @@ static const char *pathsICLHW[] = {
 static KernelPatcher::KextInfo kextG11HW {"com.apple.driver.AppleIntelICLGraphics", pathsICLHW, 1, {}, {},
     KernelPatcher::KextInfo::Unloaded};
 
-// TGL FB — com.apple (DTK, from /System/Library/Extensions/)
+// TGL FB — com.xxxxx (loaded from /Library/Extensions/)
 static const char *pathsTGLFB[] = {
-    "/System/Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelTGLGraphicsFramebuffer",
+    "/Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelTGLGraphicsFramebuffer",
 };
-static KernelPatcher::KextInfo kextTGLFB {"com.apple.driver.AppleIntelTGLGraphicsFramebuffer", pathsTGLFB, 1,
+static KernelPatcher::KextInfo kextG11FBT {"com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer", pathsTGLFB, 1,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
-// TGL HW — com.apple (loaded from /System/Library/Extensions/)
+// TGL HW — com.xxxxx (loaded from /Library/Extensions/)
 static const char *pathsTGLHW[] = {
-    "/System/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
+    "/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
 };
-static KernelPatcher::KextInfo kextTGLHW {"com.apple.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
+static KernelPatcher::KextInfo kextG11HWT {"com.xxxxx.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
@@ -44,11 +43,11 @@ Gen11 *Gen11::callback = nullptr;
 
 void Gen11::init() {
 	callback = this;
-	// 4 kextInfos: ICL FB/HW from /S/L/E + TGL FB from /S/L/E + TGL HW from /S/L/E (DTK)
+	// 4 kextInfos: ICL FB, ICL HW, TGL FB, TGL HW
 	lilu.onKextLoadForce(&kextG11FB);
 	lilu.onKextLoadForce(&kextG11HW);
-	lilu.onKextLoadForce(&kextTGLFB);
-	lilu.onKextLoadForce(&kextTGLHW);
+	lilu.onKextLoadForce(&kextG11FBT);
+	lilu.onKextLoadForce(&kextG11HWT);
 	SYSLOG("ngreen", "Registered Gen11 kext watchers");
 }
 
@@ -68,55 +67,6 @@ static bool isExperimentalMonitorEnabled() {
 	}
 
 	return checkKernelArgument("-ngreenexp");
-}
-
-static int getRequestedSchedulerType() {
-	int schedType = 5;
-	int bootArgSched = 0;
-	if (PE_parse_boot_argn("ngreenSched", &bootArgSched, sizeof(bootArgSched)) && bootArgSched >= 3 && bootArgSched <= 5) {
-		return bootArgSched;
-	}
-
-	return schedType;
-}
-
-static bool shouldPatchEmbeddedGuCFirmware() {
-	int enabled = 0;
-	if (PE_parse_boot_argn("ngreengucfw", &enabled, sizeof(enabled))) {
-		return enabled != 0;
-	}
-
-	if (checkKernelArgument("-ngreengucfw")) {
-		return true;
-	}
-
-	return getRequestedSchedulerType() == 3;
-}
-
-static bool isGuCDiagnosticsEnabled() {
-	int enabled = 0;
-	if (PE_parse_boot_argn("ngreengucdiag", &enabled, sizeof(enabled))) {
-		return enabled != 0;
-	}
-
-	return checkKernelArgument("-ngreengucdiag");
-}
-
-static void logGuCFirmwareState(const char *stage) {
-	if (!NGreen::callback) {
-		return;
-	}
-
-	const uint32_t gucStatus = NGreen::callback->readReg32(0xC000);
-	const uint32_t hucStatus = NGreen::callback->readReg32(0xD000);
-	const uint32_t renderReq = NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9);
-	const uint32_t renderAck = NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9);
-	const uint32_t blitterReq = NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9);
-	const uint32_t blitterAck = NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9);
-	const uint32_t errorGen6 = NGreen::callback->readReg32(ERROR_GEN6);
-
-	SYSLOG("ngreen", "GuC diag[%s]: GUC_STATUS=0x%x HUC_STATUS=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK_RENDER=0x%x FW_BLT=0x%x ACK_BLT=0x%x",
-	       stage ? stage : "<null>", gucStatus, hucStatus, errorGen6, renderReq, renderAck, blitterReq, blitterAck);
 }
 
 static bool isDisplayPipeForceDisabled() {
@@ -603,10 +553,10 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		return true;
 		
 		
-	}	else if (kextTGLFB.loadIndex == index) {
+	}	else if (kextG11FBT.loadIndex == index) {
 		SYSLOG("ngreen", "[FB Tracer] AppleIntelTGLGraphicsFramebuffer LOADED");
 		this->tglFBLoaded = true;
-		auto *activeKext = &kextTGLFB;
+		auto *activeKext = &kextG11FBT;
 		NGreen::callback->setRMMIOIfNecessary();
 		SYSLOG("ngreen", "init AppleIntelTGLGraphicsFramebuffer");
 		
@@ -899,7 +849,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				
 			};
 			
-			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesp , address, size), "ngreen", "kextTGLFB Failed to apply production patches!");
+			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesp , address, size), "ngreen", "kextG11FBT Failed to apply production patches!");
 		}
 		else {
 			const bool refProbeF2 = isReferenceF2ProbeEnabled();
@@ -938,7 +888,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				
 			};
 			
-			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patches , address, size), "ngreen", "kextTGLFB Failed to apply dbg patches!");
+			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patches , address, size), "ngreen", "kextG11FBT Failed to apply dbg patches!");
 
 			if (refProbeF2 && !NGreen::callback->isRealTGL) {
 				// Reference probe: enable only old f2 topology/osinfo bypass on demand.
@@ -947,7 +897,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 					{activeKext, f2, r2, arrsize(f2), 1},
 				};
 				PANIC_COND(!LookupPatchPlus::applyAll(patcher, probeF2Patch, address, size),
-					"ngreen", "kextTGLFB Failed to apply reference f2 probe patch!");
+					"ngreen", "kextG11FBT Failed to apply reference f2 probe patch!");
 				SYSLOG("ngreen", "V109: reference probe enabled (f2 osinfo patch active)");
 			} else if (refProbeF2) {
 				SYSLOG("ngreen", "V109: reference f2 probe requested but ignored on real TGL");
@@ -993,7 +943,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				 {"__ZN16IntelAccelerator19PAVPCommandCallbackE22PAVPSessionCommandID_tjPjb", wrapPavpSessionCallback, this->orgPavpSessionCallback},
 				 // initHardwareCaps NOT routed: NBlue's wrapper reads TGL offset 0x1120 for SKU,
 				 // but ICL stores SKU at 0x1150. Let the original ICL code run — SKU gates are patched.
-				 // IGScheduler5resume NOT routed: kIGHwCsDesc is only resolved for kextTGLHW.
+				 // IGScheduler5resume NOT routed: kIGHwCsDesc is only resolved for kextG11HWT.
 				 // With -disablegfxfirmware, Host Preemptive scheduler is selected (not IGScheduler5).
 			//last	 {"__ZN12IGScheduler56resumeEv", IGScheduler5resume, this->oIGScheduler5resume},
 				 // resetGraphicsEngine NOT routed: NBlue wrapper applies TGL GT workarounds which
@@ -1073,10 +1023,10 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 
 		return true;
 
-	} else if (kextTGLHW.loadIndex == index) {
+    } else if (kextG11HWT.loadIndex == index) {
 		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics LOADED");
 		this->tglHWLoaded = true;
-		auto *activeKext = &kextTGLHW;
+		auto *activeKext = &kextG11HWT;
 		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics (HW accelerator) initializing");
 		NGreen::callback->setRMMIOIfNecessary();
 /*
@@ -1121,15 +1071,13 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 
 			// {"__ZN11IGAccelTask16getBlit3DContextEb", getBlit3DContext, this->ogetBlit3DContext},
 		
-			 // V112: Resolve the NootedBlue Blit3D helpers so the fallback path can
-			 // initialize scratch/context state instead of leaving the blit object empty.
-			 {"__Z31blit3d_initialize_scratch_spaceP16IGAccelSysMemory", blit3d_initialize_scratch_space, this->oblit3d_initialize_scratch_space},
-			 {"__Z15blit3d_init_ctxP23IGHardwareBlit3DContext", blit3d_init_ctx, this->oblit3d_init_ctx},
+			 //{"__Z31blit3d_initialize_scratch_spaceP16IGAccelSysMemory", blit3d_initialize_scratch_space, this->oblit3d_initialize_scratch_space},
+			 //{"__Z15blit3d_init_ctxP23IGHardwareBlit3DContext", blit3d_init_ctx, this->oblit3d_init_ctx},
 			 // V69: ENABLED — original crashes at +0x4c memcpy'ing 68 bytes to unmapped GPU buffer
 			 // at VA 0xfffffff034136000 (page 0xD of context buffer). Our replacement skips the
 			 // dangerous memcpy and logs diagnostic info about the mapping.
 			 {"__ZN23IGHardwareBlit3DContext10initializeEv", IGHardwareBlit3DContextinitialize, this->oIGHardwareBlit3DContextinitialize},
-			 {"__ZNK14IGMappedBuffer9getMemoryEv", IGMappedBuffergetMemory, this->oIGMappedBuffergetMemory},
+			// {"__ZNK14IGMappedBuffer9getMemoryEv", IGMappedBuffergetMemory, this->oIGMappedBuffergetMemory},
 			 
 		};
 		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route symbols");
@@ -1141,30 +1089,6 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{"__ZN13IGHardwareGuC13loadGuCBinaryEv", loadGuCBinary, this->oloadGuCBinary},
 			};
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route loadGuCBinary");
-		}
-
-		if (!NGreen::callback->isRealTGL) {
-			SYSLOG("ngreen", "GuC firmware patch: skipped embedded TGL blob override on non-real TGL");
-		} else if (!patchEmbeddedTGLFirmware(patcher, index, address, size)) {
-			SYSLOG("ngreen", "GuC firmware patch: native embedded TGL firmware left unchanged");
-		}
-		if (isGuCDiagnosticsEnabled()) {
-			logGuCFirmwareState("processKext post-patch");
-		}
-
-		if (!NGreen::callback->isRealTGL) {
-			// V111: Hook IGAccelDevice::deviceStart to force success on RPL.
-			// Binary pattern (f_devstart) may not match every Sonoma build variant.
-			// This symbol-based hook guarantees deviceStart returns true regardless of
-			// BCS ring state, so the accelerator device is always registered with IOKit.
-			RouteRequestPlus devStartRoute[] = {
-				{"__ZN13IGAccelDevice11deviceStartEv", deviceStart, this->odeviceStart},
-			};
-			if (RouteRequestPlus::routeAll(patcher, index, devStartRoute, address, size)) {
-				SYSLOG("ngreen", "V111: Hooked IGAccelDevice::deviceStart for RPL force-success");
-			} else {
-				SYSLOG("ngreen", "V111: IGAccelDevice::deviceStart symbol not found — relying on binary patch");
-			}
 		}
 
 		if (!wegCoexist || forceFullMTL) {
@@ -1316,7 +1240,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{activeKext, f3, r3, arrsize(f3),	1},
 			};
 			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesAlways, address, size), "ngreen",
-				"kextTGLHW Failed to apply base patches!");
+				"kextG11HWT Failed to apply base patches!");
 			
 			if (!NGreen::callback->isRealTGL) {
 				// RPL-only: hardcode topology and bypass BCS readiness check
@@ -1327,7 +1251,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 					{activeKext, f_devstart, m_devstart, r_devstart, rm_devstart, arrsize(f_devstart), 1}, // BCS bypass
 				};
 				PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesRPL, address, size), "ngreen",
-					"kextTGLHW Failed to apply RPL-specific patches!");
+					"kextG11HWT Failed to apply RPL-specific patches!");
 
 				// Optional secondary signature for Sonoma variants with long JE encoding.
 				LookupPatchPlus const patchRPLDevstartLong {
@@ -1426,23 +1350,6 @@ void  Gen11::setAsyncSliceCount(void *that,uint32_t configRaw)
 		0x00, 0x36, 0x6e, 0x01, 0x00, 0xf8, 0x24, 0x01,
 		0x00, 0xf0, 0x49, 0x02, 0x40, 0x78, 0x7d, 0x01
 	};
-
-bool Gen11::deviceStart(void *that)
-{
-	// V111: Force IGAccelDevice::deviceStart to succeed on spoofed RPL platform.
-	// The original checks encodeFailureStack[1] which is set when BCS ring fails to
-	// start. On RPL hardware with TGL driver, BCS init fails (RPL uses different
-	// ring programming). We allow the original to run and then force success if it
-	// returned false, preventing CoreDisplay from seeing a null accelerator device.
-	auto ret = FunctionCast(deviceStart, callback->odeviceStart)(that);
-	const bool isRealTGL = NGreen::callback && NGreen::callback->isRealTGL;
-	if (!isRealTGL && !ret) {
-		SYSLOG("ngreen", "V111: IGAccelDevice::deviceStart returned false on RPL — forcing true");
-		return true;
-	}
-	DBGLOG("ngreen", "V111: IGAccelDevice::deviceStart returned %d", ret);
-	return ret;
-}
 
 
 bool  Gen11::getGPUInfo(void *that)
@@ -1665,120 +1572,14 @@ IOReturn Gen11::wrapFBClientDoAttribute(void *fbclient, uint32_t attribute, unsi
 }
 
 unsigned long Gen11::loadGuCBinary(void *that) {
-	const int requestedScheduler = getRequestedSchedulerType();
-	const bool embeddedFirmwareRequested = shouldPatchEmbeddedGuCFirmware();
-	const bool gucDiag = isGuCDiagnosticsEnabled();
-	if (gucDiag) {
-		logGuCFirmwareState("loadGuCBinary entry");
-	}
-
 	// V52: Real TGL can authenticate and load GuC firmware natively.
 	// RPL cannot — stub to return 1 and use host scheduling instead.
 	if (NGreen::callback->isRealTGL) {
-		SYSLOG("ngreen", "loadGuCBinary: real TGL sched=%d embedded-fw=%d — calling original", requestedScheduler,
-		       embeddedFirmwareRequested);
-		auto ret = FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
-		SYSLOG("ngreen", "loadGuCBinary: original returned %lu", ret);
-		if (gucDiag) {
-			logGuCFirmwareState("loadGuCBinary exit");
-		}
-		return ret;
-	}
-	if (requestedScheduler == 3 && embeddedFirmwareRequested) {
-		SYSLOG("ngreen", "loadGuCBinary: non-real TGL sched=3 requested, but embedded GuC path is only enabled on real TGL right now");
-		auto ret = FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
-		if (gucDiag) {
-			logGuCFirmwareState("loadGuCBinary non-real exit");
-		}
-		return ret;
+		SYSLOG("ngreen", "loadGuCBinary: real TGL — calling original for GuC firmware load");
+		return FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
 	}
 	SYSLOG("ngreen", "loadGuCBinary: RPL — stubbed to return 1 (host scheduling)");
-	if (gucDiag) {
-		logGuCFirmwareState("loadGuCBinary stub exit");
-	}
 	return 1;
-}
-
-bool Gen11::patchEmbeddedFirmwareAt(mach_vm_address_t symbol, const uint8_t *blob, size_t blobSize,
-	const char *label, size_t zeroFill) {
-	if (!symbol || !blob || blobSize == 0) {
-		return false;
-	}
-
-	auto status = MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock);
-	if (status != KERN_SUCCESS) {
-		SYSLOG("ngreen", "firmware patch[%s]: failed to enable kernel write (%d)", safeString(label), status);
-		return false;
-	}
-
-	lilu_os_memcpy(reinterpret_cast<void *>(symbol), blob, blobSize);
-	if (zeroFill > blobSize) {
-		memset(reinterpret_cast<uint8_t *>(symbol) + blobSize, 0, zeroFill - blobSize);
-	}
-
-	MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock);
-	SYSLOG("ngreen", "firmware patch[%s]: wrote %zu bytes @ 0x%llx", safeString(label), blobSize, symbol);
-	return true;
-}
-
-bool Gen11::patchEmbeddedFirmwareMatch(mach_vm_address_t address, size_t size, const uint8_t *needle, size_t needleSize,
-	const uint8_t *blob, size_t blobSize, const char *label) {
-	if (!address || !size || !needle || !needleSize || !blob || !blobSize) {
-		return false;
-	}
-
-	size_t offset = 0;
-	if (!KernelPatcher::findPattern(needle, nullptr, needleSize, reinterpret_cast<const void *>(address), size, &offset) || !offset) {
-		SYSLOG("ngreen", "firmware patch[%s]: pattern not found", safeString(label));
-		return false;
-	}
-
-	return patchEmbeddedFirmwareAt(address + offset, blob, blobSize, label);
-}
-
-bool Gen11::patchEmbeddedTGLFirmware(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size) {
-	if (!shouldPatchEmbeddedGuCFirmware()) {
-		SYSLOG("ngreen", "firmware patch: sched=%d did not request embedded GuC override", getRequestedSchedulerType());
-		return false;
-	}
-	if (isGuCDiagnosticsEnabled()) {
-		SYSLOG("ngreen", "firmware patch: diag enabled host_if_rev=%u GuC=%zu HuC=%zu",
-		       IGUK_GUC_HOST_INTERFACE_REV, IGFirmwareAssets::kGuCFullSize, IGFirmwareAssets::kHuCFullSize);
-	}
-
-	mach_vm_address_t kmGuCSignature = patcher.solveSymbol(index, "__ZL13__KmGuCBinary");
-	mach_vm_address_t kmGuCSpringboardSignature = patcher.solveSymbol(index, "__ZL18__KmGuCSBBinarySig");
-	mach_vm_address_t kmGen12TGLGuCFirmware = patcher.solveSymbol(index, "__ZL21__KmGen12TGLGuCBinary");
-
-	bool patched = false;
-	if (kmGuCSignature && kmGuCSpringboardSignature && kmGuCSpringboardSignature > kmGuCSignature) {
-		patched |= patchEmbeddedFirmwareAt(kmGuCSignature, IGFirmwareAssets::kGuCFull,
-			IGFirmwareAssets::kGuCFullSize, "GuC.full", kmGuCSpringboardSignature - kmGuCSignature);
-	} else if (kmGuCSignature) {
-		patched |= patchEmbeddedFirmwareAt(kmGuCSignature, IGFirmwareAssets::kGuCFull,
-			IGFirmwareAssets::kGuCFullSize, "GuC.full");
-	}
-
-	if (kmGuCSpringboardSignature) {
-		patched |= patchEmbeddedFirmwareAt(kmGuCSpringboardSignature, IGFirmwareAssets::kGuCSignature,
-			IGFirmwareAssets::kGuCSignatureSize, "GuC.springboard-sig");
-	}
-
-	if (kmGen12TGLGuCFirmware) {
-		patched |= patchEmbeddedFirmwareAt(kmGen12TGLGuCFirmware, IGFirmwareAssets::kGuCFirmware,
-			IGFirmwareAssets::kGuCFirmwareSize, "GuC.firmware");
-	} else {
-		patched |= patchEmbeddedFirmwareMatch(address, size, IGFirmwareAssets::kGuCFirmware,
-			64, IGFirmwareAssets::kGuCFirmware, IGFirmwareAssets::kGuCFirmwareSize, "GuC.firmware-fallback");
-	}
-
-	const bool hucPatched = patchEmbeddedFirmwareMatch(address, size, IGFirmwareAssets::kHuCFirmware,
-		64, IGFirmwareAssets::kHuCFirmware, IGFirmwareAssets::kHuCFirmwareSize, "HuC.firmware");
-	if (!hucPatched) {
-		SYSLOG("ngreen", "firmware patch[HuC]: no stock HuC blob was found in AppleIntelTGLGraphics");
-	}
-
-	return patched;
 }
 
 UInt8 Gen11::wrapLoadGuCBinary(void *that) {
@@ -4922,9 +4723,7 @@ void Gen11::disableCDClock(void *that)
 
 bool Gen11::AppleIntelFramebufferinit(void *frame,void *cont,uint32_t param_2)
 {
-	// Framebuffer live-cont fix disabled for boot-blocker isolation.
-	// getMember<void *>(frame, 0x4a40) = cont;
-	// getMember<void *>(frame, 0xc40) = cont;
+	
 	auto ret=FunctionCast(AppleIntelFramebufferinit, callback->oAppleIntelFramebufferinit)(frame,cont,param_2 );
 	getMember<void *>(frame, 0x4a40) = ccont;
 	auto *fbService = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(frame));
@@ -5472,30 +5271,21 @@ void Gen11::IGHardwareBlit3DContextinitialize(void *that)
 
 	// V106: On spoofed paths, default to skip Apple's original init.
 	// The original still faults at +0x4c on some boots (page fault in SecurityAgent path).
-	// In full-MTL mode, keep skip-by-default for stability; allow original only via opt-in arg.
-	// Use -ngreenV69AllowOriginal to test original init, and -ngreenV69SkipOriginal to hard-disable it.
+	// Preserve a diagnostic opt-in only: -ngreenV69AllowOriginal.
 	const bool allowOriginal = checkKernelArgument("-ngreenV69AllowOriginal");
-	const bool forceFullMTL = shouldForceFullMetalPath();
-	const bool skipOriginal = checkKernelArgument("-ngreenV69SkipOriginal");
 	uint64_t gpuBufBase = mappedBufPtr ? getMember<uint64_t>(mappedBufPtr, 0x18) : 0;
 	uint64_t gpuBufSize = mappedBufPtr ? getMember<uint64_t>(mappedBufPtr, 0x20) : 0;
 	bool safeForOriginal = mappedBufPtr && gpuBufBase != 0 && gpuBufSize >= 0xD040;
-	const bool shouldTryOriginal = allowOriginal && !skipOriginal && safeForOriginal;
-	if (shouldTryOriginal) {
-		SYSLOG("ngreen", "V111B: calling original Blit3D init (opt-in, fullMTL=%d allow=%d skip=%d base=0x%llx size=0x%llx)",
-		       forceFullMTL, allowOriginal, skipOriginal,
+	if (allowOriginal && safeForOriginal) {
+		SYSLOG("ngreen", "V105: calling original Blit3D init (base=0x%llx size=0x%llx)",
 		       (unsigned long long)gpuBufBase, (unsigned long long)gpuBufSize);
 		FunctionCast(IGHardwareBlit3DContextinitialize, callback->oIGHardwareBlit3DContextinitialize)(that);
-		SYSLOG("ngreen", "V111B: original Blit3D init completed");
+		SYSLOG("ngreen", "V105: original Blit3D init completed");
 		return;
 	}
 	if (allowOriginal && !safeForOriginal) {
 		SYSLOG("ngreen", "V106: -ngreenV69AllowOriginal requested but rejected (base=0x%llx size=0x%llx)",
 		       (unsigned long long)gpuBufBase, (unsigned long long)gpuBufSize);
-	} else if (!NGreen::callback->isRealTGL && forceFullMTL && skipOriginal) {
-		SYSLOG("ngreen", "V111B: full-MTL active and original Blit3D init disabled by -ngreenV69SkipOriginal");
-	} else if (!NGreen::callback->isRealTGL && forceFullMTL && !allowOriginal) {
-		SYSLOG("ngreen", "V111B: full-MTL active; original Blit3D init remains disabled by default (use -ngreenV69AllowOriginal to test)");
 	} else if (v69Verbose || v69CallCount == 16 || v69CallCount == 64 || v69CallCount == 256) {
 		SYSLOG("ngreen", "V106: skip original Blit3D init on non-real TGL (base=0x%llx size=0x%llx)",
 		       (unsigned long long)gpuBufBase, (unsigned long long)gpuBufSize);
@@ -5519,15 +5309,9 @@ void Gen11::IGHardwareBlit3DContextinitialize(void *that)
 	getMember<uint64_t>(that, 0x108) = 0;
 	getMember<uint32_t>(that, 0x110) = 0;
 
-	// V113: Both blit3d_initialize_scratch_space and blit3d_init_ctx write 0x44 bytes
-	// to GPU context buffer+0xD000. That page is unmapped in the signed com.apple TGL
-	// kext regardless of CPU (same root cause as the original initialize crash).
-	// Skip both helper calls unconditionally — the zero-init above is sufficient.
-	if (v69Verbose)
-		SYSLOG("ngreen", "V113: skipped blit3d scratch/ctx helpers — GPU ctx page 0xD unmapped in signed TGL kext");
-
-	// DO NOT call original here — it still faults on some spoofed boots.
-	// If helper routing is unavailable, keep the zero-init fallback rather than crash.
+	// DO NOT call original — crashes at initialize()+0x4c writing to unmapped page 0xD
+	// DO NOT call blit3d_initialize_scratch_space / blit3d_init_ctx — their hooks are not
+	// connected so oblit3d_init_ctx=0 → FunctionCast to addr 0 → instant crash
 	if (v69Verbose)
 		SYSLOG("ngreen", "V69: initialize complete (SKIPPED original — crash prevention)");
 
@@ -5538,7 +5322,7 @@ int Gen11::blit3d_supported(void *param_1,void *param_2)
 	return 0;
 }
 
-void * Gen11::IGMappedBuffergetMemory(void *that)
+uint8_t Gen11::IGMappedBuffergetMemory(void *that)
 {
 	auto ret=FunctionCast(IGMappedBuffergetMemory, callback->oIGMappedBuffergetMemory)(that);
 	return ret;

@@ -474,11 +474,7 @@
 					"APPLE_KEXT_ASSERTIONS=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/NootedGreen/PrivateHeaders",
-					"$(PROJECT_DIR)/../Materials/A/PrivateHeaders",
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = NootedGreen/Info.plist;
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -488,7 +484,7 @@
 				MODULE_NAME = com.StezzaPilot.NootedGreen;
 				MODULE_START = "$(PRODUCT_NAME)_kern_start";
 				MODULE_STOP = "$(PRODUCT_NAME)_kern_stop";
-				MODULE_VERSION = 1.0.5;
+				MODULE_VERSION = 1.0.4;
 				OTHER_CFLAGS = (
 					"-mmmx",
 					"-msse",
@@ -532,11 +528,7 @@
 					"MODULE_VERSION=$(MODULE_VERSION)",
 					"PRODUCT_NAME=$(PRODUCT_NAME)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/NootedGreen/PrivateHeaders",
-					"$(PROJECT_DIR)/../Materials/A/PrivateHeaders",
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = NootedGreen/Info.plist;
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -547,7 +539,7 @@
 				MODULE_NAME = com.StezzaPilot.NootedGreen;
 				MODULE_START = "$(PRODUCT_NAME)_kern_start";
 				MODULE_STOP = "$(PRODUCT_NAME)_kern_stop";
-				MODULE_VERSION = 1.0.5;
+				MODULE_VERSION = 1.0.4;
 				OTHER_CFLAGS = (
 					"-mmmx",
 					"-msse",
