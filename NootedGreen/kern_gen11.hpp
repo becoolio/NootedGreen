@@ -1713,6 +1713,13 @@ private:
 	static void checkWOPCMSettings(void *that,unsigned long param_1,void *param_2);
 	mach_vm_address_t ocheckWOPCMSettings {};
 
+	static uint8_t initGuCWithOptions(void *that, void *accel);
+	mach_vm_address_t oinitGuCWithOptions {};
+	static uint64_t sendHostToGucMessage(void *that, const char *msg, int32_t action, uint64_t data);
+	mach_vm_address_t osendHostToGucMessage {};
+	static uint8_t waitForHostToGucActionResponse(void *that, const char *msg, int32_t action, const char *caller);
+	mach_vm_address_t owaitForHostToGucActionResponse {};
+
 	static bool dotrue();  // stub: always returns true
 
 	static uint8_t disableVDDForAux(void *that);
