@@ -2,7 +2,6 @@
 //  details.
 #include "kern_gen11.hpp"
 #include <Headers/kern_api.hpp>
-#include <Headers/kern_file.hpp>
 #include "kern_genx.hpp"
 #include "kern_green.hpp"
 #include <IOKit/IOCatalogue.h>
@@ -1086,31 +1085,10 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		{
 			// loadGuCBinary: always route — WEG's firmware path is Mojave-gated and dead on Sonoma.
 			// Without this hook, no GuC binary loads at all in coexist mode → ring dead.
-			SolveRequestPlus gucDataSolve[] = {
-				{"__KmGen12TGLGuCBinary", this->gKmGen9GuCBinary},
-			};
-			SYSLOG_COND(!SolveRequestPlus::solveAll(patcher, index, gucDataSolve, address, size), "ngreen", "GuC override: failed to resolve __KmGen12TGLGuCBinary");
-
 			RouteRequestPlus firmwareRoute[] = {
-				{"__ZN13IGHardwareGuC15initWithOptionsEP16IntelAccelerator", initGuCWithOptions, this->oinitGuCWithOptions},
 				{"__ZN13IGHardwareGuC13loadGuCBinaryEv", loadGuCBinary, this->oloadGuCBinary},
 			};
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route loadGuCBinary");
-
-			RouteRequestPlus hostToGucRouteV1[] = {
-				{"__ZN5IGGuC20sendHostToGucMessageEPKcix", sendHostToGucMessage, this->osendHostToGucMessage},
-			};
-			RouteRequestPlus hostToGucRouteV2[] = {
-				{"__ZN5IGGuC20sendHostToGucMessageEPKcim", sendHostToGucMessage, this->osendHostToGucMessage},
-			};
-			bool sendRouteOk = RouteRequestPlus::routeAll(patcher, index, hostToGucRouteV1, address, size) ||
-			                   RouteRequestPlus::routeAll(patcher, index, hostToGucRouteV2, address, size);
-			SYSLOG_COND(!sendRouteOk, "ngreen", "GuC guard: failed to route sendHostToGucMessage");
-
-			RouteRequestPlus waitRoute[] = {
-				{"__ZN5IGGuC30waitForHostToGucActionResponseEPKciS1_", waitForHostToGucActionResponse, this->owaitForHostToGucActionResponse},
-			};
-			SYSLOG_COND(!RouteRequestPlus::routeAll(patcher, index, waitRoute, address, size), "ngreen", "GuC guard: failed to route waitForHostToGucActionResponse");
 		}
 
 		if (!wegCoexist || forceFullMTL) {
@@ -1249,12 +1227,6 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 		};
-
-		// Ventura-era tglaccelerator blit memory fix (ported):
-		//   0x0000d240 -> 0x0000e000
-		// Keep optional: signature can differ across Sonoma point releases.
-		static const uint8_t f5[] = {0x40, 0xd2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-		static const uint8_t r5[] = {0x00, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 		
 
 		
@@ -1295,19 +1267,6 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 					SYSLOG("ngreen", "V52: Applied optional long-form deviceStart readiness bypass");
 				} else {
 					SYSLOG("ngreen", "V52: Optional long-form deviceStart bypass not found on this build");
-				}
-
-				LookupPatchPlus const patchRPLBlitMemFix {
-					activeKext,
-					f5,
-					r5,
-					arrsize(f5),
-					1
-				};
-				if (patchRPLBlitMemFix.apply(patcher, address, size)) {
-					SYSLOG("ngreen", "V52: Applied optional tglaccelerator blit memory fix");
-				} else {
-					SYSLOG("ngreen", "V52: Optional tglaccelerator blit memory fix not found on this build");
 				}
 
 				SYSLOG("ngreen", "V52: Applied RPL-specific patches (topology hardcode + BCS bypass)");
@@ -1613,203 +1572,14 @@ IOReturn Gen11::wrapFBClientDoAttribute(void *fbclient, uint32_t attribute, unsi
 }
 
 unsigned long Gen11::loadGuCBinary(void *that) {
-	uint32_t rcsCtlPre = NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE));
-	uint32_t rcsHeadPre = NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE));
-	uint32_t rcsTailPre = NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE));
-	uint32_t errPre = NGreen::callback->readReg32(ERROR_GEN6);
-	uint32_t fwAckPre = NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9);
-	uint64_t tStart = 0;
-	clock_get_uptime(&tStart);
-
-	SYSLOG("ngreen",
-	       "loadGuCBinary: enter that=%p realTGL=%d RCS pre CTL=0x%x HEAD=0x%x TAIL=0x%x ERR=0x%x FW_ACK=0x%x",
-	       that,
-	       NGreen::callback->isRealTGL,
-	       rcsCtlPre,
-	       rcsHeadPre,
-	       rcsTailPre,
-	       errPre,
-	       fwAckPre);
-
-	const bool disableGfxFirmware = checkKernelArgument("-disablegfxfirmware");
-
-	// When -disablegfxfirmware is requested, skip GuC firmware load even on real TGL.
-	// This keeps host-scheduler bring-up tests viable when GuC auth/boot fails.
-	if (disableGfxFirmware) {
-		SYSLOG("ngreen",
-		       "loadGuCBinary: -disablegfxfirmware set, stubbing GuC load with success (realTGL=%d)",
-		       NGreen::callback->isRealTGL);
-		return 1;
-	}
-
 	// V52: Real TGL can authenticate and load GuC firmware natively.
 	// RPL cannot — stub to return 1 and use host scheduling instead.
 	if (NGreen::callback->isRealTGL) {
-		static bool gucOverrideAttempted = false;
-		if (!gucOverrideAttempted) {
-			gucOverrideAttempted = true;
-			constexpr const char *kGuCOverridePath = "/Users/becoolio/Downloads/DTK-rootfs-no_dev_no_private_no_volumes_no_templates_no_xarts_no_glue_no_borax/AppleInternal/SignedComponents/AppleIntelTGLGuC.framework/Versions/A/Resources/GuC.bin";
-			size_t overrideSize = 0;
-			uint8_t *overrideData = FileIO::readFileToBuffer(kGuCOverridePath, overrideSize);
-			if (overrideData && overrideSize > 0 && callback->gKmGen9GuCBinary) {
-				size_t copySize = overrideSize;
-				if (copySize > 418304U) {
-					copySize = 418304U;
-				}
-				auto status = MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock);
-				if (status == KERN_SUCCESS) {
-					lilu_os_memcpy(callback->gKmGen9GuCBinary, overrideData, copySize);
-					MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock);
-					SYSLOG("ngreen", "GuC override source=%s size=%llu", kGuCOverridePath, static_cast<unsigned long long>(copySize));
-				} else {
-					SYSLOG("ngreen", "GuC override source=embedded size=%u", 418304U);
-				}
-				Buffer::deleter(overrideData);
-			} else {
-				if (overrideData) {
-					Buffer::deleter(overrideData);
-				}
-				SYSLOG("ngreen", "GuC override source=embedded size=%u", 418304U);
-			}
-		}
-
 		SYSLOG("ngreen", "loadGuCBinary: real TGL — calling original for GuC firmware load");
-		auto ret = FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
-		uint64_t tEnd = 0;
-		clock_get_uptime(&tEnd);
-		uint64_t dtNs = 0;
-		absolutetime_to_nanoseconds(tEnd - tStart, &dtNs);
-		uint32_t rcsCtlPost = NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE));
-		uint32_t rcsHeadPost = NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE));
-		uint32_t rcsTailPost = NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE));
-		uint32_t errPost = NGreen::callback->readReg32(ERROR_GEN6);
-		uint32_t fwAckPost = NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9);
-		SYSLOG("ngreen",
-		       "loadGuCBinary: exit ret=%lu dt=%llums RCS post CTL=0x%x HEAD=0x%x TAIL=0x%x ERR=0x%x FW_ACK=0x%x",
-		       ret,
-		       (unsigned long long)(dtNs / 1000000ULL),
-		       rcsCtlPost,
-		       rcsHeadPost,
-		       rcsTailPost,
-		       errPost,
-		       fwAckPost);
-		return ret;
+		return FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
 	}
-	SYSLOG("ngreen", "loadGuCBinary: RPL — stubbed to return 1 (host scheduling), dt=%llums",
-	       (unsigned long long)0);
+	SYSLOG("ngreen", "loadGuCBinary: RPL — stubbed to return 1 (host scheduling)");
 	return 1;
-}
-
-uint8_t Gen11::initGuCWithOptions(void *that, void *accel) {
-	uint32_t gucStatusPre = NGreen::callback->readReg32(0xC000);
-	uint32_t gucDbgPre = NGreen::callback->readReg32(0xC014);
-	uint32_t gucMiaCorePre = NGreen::callback->readReg32(0xC180);
-	uint32_t fwAckPre = NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9);
-	uint32_t errPre = NGreen::callback->readReg32(ERROR_GEN6);
-	uint64_t t0 = 0;
-	clock_get_uptime(&t0);
-
-	SYSLOG("ngreen",
-	       "GuC initWithOptions: enter guc=%p accel=%p GUC_STATUS=0x%x DBG=0x%x MIA_CORE=0x%x FW_ACK=0x%x ERR=0x%x",
-	       that,
-	       accel,
-	       gucStatusPre,
-	       gucDbgPre,
-	       gucMiaCorePre,
-	       fwAckPre,
-	       errPre);
-
-	auto ret = FunctionCast(initGuCWithOptions, callback->oinitGuCWithOptions)(that, accel);
-
-	uint64_t t1 = 0;
-	clock_get_uptime(&t1);
-	uint64_t dtNs = 0;
-	absolutetime_to_nanoseconds(t1 - t0, &dtNs);
-
-	uint32_t gucStatusPost = NGreen::callback->readReg32(0xC000);
-	uint32_t gucDbgPost = NGreen::callback->readReg32(0xC014);
-	uint32_t gucMiaCorePost = NGreen::callback->readReg32(0xC180);
-	uint32_t fwAckPost = NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9);
-	uint32_t errPost = NGreen::callback->readReg32(ERROR_GEN6);
-
-	SYSLOG("ngreen",
-	       "GuC initWithOptions: exit ret=%u dt=%llums GUC_STATUS=0x%x DBG=0x%x MIA_CORE=0x%x FW_ACK=0x%x ERR=0x%x",
-	       ret,
-	       (unsigned long long)(dtNs / 1000000ULL),
-	       gucStatusPost,
-	       gucDbgPost,
-	       gucMiaCorePost,
-	       fwAckPost,
-	       errPost);
-
-	return ret;
-}
-
-static inline void dumpGuCState(const char *tag, void *guc, const char *caller, int32_t action) {
-	uint32_t gucStatus = Gen11::tReadRegister32(0xC000);
-	uint32_t gucDbg = Gen11::tReadRegister32(0xC014);
-	uint32_t gucMiaCore = Gen11::tReadRegister32(0xC180);
-	uint32_t fwAck = Gen11::tReadRegister32(FORCEWAKE_ACK_RENDER_GEN9);
-	uint32_t err = Gen11::tReadRegister32(ERROR_GEN6);
-	uint32_t rcsCtl = Gen11::tReadRegister32(RING_CTL(RENDER_RING_BASE));
-	uint32_t rcsHead = Gen11::tReadRegister32(RING_HEAD(RENDER_RING_BASE));
-	uint32_t rcsTail = Gen11::tReadRegister32(RING_TAIL(RENDER_RING_BASE));
-
-	uint32_t p24c = (gucStatus >> 16) & 0xFF;
-	uint32_t uk = (gucStatus >> 8) & 0xFF;
-
-	SYSLOG("ngreen",
-	       "%s: guc=%p caller=%s action=0x%x GUC_STATUS=0x%x(P24C=0x%x UK=0x%x) DBG=0x%x MIA_CORE=0x%x FW_ACK=0x%x ERR=0x%x RCS(CTL=0x%x HEAD=0x%x TAIL=0x%x)",
-	       tag,
-	       guc,
-	       caller ? caller : "?",
-	       static_cast<uint32_t>(action),
-	       gucStatus,
-	       p24c,
-	       uk,
-	       gucDbg,
-	       gucMiaCore,
-	       fwAck,
-	       err,
-	       rcsCtl,
-	       rcsHead,
-	       rcsTail);
-}
-
-uint64_t Gen11::sendHostToGucMessage(void *that, const char *msg, int32_t action, uint64_t data) {
-	dumpGuCState("GuC sendHostToGucMessage pre", that, "sendHostToGucMessage", action);
-
-	if (!callback->osendHostToGucMessage) {
-		SYSLOG("ngreen", "GuC sendHostToGucMessage: original ptr missing, forcing failure return");
-		return 0;
-	}
-
-	uint64_t ret = FunctionCast(sendHostToGucMessage, callback->osendHostToGucMessage)(that, msg, action, data);
-	dumpGuCState("GuC sendHostToGucMessage post", that, "sendHostToGucMessage", action);
-
-	if (ret == 0) {
-		SYSLOG("ngreen", "GuC sendHostToGucMessage: original returned failure (action=0x%x)", static_cast<uint32_t>(action));
-	}
-
-	return ret;
-}
-
-uint8_t Gen11::waitForHostToGucActionResponse(void *that, const char *msg, int32_t action, const char *caller) {
-	dumpGuCState("GuC waitForHostToGucActionResponse pre", that, caller, action);
-
-	if (!callback->owaitForHostToGucActionResponse) {
-		SYSLOG("ngreen", "GuC waitForHostToGucActionResponse: original ptr missing, forcing failure return");
-		return 0;
-	}
-
-	uint8_t ret = FunctionCast(waitForHostToGucActionResponse, callback->owaitForHostToGucActionResponse)(that, msg, action, caller);
-	dumpGuCState("GuC waitForHostToGucActionResponse post", that, caller, action);
-
-	if (ret == 0) {
-		SYSLOG("ngreen", "GuC waitForHostToGucActionResponse: timeout/failure caller=%s action=0x%x", caller ? caller : "?", static_cast<uint32_t>(action));
-	}
-
-	return ret;
 }
 
 UInt8 Gen11::wrapLoadGuCBinary(void *that) {
@@ -3274,54 +3044,8 @@ bool Gen11::start(void *that,void  *param_1)
 		}
 	}
 	
-	uint64_t startEnter = 0;
-	clock_get_uptime(&startEnter);
-	SYSLOG("ngreen",
-	       "start-wrap: before original start() RCS CTL=0x%x HEAD=0x%x TAIL=0x%x ERR=0x%x RC_INTR_EN=0x%x",
-	       NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE)),
-	       NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE)),
-	       NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE)),
-	       NGreen::callback->readReg32(ERROR_GEN6),
-	       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE));
-
 	auto ret= FunctionCast(start, callback->ostart)(that,param_1);
-	uint64_t startExit = 0;
-	clock_get_uptime(&startExit);
-	uint64_t startDtNs = 0;
-	absolutetime_to_nanoseconds(startExit - startEnter, &startDtNs);
-	SYSLOG("ngreen",
-	       "start-wrap: original start() returned %d after %llums RCS CTL=0x%x HEAD=0x%x TAIL=0x%x ERR=0x%x RC_INTR_EN=0x%x",
-	       ret,
-	       (unsigned long long)(startDtNs / 1000000ULL),
-	       NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE)),
-	       NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE)),
-	       NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE)),
-	       NGreen::callback->readReg32(ERROR_GEN6),
-	       NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE));
-
-	bool sawRingMove = false;
-	for (int probe = 1; probe <= 10; probe++) {
-		IODelay(50000);
-		uint32_t ctl = NGreen::callback->readReg32(RING_CTL(RENDER_RING_BASE));
-		uint32_t head = NGreen::callback->readReg32(RING_HEAD(RENDER_RING_BASE));
-		uint32_t tail = NGreen::callback->readReg32(RING_TAIL(RENDER_RING_BASE));
-		uint32_t err = NGreen::callback->readReg32(ERROR_GEN6);
-		SYSLOG("ngreen", "start-wrap: post-start probe[%d] RCS CTL=0x%x HEAD=0x%x TAIL=0x%x ERR=0x%x",
-		       probe, ctl, head, tail, err);
-		if (ctl || head || tail) {
-			sawRingMove = true;
-			SYSLOG("ngreen", "start-wrap: first non-zero RCS state observed at probe[%d]", probe);
-			break;
-		}
-	}
-	if (!sawRingMove) {
-		SYSLOG("ngreen", "start-wrap: RCS remained all-zero across 500ms post-start probe window");
-	}
-	if (ret) {
-		ensureDisplayPipeBacking(that);
-	} else {
-		SYSLOG("ngreen", "start-wrap: original start() failed; skipping ensureDisplayPipeBacking rescue");
-	}
+	ensureDisplayPipeBacking(that);
 	
 	// V65: IMMEDIATELY after original start() returns, re-enable RCS0 interrupts.
 	// Apple's init code may have overwritten our pre-start settings.
