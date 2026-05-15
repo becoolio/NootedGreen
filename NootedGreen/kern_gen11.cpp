@@ -1,11 +1,36 @@
 //  Copyright © 2023 ChefKiss Inc. Licensed under the Thou Shalt Not Profit License version 1.0. See LICENSE for
 //  details.
 #include "kern_gen11.hpp"
+#include "RcsEngineTrace.hpp"
+#include "TglGpuBringup.hpp"
 #include <Headers/kern_api.hpp>
 #include "kern_genx.hpp"
 #include "kern_green.hpp"
 #include <IOKit/IOCatalogue.h>
 #include <kern/thread_call.h>
+
+static uint16_t readDeviceIdFromService(IOService *service) {
+	uint32_t deviceId = 0;
+	IORegistryEntry *entry = service;
+	if (entry && !WIOKit::getOSDataValue(entry, "device-id", deviceId)) {
+		entry = service->getProvider();
+		if (!entry || !WIOKit::getOSDataValue(entry, "device-id", deviceId)) {
+			return 0;
+		}
+	}
+
+	return static_cast<uint16_t>(deviceId & 0xFFFFU);
+}
+
+static int getRcsDeepSchedulerType() {
+	int schedType = 5;
+	int bootArgSched = 0;
+	if (PE_parse_boot_argn("ngreenSched", &bootArgSched, sizeof(bootArgSched)) &&
+	    bootArgSched >= 3 && bootArgSched <= 5) {
+		schedType = bootArgSched;
+	}
+	return schedType;
+}
 
 // ==== 4 kextInfos: TGL from /Library/Extensions, ICL fallback from /System/Library/Extensions ====
 
@@ -51,6 +76,48 @@ void Gen11::init() {
 	SYSLOG("ngreen", "Registered Gen11 kext watchers");
 }
 
+bool Gen11::tmmioReady() {
+	return NGreen::callback != nullptr && NGreen::callback->mmioValid();
+}
+
+const IGHwCsDesc *Gen11::tGetHwCsDesc() {
+	return callback ? reinterpret_cast<const IGHwCsDesc *>(callback->kIGHwCsDesc) : nullptr;
+}
+
+void *Gen11::tGetSharedMappedBufferVirtualAddress(void *buffer) {
+	if (!buffer || !callback || !callback->oIGSharedMappedBuffergetVirtualAddress) {
+		return nullptr;
+	}
+	return FunctionCast(tGetSharedMappedBufferVirtualAddress, callback->oIGSharedMappedBuffergetVirtualAddress)(buffer);
+}
+
+uint64_t Gen11::tGetMappedBufferGPUVirtualAddress(void *buffer) {
+	if (!buffer || !callback || !callback->oIGMappedBuffergetGPUVirtualAddress) {
+		return 0;
+	}
+	return FunctionCast(tGetMappedBufferGPUVirtualAddress, callback->oIGMappedBuffergetGPUVirtualAddress)(buffer);
+}
+
+void Gen11::tWriteRegister32(unsigned long a, unsigned int b) {
+	if (NGreen::callback) {
+		NGreen::callback->writeReg32(a, b);
+	}
+}
+
+void Gen11::tWriteRegister64(void volatile *, unsigned long b, unsigned long long c) {
+	if (NGreen::callback) {
+		NGreen::callback->writeReg64(b, c);
+	}
+}
+
+unsigned int Gen11::tReadRegister32(unsigned long a) {
+	return NGreen::callback ? NGreen::callback->readReg32(a) : 0;
+}
+
+unsigned long long Gen11::tReadRegister64(void volatile *, unsigned long b) {
+	return NGreen::callback ? NGreen::callback->readReg64(b) : 0;
+}
+
 static bool isWEGCoexistMode() {
 	int enabled = 0;
 	if (PE_parse_boot_argn("nbwegcoex", &enabled, sizeof(enabled))) {
@@ -67,6 +134,15 @@ static bool isExperimentalMonitorEnabled() {
 	}
 
 	return checkKernelArgument("-ngreenexp");
+}
+
+static bool isScheduler5TraceEnabled() {
+	int enabled = 0;
+	if (PE_parse_boot_argn("ngreenS5Trace", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	return checkKernelArgument("-ngreenS5Trace");
 }
 
 static bool isDisplayPipeForceDisabled() {
@@ -1025,6 +1101,12 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 
     } else if (kextG11HWT.loadIndex == index) {
 		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics LOADED");
+		if (isTglTraceEnabled()) {
+			auto &bringup = getTglGpuBringupState();
+			bringup = {};
+			bringup.isTgl9A49 = NGreen::callback && NGreen::callback->isRealTGL;
+			dumpTglGpuBringupState("AppleIntelTGLGraphics processKext entry");
+		}
 		this->tglHWLoaded = true;
 		auto *activeKext = &kextG11HWT;
 		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics (HW accelerator) initializing");
@@ -1048,6 +1130,47 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{"__ZN21IGAccelDisplayMachine17probeDisplayPipesEv", this->oDisplayMachineProbeDisplayPipes},
 			};
 			PANIC_COND(!SolveRequestPlus::solveAll(patcher, index, solveRequests, address, size), "ngreen", "Failed to resolve display machine symbols (TGL)");
+		}
+
+		if (isRcsEngineTraceEnabled()) {
+			struct TraceSolveEntry {
+				const char *symbol;
+				mach_vm_address_t addr;
+				bool required;
+			};
+
+			TraceSolveEntry traceSymbols[] = {
+				{"__ZN20IGHardwareRingBuffer19resetGraphicsEngineEP17IGHardwareContext", 0, true},
+				{"__ZN12IGScheduler519initWithAcceleratorEP22IOGraphicsAccelerator2", 0, true},
+				{"__ZN12IGScheduler56resumeEv", 0, true},
+				{"__ZN12IGScheduler54pushEP17IGHardwareContextjjbb", 0, true},
+				{"__ZN12IGScheduler56notifyE10IGHwCsType", 0, true},
+				{"__ZN12IGScheduler516checkForProgressE10IGHwCsType", 0, true},
+				{"__ZN12IGScheduler520enableStampInterruptEi", 0, true},
+				{"__ZN12IGScheduler529enableContextSwitchInterruptsEv", 0, true},
+				{"__ZN17IGHardwareContext25initRingGPUVirtualAddressEv", 0, false},
+				{"__ZN17IGHardwareContext17initRingRegistersEv", 0, false},
+				{"__ZN17IGHardwareContext15initRingControlEb", 0, false},
+				{"__ZN17IGHardwareContext13resetRingHeadEv", 0, false},
+				{"__ZN17IGHardwareContext14updateRingTailEj", 0, false},
+				{"__ZN20IGHardwareRingBuffer4initEP17IGHardwareContext", 0, false},
+				{"__ZN20IGHardwareRingBuffer12submitToRingEv", 0, false},
+				{"__ZN26IGHardwareCommandStreamer514submitExecListEj", 0, false},
+				{"__ZN26IGHardwareCommandStreamer516resumeSchedulingEv", 0, false},
+				{"__ZN26IGHardwareCommandStreamer524prepareExecListAndSubmitEjjPKj", 0, false},
+				{"__ZN26IGHardwareCommandStreamer526processContextStatusBufferEj", 0, false},
+				{"__ZN32IGHardwareRenderCommandStreamer54initEP22IOGraphicsAccelerator2P10IOWorkLoopP12IGScheduler5", 0, false},
+				{"__ZNK20IGSharedMappedBuffer17getVirtualAddressEv", this->oIGSharedMappedBuffergetVirtualAddress, false},
+				{"__ZNK14IGMappedBuffer20getGPUVirtualAddressEv", this->oIGMappedBuffergetGPUVirtualAddress, false},
+			};
+
+			for (auto &entry : traceSymbols) {
+				SolveRequestPlus request {entry.symbol, entry.addr};
+				bool found = request.solve(patcher, index, address, size);
+				SYSLOG("ngreen", "RCS_TRACE: symbol %s %s addr=0x%llx required=%d",
+				       entry.symbol, found ? "FOUND" : "MISSING",
+				       static_cast<unsigned long long>(entry.addr), entry.required);
+			}
 		}
 
 		RouteRequestPlus requests[] = {
@@ -1089,6 +1212,47 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{"__ZN13IGHardwareGuC13loadGuCBinaryEv", loadGuCBinary, this->oloadGuCBinary},
 			};
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route loadGuCBinary");
+		}
+
+		if (isTglTraceEnabled()) {
+			RouteRequestPlus bringupTraceRoutes[] = {
+				{"__ZN13IGHardwareGuC18checkWOPCMSettingsEmR14IOVirtualRange", checkWOPCMSettings, this->ocheckWOPCMSettings},
+			};
+			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, bringupTraceRoutes, address, size), "ngreen", "Failed to route TGL bring-up trace symbols");
+		}
+
+		if (isScheduler5TraceEnabled() || isRcsEngineTraceEnabled()) {
+			RouteRequestPlus s5TraceRoutes[] = {
+				{"__ZN12IGScheduler519initWithAcceleratorEP22IOGraphicsAccelerator2", IGScheduler5initWithAccelerator, this->oIGScheduler5initWithAccelerator},
+				{"__ZN12IGScheduler56resumeEv", IGScheduler5resume, this->oIGScheduler5resume},
+				{"__ZN12IGScheduler54pushEP17IGHardwareContextjjbb", IGScheduler5push, this->oIGScheduler5push},
+				{"__ZN12IGScheduler56notifyE10IGHwCsType", IGScheduler5notify, this->oIGScheduler5notify},
+				{"__ZN12IGScheduler520enableStampInterruptEi", IGScheduler5enableStampInterrupt, this->oIGScheduler5enableStampInterrupt},
+				{"__ZN12IGScheduler529enableContextSwitchInterruptsEv", IGScheduler5enableContextSwitchInterrupts, this->oIGScheduler5enableContextSwitchInterrupts},
+				{"__ZN12IGScheduler516checkForProgressE10IGHwCsType", IGScheduler5checkForProgress, this->oIGScheduler5checkForProgress},
+			};
+			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, s5TraceRoutes, address, size), "ngreen", "Failed to route IGScheduler5 trace symbols");
+			SYSLOG("ngreen", "S5Trace: routed 7 IGScheduler5 symbols");
+		}
+
+		if (isRcsEngineTraceEnabled()) {
+			auto routeTraceSymbol = [&](const char *symbol, auto replacement, mach_vm_address_t &original) {
+				RouteRequestPlus request {symbol, replacement, original};
+				bool routed = request.route(patcher, index, address, size);
+				SYSLOG("ngreen", "RCS_TRACE: lower symbol %s %s", symbol, routed ? "ROUTED" : "SKIPPED");
+			};
+
+			routeTraceSymbol("__ZN17IGHardwareContext25initRingGPUVirtualAddressEv", IGHardwareContextinitRingGPUVirtualAddress, this->oIGHardwareContextinitRingGPUVirtualAddress);
+			routeTraceSymbol("__ZN17IGHardwareContext17initRingRegistersEv", IGHardwareContextinitRingRegisters, this->oIGHardwareContextinitRingRegisters);
+			routeTraceSymbol("__ZN17IGHardwareContext15initRingControlEb", IGHardwareContextinitRingControl, this->oIGHardwareContextinitRingControl);
+			routeTraceSymbol("__ZN17IGHardwareContext13resetRingHeadEv", IGHardwareContextresetRingHead, this->oIGHardwareContextresetRingHead);
+			routeTraceSymbol("__ZN17IGHardwareContext14updateRingTailEj", IGHardwareContextupdateRingTail, this->oIGHardwareContextupdateRingTail);
+			routeTraceSymbol("__ZN20IGHardwareRingBuffer4initEP17IGHardwareContext", IGHardwareRingBufferinit, this->oIGHardwareRingBufferinit);
+			routeTraceSymbol("__ZN20IGHardwareRingBuffer12submitToRingEv", IGHardwareRingBuffersubmitToRing, this->oIGHardwareRingBuffersubmitToRing);
+			routeTraceSymbol("__ZN32IGHardwareRenderCommandStreamer54initEP22IOGraphicsAccelerator2P10IOWorkLoopP12IGScheduler5", IGHardwareRenderCommandStreamerinit, this->oIGHardwareRenderCommandStreamerinit);
+			routeTraceSymbol("__ZN26IGHardwareCommandStreamer516resumeSchedulingEv", IGHardwareCommandStreamerresumeScheduling, this->oIGHardwareCommandStreamerresumeScheduling);
+			routeTraceSymbol("__ZN26IGHardwareCommandStreamer514submitExecListEj", IGHardwareCommandStreamersubmitExecList, this->oIGHardwareCommandStreamersubmitExecList);
+			routeTraceSymbol("__ZN26IGHardwareCommandStreamer524prepareExecListAndSubmitEjjPKj", IGHardwareCommandStreamerprepareExecListAndSubmit, this->oIGHardwareCommandStreamerprepareExecListAndSubmit);
 		}
 
 		if (!wegCoexist || forceFullMTL) {
@@ -1372,6 +1536,10 @@ bool  Gen11::getGPUInfo(void *that)
 	auto ret=FunctionCast(getGPUInfo, callback->ogetGPUInfo)(that);
 	const bool isRealTGL = NGreen::callback && NGreen::callback->isRealTGL;
 	const bool forceFullMTL = shouldForceFullMetalPath();
+	if (isTglTraceEnabled()) {
+		auto &bringup = getTglGpuBringupState();
+		bringup.topologyOk = ret;
+	}
 	
 	// --- GPU topology override for RPL i7-13700H (verified from Linux i915 syslog) ---
 	// Linux i915 reports: 1 slice, 6 DSS (mask=0x3f), 16 EU/DSS, 96 EU total.
@@ -1408,9 +1576,14 @@ bool  Gen11::getGPUInfo(void *that)
 	// later receives a null Metal object in RunFullDisplayPipe.
 	if (!isRealTGL && forceFullMTL && !ret) {
 		SYSLOG("ngreen", "getGPUInfo: forcing success on spoofed CPU in full-MTL mode");
+		if (isTglTraceEnabled()) {
+			getTglGpuBringupState().topologyOk = true;
+		}
+		dumpTglGpuBringupState("getGPUInfo POST forced-success");
 		return true;
 	}
 
+	dumpTglGpuBringupState("getGPUInfo POST");
 	return ret;
 }
 
@@ -1532,6 +1705,7 @@ bool Gen11::initHardwareCaps(void *this_ptr) {
 
 void Gen11::checkWOPCMSettings(void *that,unsigned long param_1,void *param_2)
 {
+	dumpTglGpuBringupState("checkWOPCMSettings PRE");
 	const uint32_t GUC_WOPCM_OFFSET = 1 * 1024 * 1024;
 	const uint32_t GUC_WOPCM_SIZE = 1 * 1024 * 1024;
 	
@@ -1541,9 +1715,17 @@ void Gen11::checkWOPCMSettings(void *that,unsigned long param_1,void *param_2)
 	} IOVirtualRange;
 	
 	IOVirtualRange *wopcm_range = (IOVirtualRange *)param_2;
-		
-	wopcm_range->address = GUC_WOPCM_OFFSET;
-	wopcm_range->length = GUC_WOPCM_SIZE;
+	if (callback->ocheckWOPCMSettings) {
+		FunctionCast(checkWOPCMSettings, callback->ocheckWOPCMSettings)(that, param_1, param_2);
+	} else if (wopcm_range) {
+		wopcm_range->address = GUC_WOPCM_OFFSET;
+		wopcm_range->length = GUC_WOPCM_SIZE;
+	}
+	if (isTglTraceEnabled()) {
+		auto &bringup = getTglGpuBringupState();
+		bringup.gucWopcmProgrammed = true;
+	}
+	dumpTglGpuBringupState("checkWOPCMSettings POST");
 	
 }
 
@@ -1572,13 +1754,43 @@ IOReturn Gen11::wrapFBClientDoAttribute(void *fbclient, uint32_t attribute, unsi
 }
 
 unsigned long Gen11::loadGuCBinary(void *that) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "NG_RCS_BOUNDARY[IGHardwareGuC::loadGuCBinary pre]: gucDisabledByNVRAM=%d hostSchedulerRequired=%d",
+		       checkKernelArgument("-disablegfxfirmware"), getRcsDeepSchedulerType() == 5);
+		dumpRcsEngineActivationState("IGHardwareGuC::loadGuCBinary pre");
+	}
+	dumpTglGpuBringupState("loadGuCBinary PRE");
 	// V52: Real TGL can authenticate and load GuC firmware natively.
 	// RPL cannot — stub to return 1 and use host scheduling instead.
 	if (NGreen::callback->isRealTGL) {
 		SYSLOG("ngreen", "loadGuCBinary: real TGL — calling original for GuC firmware load");
-		return FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+		unsigned long ret = 0;
+		if (callback->oloadGuCBinary) {
+			ret = FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
+		}
+		if (isTglTraceEnabled()) {
+			auto &bringup = getTglGpuBringupState();
+			bringup.gucRequested = true;
+			bringup.gucFirmwareLoaded = (ret != 0);
+		}
+		if (isRcsEngineTraceEnabled()) {
+			SYSLOG("ngreen", "NG_RCS_BOUNDARY[IGHardwareGuC::loadGuCBinary post]: ret=%lu hostSchedulerRequired=%d", ret, getRcsDeepSchedulerType() == 5);
+			dumpRcsEngineActivationState("IGHardwareGuC::loadGuCBinary post");
+		}
+		dumpTglGpuBringupState("loadGuCBinary POST");
+		return ret;
 	}
 	SYSLOG("ngreen", "loadGuCBinary: RPL — stubbed to return 1 (host scheduling)");
+	if (isTglTraceEnabled()) {
+		auto &bringup = getTglGpuBringupState();
+		bringup.gucRequested = true;
+		bringup.gucFirmwareLoaded = true;
+	}
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "NG_RCS_BOUNDARY[IGHardwareGuC::loadGuCBinary post-stub]: hostSchedulerRequired=1");
+		dumpRcsEngineActivationState("IGHardwareGuC::loadGuCBinary post-stub");
+	}
+	dumpTglGpuBringupState("loadGuCBinary POST stub");
 	return 1;
 }
 
@@ -2845,9 +3057,8 @@ bool Gen11::start(void *that,void  *param_1)
 	// Priority: boot-arg "ngreenSched=N" > Info.plist "SchedulerType" > default.
 	// V52: Default depends on platform — real TGL uses GuC (3), RPL uses Host (5).
 	auto *service = static_cast<IOService *>(that);
+	int schedType = NGreen::callback->isRealTGL ? 3 : 5;
 	{
-		int schedType = NGreen::callback->isRealTGL ? 3 : 5;
-		
 		// 1. Check boot-arg first (highest priority)
 		int bootArgSched = 0;
 		if (PE_parse_boot_argn("ngreenSched", &bootArgSched, sizeof(bootArgSched)) && bootArgSched >= 3 && bootArgSched <= 5) {
@@ -2877,6 +3088,13 @@ bool Gen11::start(void *that,void  *param_1)
 			schedNum->release();
 			SYSLOG("ngreen", "V44: injected GraphicsSchedulerSelect=%d", schedType);
 		}
+	}
+	if (isTglTraceEnabled()) {
+		auto &bringup = getTglGpuBringupState();
+		bringup.schedulerType = schedType;
+		bringup.isTgl9A49 = (readDeviceIdFromService(service) == 0x9A49);
+		bringup.gucRequested = (schedType == 3);
+		dumpTglGpuBringupState("IntelAccelerator::start PRE");
 	}
 
 	// Inject MultiForceWakeSelect=1 into Development dictionary.
@@ -3046,6 +3264,7 @@ bool Gen11::start(void *that,void  *param_1)
 	
 	auto ret= FunctionCast(start, callback->ostart)(that,param_1);
 	ensureDisplayPipeBacking(that);
+	dumpTglGpuBringupState("IntelAccelerator::start POST");
 	
 	// V65: IMMEDIATELY after original start() returns, re-enable RCS0 interrupts.
 	// Apple's init code may have overwritten our pre-start settings.
@@ -3760,6 +3979,12 @@ void Gen11::wrapSafeForceWake(void *that, bool set, uint32_t dom) {
 }
 
 void Gen11::forceWake(void *that, bool set, uint32_t dom, uint8_t ctx) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "NG_RCS_BOUNDARY[IntelAccelerator::SafeForceWakeMultithreaded pre]: this=%p set=%d dom=0x%x ctx=%u ackRender=0x%x ackBlitter=0x%x",
+		       that, set, dom, ctx,
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9));
+	}
 	// V61: silenced per-call logging — was flooding Lilu circular buffer (384+ entries/boot)
 	// preventing V60M health monitor and delayed child check entries from surviving
 	
@@ -3936,6 +4161,12 @@ void Gen11::forceWake(void *that, bool set, uint32_t dom, uint8_t ctx) {
 			else
 				DBGLOG("ngreen", "ForceWake OK domain=%s set=%d ack=0x%x", strForDom(d), set, wrapReadRegister32(callback->framecont, fwAckReg(d)));
 		}
+	}
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "NG_RCS_BOUNDARY[IntelAccelerator::SafeForceWakeMultithreaded post]: this=%p set=%d dom=0x%x ctx=%u ackRender=0x%x ackBlitter=0x%x",
+		       that, set, dom, ctx,
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9));
 	}
 	// V61: silenced — see above
 }
@@ -5678,51 +5909,459 @@ unsigned long  Gen11::allocateDisplayResources(void *that)
 }
 
 
+bool Gen11::isRcsEngineType(IGHwCsType type) {
+	return type == kIGHwCsTypeRCS;
+}
+
+void Gen11::dumpRCSSubmissionState(const char *stage) {
+	if (!tmmioReady()) {
+		SYSLOG("ngreen", "S5Trace[%s]: MMIO unavailable", stage ? stage : "<null>");
+		return;
+	}
+
+	uint32_t ringStart = tReadRegister32(RING_START(RENDER_RING_BASE));
+	uint32_t ringCtl = tReadRegister32(RING_CTL(RENDER_RING_BASE));
+	uint32_t ringHead = tReadRegister32(RING_HEAD(RENDER_RING_BASE));
+	uint32_t ringTail = tReadRegister32(RING_TAIL(RENDER_RING_BASE));
+	uint32_t ringHws = tReadRegister32(RING_HWS_PGA(RENDER_RING_BASE));
+	uint32_t execListStatus = tReadRegister32(RING_EXECLIST_STATUS(RENDER_RING_BASE));
+	uint32_t contextStatusPtr = tReadRegister32(RING_CONTEXT_STATUS_PTR(RENDER_RING_BASE));
+	uint32_t errorGen6 = tReadRegister32(ERROR_GEN6);
+	uint32_t renderCopyIntrEnable = tReadRegister32(GEN11_RENDER_COPY_INTR_ENABLE);
+	uint32_t rcs0ReservedIntrMask = tReadRegister32(GEN11_RCS0_RSVD_INTR_MASK);
+	uint32_t gfxMstrIrq = tReadRegister32(GEN11_GFX_MSTR_IRQ);
+	uint32_t gtIntrDw0 = tReadRegister32(GEN11_GT_INTR_DW0);
+	uint32_t gtIntrDw1 = tReadRegister32(GEN11_GT_INTR_DW1);
+
+	SYSLOG("ngreen", "S5Trace[%s]: RCS START=0x%x CTL=0x%x HEAD=0x%x TAIL=0x%x HWS_PGA=0x%x EXECLIST_STATUS=0x%x CONTEXT_STATUS_PTR=0x%x ERR=0x%x RC_INTR_EN=0x%x RCS0_INTR_MASK=0x%x GFX_MSTR_IRQ=0x%x GT_INTR_DW0=0x%x GT_INTR_DW1=0x%x",
+	       stage ? stage : "<null>", ringStart, ringCtl, ringHead, ringTail, ringHws,
+	       execListStatus, contextStatusPtr, errorGen6, renderCopyIntrEnable,
+	       rcs0ReservedIntrMask, gfxMstrIrq, gtIntrDw0, gtIntrDw1);
+
+	for (uint32_t i = 0; i < 4; i++) {
+		uint32_t lo = tReadRegister32(RING_CONTEXT_STATUS_BUF(RENDER_RING_BASE, i));
+		uint32_t hi = tReadRegister32(RING_CONTEXT_STATUS_BUF_HI(RENDER_RING_BASE, i));
+		SYSLOG("ngreen", "S5Trace[%s]: RCS_CSB[%u]=0x%08x%08x", stage ? stage : "<null>", i, hi, lo);
+	}
+}
+
+bool Gen11::IGScheduler5initWithAccelerator(void *that, void *accelerator) {
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::initWithAccelerator this=%p accel=%p", that, accelerator);
+	dumpRCSSubmissionState("IGScheduler5::initWithAccelerator pre");
+	if (isRcsEngineTraceEnabled()) {
+		validateRcsDescriptorOrEngineObject("IGScheduler5::initWithAccelerator pre", that);
+		dumpNearbyKnownEngineGlobals("IGScheduler5::initWithAccelerator pre");
+		dumpRcsEngineActivationState("IGScheduler5::initWithAccelerator pre");
+	}
+
+	if (!callback->oIGScheduler5initWithAccelerator) {
+		SYSLOG("ngreen", "S5Trace: IGScheduler5::initWithAccelerator original unresolved");
+		dumpRCSSubmissionState("IGScheduler5::initWithAccelerator unresolved");
+		if (isRcsEngineTraceEnabled()) {
+			dumpRcsEngineActivationState("IGScheduler5::initWithAccelerator unresolved");
+		}
+		return false;
+	}
+
+	auto ret = FunctionCast(IGScheduler5initWithAccelerator, callback->oIGScheduler5initWithAccelerator)(that, accelerator);
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::initWithAccelerator ret=%d", ret);
+	dumpRCSSubmissionState("IGScheduler5::initWithAccelerator post");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::initWithAccelerator post");
+		markRcsRegisterTransition("IGScheduler5::initWithAccelerator post");
+	}
+	return ret;
+}
+
+
 	
 void Gen11::IGScheduler5resume(void *that) {
-		
-		void *accelerator = getMember<void *>(that, 0x10);
-		struct IGHwCsDesc *descArray = (struct IGHwCsDesc *)callback->kIGHwCsDesc;
-		uint32_t mode = _MASKED_BIT_ENABLE(GEN11_GFX_DISABLE_LEGACY_MODE);
+	void *accelerator = that ? getMember<void *>(that, 0x10) : nullptr;
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::resume this=%p accel=%p", that, accelerator);
+	dumpRCSSubmissionState("IGScheduler5::resume pre");
+	if (isRcsEngineTraceEnabled()) {
+		validateRcsDescriptorOrEngineObject("IGScheduler5::resume pre", that);
+		dumpRcsEngineActivationState("IGScheduler5::resume pre");
+	}
 
-		for (int i = 0; i < 6; i++) {
-			struct IGHwCsDesc *desc = &descArray[i];
-
-			// --- FILTER: ONLY RCS AND BCS ---
-			if (desc->type == kIGHwCsTypeRCS) {
-				//FunctionCast(SafeForceWake, callback->oSafeForceWake)(accelerator, true, 0);
-			} else if (desc->type == kIGHwCsTypeBCS) {
-				//FunctionCast(SafeForceWake, callback->oSafeForceWake)(accelerator, true, 1);
-			} else {
-				continue;
-			}
-
-					uint32_t ringBase = desc->mmioExecListControl - 0x3c;
-					
-					// USE THE CORRECT STRUCT MEMBER FOR HWS
-					// The dump proves mmioGlobalStatusPage holds the offset 0x2080
-					uint32_t hwsRegisterOffset = desc->mmioGlobalStatusPage;
-					
-					// READ SHADOW REGISTER
-					// We use the offset from the struct (0x2080) to index the shadow map
-					uint32_t hwsAddr = getMember<uint32_t>(accelerator, 0x1240 + hwsRegisterOffset);
-					
-					// WRITE TO HARDWARE
-					NGreen::callback->writeReg32(hwsRegisterOffset, hwsAddr);
-					NGreen::callback->readReg32(hwsRegisterOffset);
-
-					// REST OF INIT (Using explicit offsets from struct where possible)
-					NGreen::callback->writeReg32(ringBase + 0x98, ~0u); // HWSTAM
-					NGreen::callback->writeReg32(desc->mmioGfxMode, mode); // GFX Mode
-					NGreen::callback->writeReg32(ringBase + 0x9c, _MASKED_BIT_DISABLE(STOP_RING)); // MI Mode
-					
-					NGreen::callback->writeReg32(desc->mmioErrorIdentity, ~0u); // EMR
-					NGreen::callback->writeReg32(desc->mmioErrorMask, ~0u);    // EIR
-					NGreen::callback->writeReg32(desc->mmioErrorIdentity, ~0x1); // I915_ERROR_INSTRUCTION
+	if (!callback->oIGScheduler5resume) {
+		SYSLOG("ngreen", "S5Trace: IGScheduler5::resume original unresolved");
+		dumpRCSSubmissionState("IGScheduler5::resume unresolved");
+		if (isRcsEngineTraceEnabled()) {
+			dumpRcsEngineActivationState("IGScheduler5::resume unresolved");
 		}
-	
+		return;
+	}
+
 	FunctionCast(IGScheduler5resume, callback->oIGScheduler5resume)(that);
-	
+	dumpRCSSubmissionState("IGScheduler5::resume post");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::resume post");
+		markRcsRegisterTransition("IGScheduler5::resume post");
+	}
+}
+
+bool Gen11::IGScheduler5push(void *that, void *context, uint32_t arg2, uint32_t arg3, bool arg4, bool arg5) {
+	IGHwCsType type = kIGHwCsTypeRCS;
+	void *csState = context ? getMember<void *>(context, 0xb8) : nullptr;
+	bool haveType = csState != nullptr;
+	if (haveType) {
+		type = static_cast<IGHwCsType>(getMember<int32_t>(csState, 0x20));
+	}
+
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::push this=%p ctx=%p type=%u haveType=%d arg2=0x%x arg3=0x%x arg4=%d arg5=%d",
+	       that, context, haveType ? static_cast<unsigned>(type) : 0xFFFFFFFFU, haveType, arg2, arg3, arg4, arg5);
+	if (haveType && !isRcsEngineType(type)) {
+		SYSLOG("ngreen", "S5Trace: IGScheduler5::push observed non-RCS engine=%u, forwarding to original", static_cast<unsigned>(type));
+	}
+	dumpRCSSubmissionState("IGScheduler5::push pre");
+	if (isRcsEngineTraceEnabled()) {
+		validateRcsDescriptorOrEngineObject("IGScheduler5::push pre scheduler", that);
+		validateRcsDescriptorOrEngineObject("IGScheduler5::push pre context", context);
+		dumpNearbyKnownEngineGlobals("IGScheduler5::push pre");
+		dumpRcsEngineActivationState("IGScheduler5::push pre");
+	}
+
+	if (!callback->oIGScheduler5push) {
+		SYSLOG("ngreen", "S5Trace: IGScheduler5::push original unresolved");
+		dumpRCSSubmissionState("IGScheduler5::push unresolved");
+		if (isRcsEngineTraceEnabled()) {
+			dumpRcsEngineActivationState("IGScheduler5::push unresolved");
+		}
+		return false;
+	}
+
+	auto ret = FunctionCast(IGScheduler5push, callback->oIGScheduler5push)(that, context, arg2, arg3, arg4, arg5);
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::push ret=%d", ret);
+	dumpRCSSubmissionState("IGScheduler5::push post");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::push post");
+		markRcsRegisterTransition("IGScheduler5::push post");
+		uint32_t ringStart = tReadRegister32(RING_START(RENDER_RING_BASE));
+		uint32_t ringCtl = tReadRegister32(RING_CTL(RENDER_RING_BASE));
+		uint32_t ringTail = tReadRegister32(RING_TAIL(RENDER_RING_BASE));
+		uint32_t acthd = tReadRegister32(RING_ACTHD(RENDER_RING_BASE));
+		uint32_t csb0 = tReadRegister32(RING_CONTEXT_STATUS_BUF(RENDER_RING_BASE, 0));
+		uint32_t csb0Hi = tReadRegister32(RING_CONTEXT_STATUS_BUF_HI(RENDER_RING_BASE, 0));
+		if (ret == 1 && ringStart == 0 && ringCtl == 0) {
+			SYSLOG("ngreen", "RCS_ANALYSIS: push accepted but RCS ring not programmed");
+		} else if ((ringStart != 0 || ringCtl != 0) && ringTail == 0) {
+			SYSLOG("ngreen", "RCS_ANALYSIS: ring programmed but tail not moving");
+		} else if (ringTail != 0 && acthd == 0) {
+			SYSLOG("ngreen", "RCS_ANALYSIS: tail moved but ACTHD did not");
+		} else if (acthd != 0 && csb0 == 0 && csb0Hi == 0) {
+			SYSLOG("ngreen", "RCS_ANALYSIS: ACTHD moved but CSB did not");
+		} else if (csb0 != 0 || csb0Hi != 0) {
+			SYSLOG("ngreen", "RCS_ANALYSIS: CSB moved; completion path may be next");
+		}
+	}
+	return ret;
+}
+
+void Gen11::IGScheduler5notify(void *that, IGHwCsType type) {
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::notify this=%p type=%u", that, static_cast<unsigned>(type));
+	if (!isRcsEngineType(type)) {
+		SYSLOG("ngreen", "S5Trace: IGScheduler5::notify observed non-RCS engine=%u, forwarding to original", static_cast<unsigned>(type));
+	}
+	dumpRCSSubmissionState("IGScheduler5::notify pre");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::notify pre");
+	}
+
+	if (!callback->oIGScheduler5notify) {
+		SYSLOG("ngreen", "S5Trace: IGScheduler5::notify original unresolved");
+		dumpRCSSubmissionState("IGScheduler5::notify unresolved");
+		if (isRcsEngineTraceEnabled()) {
+			dumpRcsEngineActivationState("IGScheduler5::notify unresolved");
+		}
+		return;
+	}
+
+	FunctionCast(IGScheduler5notify, callback->oIGScheduler5notify)(that, type);
+	dumpRCSSubmissionState("IGScheduler5::notify post");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::notify post");
+		markRcsRegisterTransition("IGScheduler5::notify post");
+	}
+}
+
+void Gen11::IGScheduler5enableStampInterrupt(void *that, int stampIndex) {
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::enableStampInterrupt this=%p stampIndex=%d", that, stampIndex);
+	dumpRCSSubmissionState("IGScheduler5::enableStampInterrupt pre");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::enableStampInterrupt pre");
+	}
+
+	if (!callback->oIGScheduler5enableStampInterrupt) {
+		SYSLOG("ngreen", "S5Trace: IGScheduler5::enableStampInterrupt original unresolved");
+		dumpRCSSubmissionState("IGScheduler5::enableStampInterrupt unresolved");
+		if (isRcsEngineTraceEnabled()) {
+			dumpRcsEngineActivationState("IGScheduler5::enableStampInterrupt unresolved");
+		}
+		return;
+	}
+
+	FunctionCast(IGScheduler5enableStampInterrupt, callback->oIGScheduler5enableStampInterrupt)(that, stampIndex);
+	dumpRCSSubmissionState("IGScheduler5::enableStampInterrupt post");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::enableStampInterrupt post");
+		markRcsRegisterTransition("IGScheduler5::enableStampInterrupt post");
+	}
+}
+
+void Gen11::IGScheduler5enableContextSwitchInterrupts(void *that) {
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::enableContextSwitchInterrupts this=%p", that);
+	dumpRCSSubmissionState("IGScheduler5::enableContextSwitchInterrupts pre");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::enableContextSwitchInterrupts pre");
+	}
+
+	if (!callback->oIGScheduler5enableContextSwitchInterrupts) {
+		SYSLOG("ngreen", "S5Trace: IGScheduler5::enableContextSwitchInterrupts original unresolved");
+		dumpRCSSubmissionState("IGScheduler5::enableContextSwitchInterrupts unresolved");
+		if (isRcsEngineTraceEnabled()) {
+			dumpRcsEngineActivationState("IGScheduler5::enableContextSwitchInterrupts unresolved");
+		}
+		return;
+	}
+
+	FunctionCast(IGScheduler5enableContextSwitchInterrupts, callback->oIGScheduler5enableContextSwitchInterrupts)(that);
+	dumpRCSSubmissionState("IGScheduler5::enableContextSwitchInterrupts post");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::enableContextSwitchInterrupts post");
+		markRcsRegisterTransition("IGScheduler5::enableContextSwitchInterrupts post");
+	}
+}
+
+bool Gen11::IGScheduler5checkForProgress(void *that, IGHwCsType type) {
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::checkForProgress this=%p type=%u", that, static_cast<unsigned>(type));
+	dumpRCSSubmissionState("IGScheduler5::checkForProgress pre");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::checkForProgress pre");
+	}
+
+	if (!callback->oIGScheduler5checkForProgress) {
+		SYSLOG("ngreen", "S5Trace: IGScheduler5::checkForProgress original unresolved");
+		dumpRCSSubmissionState("IGScheduler5::checkForProgress unresolved");
+		if (isRcsEngineTraceEnabled()) {
+			dumpRcsEngineActivationState("IGScheduler5::checkForProgress unresolved");
+		}
+		return false;
+	}
+
+	auto ret = FunctionCast(IGScheduler5checkForProgress, callback->oIGScheduler5checkForProgress)(that, type);
+	SYSLOG("ngreen", "S5Trace: IGScheduler5::checkForProgress ret=%d", ret);
+	dumpRCSSubmissionState("IGScheduler5::checkForProgress post");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGScheduler5::checkForProgress post");
+		markRcsRegisterTransition("IGScheduler5::checkForProgress post");
+	}
+	return ret;
+}
+
+void Gen11::IGHardwareContextinitRingGPUVirtualAddress(void *that) {
+	if (isRcsEngineTraceEnabled()) {
+		validateRcsDescriptorOrEngineObject("IGHardwareContext::initRingGPUVirtualAddress pre", that);
+		dumpRcsEngineActivationState("IGHardwareContext::initRingGPUVirtualAddress pre");
+		dumpContextImageKnownFields("IGHardwareContext::initRingGPUVirtualAddress pre", that);
+	}
+	if (callback->oIGHardwareContextinitRingGPUVirtualAddress) {
+		FunctionCast(IGHardwareContextinitRingGPUVirtualAddress, callback->oIGHardwareContextinitRingGPUVirtualAddress)(that);
+	}
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareContext::initRingGPUVirtualAddress post");
+		dumpContextImageKnownFields("IGHardwareContext::initRingGPUVirtualAddress post", that);
+		markRcsRegisterTransition("IGHardwareContext::initRingGPUVirtualAddress post");
+	}
+}
+
+void Gen11::IGHardwareContextinitRingRegisters(void *that) {
+	if (isRcsEngineTraceEnabled()) {
+		validateRcsDescriptorOrEngineObject("IGHardwareContext::initRingRegisters pre", that);
+		dumpRcsEngineActivationState("IGHardwareContext::initRingRegisters pre");
+		dumpContextImageKnownFields("IGHardwareContext::initRingRegisters pre", that);
+	}
+	if (callback->oIGHardwareContextinitRingRegisters) {
+		FunctionCast(IGHardwareContextinitRingRegisters, callback->oIGHardwareContextinitRingRegisters)(that);
+	}
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareContext::initRingRegisters post");
+		dumpContextImageKnownFields("IGHardwareContext::initRingRegisters post", that);
+		markRcsRegisterTransition("IGHardwareContext::initRingRegisters post");
+	}
+}
+
+void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareContext::initRingControl this=%p enable=%d", that, enable);
+		dumpRcsEngineActivationState("IGHardwareContext::initRingControl pre");
+		dumpContextImageKnownFields("IGHardwareContext::initRingControl pre", that);
+	}
+	if (callback->oIGHardwareContextinitRingControl) {
+		FunctionCast(IGHardwareContextinitRingControl, callback->oIGHardwareContextinitRingControl)(that, enable);
+	}
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareContext::initRingControl post");
+		dumpContextImageKnownFields("IGHardwareContext::initRingControl post", that);
+		markRcsRegisterTransition("IGHardwareContext::initRingControl post");
+	}
+}
+
+void Gen11::IGHardwareContextresetRingHead(void *that) {
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareContext::resetRingHead pre");
+	}
+	if (callback->oIGHardwareContextresetRingHead) {
+		FunctionCast(IGHardwareContextresetRingHead, callback->oIGHardwareContextresetRingHead)(that);
+	}
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareContext::resetRingHead post");
+		markRcsRegisterTransition("IGHardwareContext::resetRingHead post");
+	}
+}
+
+void Gen11::IGHardwareContextupdateRingTail(void *that, uint32_t tail) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareContext::updateRingTail this=%p tail=0x%x", that, tail);
+		dumpRcsEngineActivationState("IGHardwareContext::updateRingTail pre");
+		dumpContextImageKnownFields("IGHardwareContext::updateRingTail pre", that);
+	}
+	if (callback->oIGHardwareContextupdateRingTail) {
+		FunctionCast(IGHardwareContextupdateRingTail, callback->oIGHardwareContextupdateRingTail)(that, tail);
+	}
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareContext::updateRingTail post");
+		dumpContextImageKnownFields("IGHardwareContext::updateRingTail post", that);
+		markRcsRegisterTransition("IGHardwareContext::updateRingTail post");
+	}
+}
+
+bool Gen11::IGHardwareRingBufferinit(void *that, void *context) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareRingBuffer::init this=%p context=%p", that, context);
+		validateRcsDescriptorOrEngineObject("IGHardwareRingBuffer::init ringBuffer", that);
+		validateRcsDescriptorOrEngineObject("IGHardwareRingBuffer::init context", context);
+		dumpRcsEngineActivationState("IGHardwareRingBuffer::init pre");
+		dumpContextImageKnownFields("IGHardwareRingBuffer::init pre", context);
+		dumpRingMemoryKnownFields("IGHardwareRingBuffer::init pre", that);
+	}
+
+	if (!callback->oIGHardwareRingBufferinit) {
+		if (isRcsEngineTraceEnabled()) {
+			dumpRcsEngineActivationState("IGHardwareRingBuffer::init unresolved");
+		}
+		return false;
+	}
+
+	auto ret = FunctionCast(IGHardwareRingBufferinit, callback->oIGHardwareRingBufferinit)(that, context);
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareRingBuffer::init ret=%d", ret);
+		dumpRcsEngineActivationState("IGHardwareRingBuffer::init post");
+		dumpContextImageKnownFields("IGHardwareRingBuffer::init post", context);
+		dumpRingMemoryKnownFields("IGHardwareRingBuffer::init post", that);
+		markRcsRegisterTransition("IGHardwareRingBuffer::init post");
+	}
+	return ret;
+}
+
+void Gen11::IGHardwareRingBuffersubmitToRing(void *that) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareRingBuffer::submitToRing this=%p", that);
+		dumpRcsEngineActivationState("IGHardwareRingBuffer::submitToRing pre");
+		dumpRingMemoryKnownFields("IGHardwareRingBuffer::submitToRing pre", that);
+		dumpContextImageKnownFields("IGHardwareRingBuffer::submitToRing pre", getMember<void *>(that, 0x20));
+	}
+
+	if (callback->oIGHardwareRingBuffersubmitToRing) {
+		FunctionCast(IGHardwareRingBuffersubmitToRing, callback->oIGHardwareRingBuffersubmitToRing)(that);
+	}
+
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareRingBuffer::submitToRing post");
+		dumpRingMemoryKnownFields("IGHardwareRingBuffer::submitToRing post", that);
+		dumpContextImageKnownFields("IGHardwareRingBuffer::submitToRing post", getMember<void *>(that, 0x20));
+		markRcsRegisterTransition("IGHardwareRingBuffer::submitToRing post");
+	}
+}
+
+bool Gen11::IGHardwareRenderCommandStreamerinit(void *that, void *accelerator, void *workLoop, void *scheduler) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareRenderCommandStreamer::init this=%p accel=%p workLoop=%p scheduler=%p", that, accelerator, workLoop, scheduler);
+		validateRcsDescriptorOrEngineObject("IGHardwareRenderCommandStreamer::init scheduler", scheduler);
+		dumpNearbyKnownEngineGlobals("IGHardwareRenderCommandStreamer::init pre");
+		dumpRcsEngineActivationState("IGHardwareRenderCommandStreamer::init pre");
+	}
+
+	if (!callback->oIGHardwareRenderCommandStreamerinit) {
+		if (isRcsEngineTraceEnabled()) {
+			dumpRcsEngineActivationState("IGHardwareRenderCommandStreamer::init unresolved");
+		}
+		return false;
+	}
+
+	auto ret = FunctionCast(IGHardwareRenderCommandStreamerinit, callback->oIGHardwareRenderCommandStreamerinit)(that, accelerator, workLoop, scheduler);
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareRenderCommandStreamer::init ret=%d", ret);
+		dumpRcsEngineActivationState("IGHardwareRenderCommandStreamer::init post");
+		markRcsRegisterTransition("IGHardwareRenderCommandStreamer::init post");
+	}
+	return ret;
+}
+
+void Gen11::IGHardwareCommandStreamerresumeScheduling(void *that) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareCommandStreamer::resumeScheduling this=%p", that);
+		dumpRcsEngineActivationState("IGHardwareCommandStreamer::resumeScheduling pre");
+	}
+
+	if (callback->oIGHardwareCommandStreamerresumeScheduling) {
+		FunctionCast(IGHardwareCommandStreamerresumeScheduling, callback->oIGHardwareCommandStreamerresumeScheduling)(that);
+	}
+
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareCommandStreamer::resumeScheduling post");
+		markRcsRegisterTransition("IGHardwareCommandStreamer::resumeScheduling post");
+	}
+}
+
+void Gen11::IGHardwareCommandStreamersubmitExecList(void *that, uint32_t stamp) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareCommandStreamer::submitExecList this=%p stamp=0x%x", that, stamp);
+		dumpRcsEngineActivationState("IGHardwareCommandStreamer::submitExecList pre");
+		SYSLOG("ngreen", "NG_STAMP_MEM[IGHardwareCommandStreamer::submitExecList pre]: stampIndex=0x%x", stamp);
+	}
+
+	if (callback->oIGHardwareCommandStreamersubmitExecList) {
+		FunctionCast(IGHardwareCommandStreamersubmitExecList, callback->oIGHardwareCommandStreamersubmitExecList)(that, stamp);
+	}
+
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareCommandStreamer::submitExecList post");
+		SYSLOG("ngreen", "NG_STAMP_MEM[IGHardwareCommandStreamer::submitExecList post]: stampIndex=0x%x", stamp);
+		markRcsRegisterTransition("IGHardwareCommandStreamer::submitExecList post");
+	}
+}
+
+void Gen11::IGHardwareCommandStreamerprepareExecListAndSubmit(void *that, uint32_t arg1, uint32_t arg2, const uint32_t *arg3) {
+	if (isRcsEngineTraceEnabled()) {
+		SYSLOG("ngreen", "RCS_TRACE: IGHardwareCommandStreamer::prepareExecListAndSubmit this=%p arg1=0x%x arg2=0x%x arg3=%p", that, arg1, arg2, arg3);
+		if (arg3) {
+			SYSLOG("ngreen", "RCS_TRACE: IGHardwareCommandStreamer::prepareExecListAndSubmit arg3[0]=0x%x arg3[1]=0x%x", arg3[0], arg3[1]);
+		}
+		dumpRcsEngineActivationState("IGHardwareCommandStreamer::prepareExecListAndSubmit pre");
+		SYSLOG("ngreen", "NG_ELSP_WRITE[IGHardwareCommandStreamer::prepareExecListAndSubmit pre]: arg1=0x%x arg2=0x%x arg3=%p", arg1, arg2, arg3);
+		SYSLOG("ngreen", "NG_CONTEXT_DESC[IGHardwareCommandStreamer::prepareExecListAndSubmit pre]: desc0=0x%x desc1=0x%x", arg3 ? arg3[0] : 0, arg3 ? arg3[1] : 0);
+	}
+
+	if (callback->oIGHardwareCommandStreamerprepareExecListAndSubmit) {
+		FunctionCast(IGHardwareCommandStreamerprepareExecListAndSubmit, callback->oIGHardwareCommandStreamerprepareExecListAndSubmit)(that, arg1, arg2, arg3);
+	}
+
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("IGHardwareCommandStreamer::prepareExecListAndSubmit post");
+		SYSLOG("ngreen", "NG_ELSP_WRITE[IGHardwareCommandStreamer::prepareExecListAndSubmit post]: arg1=0x%x arg2=0x%x arg3=%p", arg1, arg2, arg3);
+		markRcsRegisterTransition("IGHardwareCommandStreamer::prepareExecListAndSubmit post");
+	}
 }
 
 unsigned long Gen11::resetGraphicsEngine(void *that,void *param_1)
@@ -5730,6 +6369,14 @@ unsigned long Gen11::resetGraphicsEngine(void *that,void *param_1)
 	static int v63ResetCount = 0;
 	v63ResetCount++;
 	SYSLOG("ngreen", "V63: resetGraphicsEngine call #%d", v63ResetCount);
+	if (isTglTraceEnabled()) {
+		getTglGpuBringupState().rcsResetSeen = true;
+		dumpTglGpuBringupState("resetGraphicsEngine PRE");
+	}
+	if (isRcsEngineTraceEnabled()) {
+		validateRcsDescriptorOrEngineObject("resetGraphicsEngine PRE", param_1);
+		dumpRcsEngineActivationState("resetGraphicsEngine PRE");
+	}
 	
 	//GT workarounds: the list of these WAs is applied whenever these registers
 	//*   revert to their default values: on GPU reset, suspend/resume [1]_, etc.
@@ -5822,6 +6469,11 @@ unsigned long Gen11::resetGraphicsEngine(void *that,void *param_1)
 		NGreen::callback->writeReg32(RING_EMR(BLT_RING_BASE), 0xFFFFFFFF);
 		if (postErr)
 			SYSLOG("ngreen", "V71: resetGfxEng post-clear ERR=0x%x", postErr);
+	}
+	dumpTglGpuBringupState("resetGraphicsEngine POST");
+	if (isRcsEngineTraceEnabled()) {
+		dumpRcsEngineActivationState("resetGraphicsEngine POST");
+		markRcsRegisterTransition("resetGraphicsEngine POST");
 	}
 	
 	return ret;

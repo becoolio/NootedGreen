@@ -1,0 +1,37 @@
+# IORegistry Graphics Tree
+
+## Collection
+- Command: ioreg -lw0 -p IOService | grep -Ei graphics-related
+- Status: COMPLETED - See full ioreg output
+
+## Key Findings
+
+### Lilu
+- Index 56: as.vit9696.Lilu (1.7.3)
+- "VersionInfo" = "DBG-173-2026-03-20"
+- "IOMatchedAtBoot" = Yes
+
+### NootedGreen
+- Index 58: com.StezzaPilot.NootedGreen (1.0.4)
+- "IOMatchedAtBoot" = Yes
+
+### AppleGPUWrangler
+- Index 135: com.apple.AppleGPUWrangler
+- "debug-gpus" shows GPU stats
+- Active and registered
+
+### IODisplayWrangler
+- Index 502: IODisplayWrangler
+- "IOGraphicsIgnoreParameters" = {"aupc"=Yes,"auph"=Yes,...}
+- Power state 4 (active)
+- Registered and active
+
+### IOAccelerationUserClient
+- Index 632: IOAccelerationUserClient
+- "IOUserClientCreator" = "pid 166, WindowServer"
+- Non-registered, matched active
+
+### AppleIntelTGLGraphicsFramebuffer
+- Index 138: com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer (16.0.0)
+- Attached to AppleIntelFramebufferController
+- IOFramebufferUserClient present

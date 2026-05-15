@@ -1,0 +1,42 @@
+# Git and Build State
+
+## Git Information
+- Current Branch: main
+- Latest Commit: 2cf3a06 Revert "blit mem fix check"
+- Commit Date: Unknown
+- Changes: 3 files changed, 306 insertions(+), 46 deletions(-)
+
+## Uncommitted Changes
+- NootedGreen.xcodeproj/project.pbxproj: +8 lines
+- NootedGreen/kern_gen11.cpp: +323 lines
+- NootedGreen/kern_gen11.hpp: +21 lines
+
+## Source Info.plist
+- CFBundleIdentifier: com.StezzaPilot.NootedGreen
+- CFBundleVersion: 1.0.4
+- CFBundleShortVersionString: 1.0.4
+
+## Expected NootedGreen Version
+- Source: 1.0.4
+- Build: V1.0.4
+
+## Loaded Kext Version
+- Loaded: com.StezzaPilot.NootedGreen (1.0.4)
+- Kextstat Index: 58
+- Address: 0xffffff8003f22000
+- Size: 0x68000
+- Linked Against: <56 18 9 7 6 3 2 1>
+
+## Version Match Analysis
+- Source version: 1.0.4
+- Loaded version: 1.0.4
+- Match: YES
+
+## Git Diff Summary
+- project.pbxproj: Modified (build settings)
+- kern_gen11.cpp: +323 lines (major changes, likely blit mem fix revert)
+- kern_gen11.hpp: +21 lines (header changes)
+
+## Note
+The commit message "Revert 'blit mem fix check'" indicates the previous blit memory fix
+was reverted. This is the HEAD commit for this boot.

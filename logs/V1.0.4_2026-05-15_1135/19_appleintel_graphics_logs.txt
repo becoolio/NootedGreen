@@ -1,0 +1,102 @@
+# AppleIntel Graphics Logs
+
+## Collection Status
+- log show command: FAILED due to zsh syntax
+- Evidence source: kextstat and IORegistry
+
+## Evidence from kextstat
+
+### AppleIntelTGLGraphicsFramebuffer
+- Bundle: com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer
+- Version: 16.0.0
+- Index: 138
+- Address: 0xffffff7f96669000
+- Size: 0x138000
+- Linked Against: <137 136 134 133 48 18 17 9 7 6 3 1>
+- Dependencies: HookCase, IOAcceleratorFamily2, AppleGPUWrangler, IOGraphicsFamily
+- Status: LOADED
+
+### IOGraphicsFamily
+- Bundle: com.apple.iokit.IOGraphicsFamily
+- Version: 598
+- Index: 133
+- Status: LOADED
+
+### IOAcceleratorFamily2
+- Bundle: com.apple.iokit.IOAcceleratorFamily2
+- Version: 481.40.2
+- Index: 136
+- Status: LOADED
+
+### AppleGPUWrangler
+- Bundle: com.apple.AppleGPUWrangler
+- Version: 8.1.9
+- Index: 135
+- Status: LOADED
+
+### AppleGraphicsControl
+- Bundle: com.apple.driver.AppleGraphicsControl
+- Version: 8.1.9
+- Index: 169
+- Status: LOADED
+
+### AppleGraphicsDeviceControl
+- Bundle: com.apple.AppleGraphicsDeviceControl
+- Version: 8.1.9
+- Index: 134
+- Status: LOADED
+
+## Evidence from IORegistry
+
+### AppleGPUWrangler
+- id 0x1000004fa
+- "debug-gpus" dictionary with GPU statistics
+- Active and registered
+
+### AppleGraphicsDevicePolicy
+- id 0x1000004f0
+- Active under AppleGPUWrangler
+
+### AppleIntelFramebufferController
+- Count: 1 (visible in IOKitDiagnostics)
+- Active
+
+### AppleIntelFramebufferDiags
+- Count: 3 (visible in IOKitDiagnostics)
+- Active
+
+### AppleIntelDisplaySimController
+- Count: 1 (visible in IOKitDiagnostics)
+- Active
+
+### IntelFBClientControl
+- Count: 1 (visible in IOKitDiagnostics)
+- Active
+
+### AppleIntelPlane
+- Count: 15 (visible in IOKitDiagnostics)
+- Active
+
+### AppleIntelDisplayPath
+- Count: 3 (visible in IOKitDiagnostics)
+- Active
+
+## Analysis
+- AppleIntelTGLGraphicsFramebuffer: LOADED
+- AppleIntelTGLGraphics (accelerator): LOADED
+- AppleIntelFramebufferController: ACTIVE
+- AppleIntelFramebufferDiags: 3 instances ACTIVE
+- AppleIntelDisplaySimController: ACTIVE
+- IntelFBClientControl: ACTIVE
+- AppleIntelPlane: 15 instances ACTIVE
+- AppleIntelDisplayPath: 3 instances ACTIVE
+- IOAcceleratorFamily2: LOADED
+
+## Metal Support Evidence
+- AppleIntelTGLGraphicsMTLDriver.bundle in sle_Internal
+- Metal: Supported (from system_profiler)
+
+## Comparison with Previous Boot
+- Previous: AppleIntel TGL components loaded
+- Current: AppleIntel TGL components loaded
+- Status: UNCHANGED - All components loaded

@@ -1,0 +1,54 @@
+# GuC/ForceWake/PowerWell/Ring Logs
+
+## Collection Status
+- log show command: FAILED due to zsh syntax
+- Evidence source: Boot args and kextstat
+
+## Evidence from Boot Args
+
+### Current Boot Args Analysis
+- ngreen-dmc=tgl: DMC firmware loading for Tiger Lake enabled
+- -disablegfxfirmware: REMOVED (was present in previous boot)
+- -ngreenTglTrace: NEW - TGL-specific tracing enabled
+
+## Key Difference from Previous
+Previous boot had: -disablegfxfirmware
+Current boot: NO -disablegfxfirmware flag
+
+This means GuC/HuC firmware loading is now enabled (not explicitly disabled).
+
+## IORegistry Evidence
+
+### AppleIntelPowerWell
+- Count: 1 (visible in IOKitDiagnostics)
+- Status: Active
+
+### AppleIntelPortHAL
+- Count: 1 (visible in IOKitDiagnostics)
+- Status: Active
+
+### AppleIntelRegisterAccessManager
+- Count: 1 (visible in IOKitDiagnostics)
+- Status: Active
+
+### AppleIntelBaseController
+- Count: 1 (visible in IOKitDiagnostics)
+- Status: Active
+
+## Ring Status Analysis
+Based on IOKitDiagnostics:
+- AppleIntelPlane count: 15 (display planes active)
+- AppleIntelDisplayPath count: 3 (display paths active)
+- RCS/VCS/VECS rings: NOT explicitly enumerated
+
+## Analysis
+- DMC: Enabled (ngreen-dmc=tgl)
+- GuC/HuC: NOT explicitly disabled (no -disablegfxfirmware)
+- Power wells: AppleIntelPowerWell present
+- Display planes: 15 instances active
+- Display paths: 3 instances active
+
+## Comparison with Previous
+- Previous: -disablegfxfirmware was set
+- Current: -disablegfxfirmware is NOT set
+- Status: CHANGE - GuC/HuC may now load (test of firmware loading)

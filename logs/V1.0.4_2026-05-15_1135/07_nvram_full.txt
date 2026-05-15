@@ -1,0 +1,12 @@
+boot-gamma	%e40%00%00%1e%07%00%00%00%00%00%00%be%00%00%00%00%00%00%00%0d%00%00%01U%00%02%08%09%07C%0f%dc%0e%07%1cV %0c1%b3@O<%0aQRK%1acVZ%18s%f1%c6%a0%d5%b3%cd%01%db%ba%eb%ff%ef%fe%f9%9e%f7%ff%fd%d9%fb%0c%00%02%08n%06%04%10~%0e%07%1eV L1%be;O<%8eJ%12J<Z%96XPi%18cms%e5%961%a1%b4%d2u%da%fa%e9%7f%ee%be%f9@%f9%10%00%02%0al%06%05%14%03%0f%0c0%81.O<c;QG%a2E^x%b3ng%9d%ba%89%ad%b4%a3%9b%b0%c3V%a8%f4%d2%91%b6y%e52%cb{%ec.%d4%bc%f24%dd}%f7%a2%e5%fe%fa%90%ed%ff%fd%fa%f6
+boot-args	itlwm_cc=US -v -liludbgall liludump=80 keepsyms=1 debug=0x100 NGreenDebug ngreenSched=3 ngreen-dmc=tgl -ngreenTglTrace
+bluetoothExternalDongleFailed	%00
+bluetoothInternalControllerInfo	%00%00%00%00%00%00%00%00%00%00%00%00%00%00
+prev-lang:kbd	en:-252%00
+run-efi-updater	%00
+SystemAudioVolumeDB	%e4
+platform-uuid	DELLN%00%10K%802%b9%c0OQG3
+prev-lang-diags:	en
+fmm-computer-name	MacBook Pro
+csr-active-config	%ef%0f%00%00
+SystemAudioVolume	F

@@ -1,0 +1,10 @@
+# dmesg Output
+
+## Status
+- Command: dmesg
+- Status: FAILED - Unable to obtain kernel buffer: Operation not permitted
+- Note: sudo required but not available in this context
+
+## Alternative
+Kernel logs cannot be collected via dmesg without sudo privileges.
+Using ioreg and system_profiler as primary data sources for this analysis.

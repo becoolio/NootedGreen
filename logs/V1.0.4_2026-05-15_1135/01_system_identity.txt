@@ -1,0 +1,46 @@
+# System Identity Report
+# Generated: Fri May 15 03:28:55 EST 2026
+
+## sw_vers
+ProductName:		macOS
+ProductVersion:		14.8.3
+BuildVersion:		23J220
+
+## uname -a
+Darwin macbook-pro 23.6.0 Darwin Kernel Version 23.6.0: Wed Nov  5 21:49:21 PST 2025; root:xnu-10063.141.1.708.2~1/RELEASE_X86_64 x86_64
+
+## hostname
+macbook-pro
+
+## uptime
+ 3:28  up 7 mins, 1 user, load averages: 6.62 19.61 12.79
+
+## whoami
+becoolio
+
+## date
+Fri May 15 03:28:55 EST 2026
+
+## sysctl kern.boottime
+kern.boottime: { sec = 1778833339, usec = 413964 } Fri May 15 03:22:19 2026
+
+## sysctl hw.model
+hw.model: MacBookPro16,2
+
+## SIP Status
+System Integrity Protection status: unknown (Custom Configuration).
+Configuration:
+	Apple Internal: disabled
+	Kext Signing: disabled
+	Filesystem Protections: disabled
+	Debugging Restrictions: disabled
+	DTrace Restrictions: disabled
+	NVRAM Protections: disabled
+	BaseSystem Verification: disabled
+This is an unsupported configuration, likely to break in the future and leave your machine in an unknown state.
+
+## Authenticated Root Status
+Authenticated Root status: disabled
+
+## Previous Shutdown Cause
+NOTE: Command execution had syntax issue. See kernel logs for shutdown cause.

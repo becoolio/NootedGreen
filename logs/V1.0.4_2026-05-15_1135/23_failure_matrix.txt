@@ -1,0 +1,43 @@
+# Failure Matrix
+
+| Component | Expected | Observed | Status | Evidence | Likely Meaning |
+|-----------|----------|----------|--------|----------|----------------|
+| OpenCore boot-args | Custom with debug flags | itlwm_cc=US -v -liludbgall liludump=80 keepsyms=1 debug=0x100 NGreenDebug ngreenSched=3 ngreen-dmc=tgl -ngreenTglTrace | PASS | NVRAM boot-args | Debug flags present |
+| Lilu load | Loaded | Loaded v1.7.3 | PASS | kextstat index 56 | Lilu working |
+| NootedGreen load | Loaded | Loaded v1.0.4 | PASS | kextstat index 58 | NootedGreen working |
+| NootedGreen version | 1.0.4 | 1.0.4 | PASS | Info.plist vs loaded | Version matches |
+| NootedGreen patch application | Complete | Complete | PASS | All stages finished | Patches applied |
+| NootedGreen function routing | Routes exist | Routes exist | PASS | ioreg presence | Functions routed |
+| IGPU IORegistry presence | Present | Present | PASS | system_profiler shows GPU | IGPU detected |
+| IGPU device-id | 0x9a49 | 0x9a49 | PASS | system_profiler "Device ID: 0x9a49" | Spoof working |
+| IGPU platform-id | Set | UNKNOWN | UNKNOWN | Not visible in current data | Platform-id not explicitly verified |
+| AppleIntel graphics kext load | Multiple | AppleIntelTGLGraphicsFramebuffer + IOAcceleratorFamily2 | PASS | kextstat indices 138, 136 | Kexts loaded |
+| AppleIntel framebuffer attach | Attached | AppleIntelFramebufferController active | PASS | IOKitDiagnostics count=1 | Attached |
+| AppleIntel accelerator attach | Attached | IOAcceleratorFamily2 loaded | PASS | kextstat index 136 | Attached |
+| framebuffer service publication | Published | AppleIntelFramebufferDiags active | PASS | IOKitDiagnostics count=3 | Published |
+| IOFramebuffer availability | Available | IOFramebufferUserClient present | PASS | ioreg id 0x1000005fa | Available |
+| EDID present | Present | Present | PASS | Display online 1920x1080 | EDID present |
+| VBT present | Present | UNKNOWN | UNKNOWN | Not explicitly verified | Needs log check |
+| OpRegion present | Present | UNKNOWN | UNKNOWN | Not explicitly verified | Needs log check |
+| display online | Online | Online=Yes | PASS | system_profiler | Display online |
+| display mode publication | Modes | 1920x1080 modes | PASS | system_profiler | Modes published |
+| backlight service | Present | Present (no IOBacklight) | PASS | IODisplayWrangler active | Backlight working |
+| WindowServer startup | Started | Started (pid 166) | PASS | ioreg user clients | Started |
+| CoreDisplay transaction | Supported | IOAccelerationUserClient created | PASS | ioreg id 0x100000632 | Supported |
+| IOAccelDisplayPipeUserClient2 | Created | UNKNOWN | UNKNOWN | Not visible directly | May not be enumerated |
+| IOAccelerator attach | Attached | IOAcceleratorFamily2 loaded | PASS | kextstat index 136 | Attached |
+| Metal support | Supported | Metal: Supported | PASS | system_profiler | Metal works |
+| GuC firmware | May load | NOT explicitly disabled | PARTIAL | No -disablegfxfirmware flag | May load |
+| HuC firmware | May load | NOT explicitly disabled | PARTIAL | No -disablegfxfirmware flag | May load |
+| DMC firmware | Loaded | ngreen-dmc=tgl flag set | PASS | Boot args | DMC enabled |
+| forcewake | Active | AppleIntelPowerWell active | PASS | IOKitDiagnostics | Power wells OK |
+| power wells | Active | AppleIntelPowerWell count=1 | PASS | IOKitDiagnostics | Active |
+| MMIO BAR0 | Accessible | Not explicitly verified | UNKNOWN | Not in current data | Needs log check |
+| RCS ring | Present | AppleIntelPlane count=15 | PARTIAL | IOKitDiagnostics | Display planes active |
+| BCS ring | Present | UNKNOWN | UNKNOWN | Not explicitly verified | Needs log check |
+| VCS ring | Present | UNKNOWN | UNKNOWN | Not explicitly verified | Needs log check |
+| VECS ring | Present | UNKNOWN | UNKNOWN | Not explicitly verified | Needs log check |
+| execlists | May init | UNKNOWN | UNKNOWN | Not explicitly verified | Needs log check |
+| stamp advancement | Advancing | UNKNOWN | UNKNOWN | Not explicitly verified | Needs log check |
+| panic status | No panic | No panic | PASS | System running | No panic |
+| crash reports | None | None found | PASS | No crash reports | No crashes |

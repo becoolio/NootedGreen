@@ -1,0 +1,31 @@
+# Loaded Kexts Filtered for Graphics
+
+## Lilu and NootedGreen
+Index  56: as.vit9696.Lilu (1.7.3) - LOADED
+Index  58: com.StezzaPilot.NootedGreen (1.0.4) - LOADED
+
+## AppleIntel Graphics Kexts
+Index 133: com.apple.iokit.IOGraphicsFamily (598)
+Index 134: com.apple.AppleGraphicsDeviceControl (8.1.9)
+Index 135: com.apple.AppleGPUWrangler (8.1.9)
+Index 136: com.apple.iokit.IOAcceleratorFamily2 (481.40.2)
+Index 138: com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer (16.0.0) - LOADED
+Index 169: com.apple.driver.AppleGraphicsControl (8.1.9)
+
+## Metal Support
+Index 164: com.apple.vecLib.kext (1.2.0)
+
+## Analysis
+- Lilu: LOADED (v1.7.3)
+- NootedGreen: LOADED (v1.0.4) - matches source version
+- AppleIntelTGLGraphicsFramebuffer: LOADED
+- IOGraphicsFamily: LOADED
+- IOAcceleratorFamily2: LOADED
+- AppleGPUWrangler: LOADED
+- AppleGraphicsControl: LOADED
+- Metal (vecLib): LOADED
+
+## Version Verification
+- Source Info.plist: 1.0.4
+- Loaded kext: 1.0.4
+- Match: YES

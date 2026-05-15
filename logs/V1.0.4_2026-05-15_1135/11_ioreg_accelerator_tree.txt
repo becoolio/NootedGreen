@@ -1,0 +1,32 @@
+# IORegistry Accelerator Tree
+
+## IOAccelerator
+- IOAccelerator (count): 0
+- IOAccelDevice2 (count): 0
+- IOAccelDisplayPipe (count): 0
+- IOAccelDisplayPipeUserClient2 (count): 0
+- IOAccelGLContext2 (count): 0
+- IOAccelContext2 (count): 0
+- IOAccelSurface (count): 0
+- IOAccelShared2 (count): 0
+
+## IOAcceleratorFamily2
+- Index 136: com.apple.iokit.IOAcceleratorFamily2 (481.40.2)
+- Linked Against: <133 117 48 31 18 9 8 7 6 3 1>
+- Dependencies: IOGraphicsFamily, IOSurface
+
+## AppleIntelTGLGraphicsFramebuffer
+- Index 138: com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer (16.0.0)
+- Linked Against: <137 136 134 133 48 18 17 9 7 6 3 1>
+- Dependencies: IOAcceleratorFamily2, AppleGPUWrangler, IOGraphicsFamily
+
+## IOAccelerationUserClient
+- id 0x100000632: Created by WindowServer (pid 166)
+- id 0x1000005fa: IOGDiagnosticGTraceClient created by WindowServer
+
+## Analysis
+- IOAcceleratorFamily2: LOADED
+- AppleIntelTGLGraphicsFramebuffer: LOADED
+- IOAccelerationUserClient: CREATED BY WindowServer
+- Accelerator services available through WindowServer
+- IOAccelDisplayPipeUserClient2: NOT directly visible in counts (may be created transiently)

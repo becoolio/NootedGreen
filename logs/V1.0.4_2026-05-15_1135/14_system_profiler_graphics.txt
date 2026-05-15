@@ -1,0 +1,60 @@
+# System Profiler - Graphics and Displays
+
+## Graphics/Displays
+
+    Intel HD Graphics TGL CRB:
+      Chipset Model: Intel HD Graphics TGL CRB
+      Type: GPU
+      Bus: Built-In
+      VRAM (Dynamic, Max): 1536 MB
+      Vendor: Intel
+      Device ID: 0x9a49
+      Revision ID: 0x0001
+      Metal: Supported
+      Displays:
+        Display:
+          Resolution: 1920 x 1080 (1080p FHD - Full High Definition)
+          UI Looks like: 1920 x 1080 @ 60.00Hz
+          Framebuffer Depth: 24-Bit Color (ARGB8888)
+          Main Display: Yes
+          Mirror: Off
+          Online: Yes
+          Connection Type: Internal
+
+## Analysis
+
+### GPU Detection
+- GPU Name: Intel HD Graphics TGL CRB
+- Type: GPU (not Basic Display)
+- Bus: Built-In
+- VRAM: 1536 MB (Dynamic)
+- Vendor: Intel
+- Device ID: 0x9a49 (spoofed ID)
+- Metal: Supported
+
+### Display Detection
+- Resolution: 1920x1080 (1080p FHD)
+- Refresh Rate: 60.00Hz
+- Framebuffer Depth: 24-Bit Color (ARGB8888)
+- Main Display: Yes
+- Mirror: Off
+- Online: Yes
+- Connection Type: Internal
+
+### Metal Support
+- Metal: Supported - YES
+
+### Acceleration Status
+- GPU shows as Intel HD Graphics (properly recognized)
+- VRAM reported (1536 MB)
+- Metal supported
+- Display online and functional
+
+### Comparison with Previous Boot
+- Previous: Metal: Supported
+- Current: Metal: Supported
+- Status: UNCHANGED - Metal still supported
+
+## Conclusion
+The system has proper Intel GPU detection and Metal support.
+Display is online and functional at 1080p.

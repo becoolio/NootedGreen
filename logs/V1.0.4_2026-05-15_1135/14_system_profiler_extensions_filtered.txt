@@ -1,0 +1,30 @@
+# System Profiler - Extensions (Filtered)
+
+## Extension Filter
+grep -Ei "Nooted|Lilu|Intel|Framebuffer|Graphics|IOAccel"
+
+## Available Evidence
+From kextstat:
+
+### Lilu
+- as.vit9696.Lilu (1.7.3) - Index 56
+
+### NootedGreen
+- com.StezzaPilot.NootedGreen (1.0.4) - Index 58
+
+### AppleIntel Graphics
+- com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer (16.0.0) - Index 138
+- com.apple.iokit.IOGraphicsFamily (598) - Index 133
+- com.apple.iokit.IOAcceleratorFamily2 (481.40.2) - Index 136
+- com.apple.AppleGPUWrangler (8.1.9) - Index 135
+- com.apple.driver.AppleGraphicsControl (8.1.9) - Index 169
+- com.apple.AppleGraphicsDeviceControl (8.1.9) - Index 134
+
+## Analysis
+- Lilu: LOADED
+- NootedGreen: LOADED
+- AppleIntel Graphics: LOADED
+- IOGraphicsFamily: LOADED
+- IOAcceleratorFamily2: LOADED
+- AppleGPUWrangler: LOADED
+- All expected graphics extensions are loaded

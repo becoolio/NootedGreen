@@ -1,0 +1,29 @@
+# IORegistry Display Tree
+
+## Command
+- ioreg -lw0 -p IODisplayWrangler
+
+## Key Findings
+
+### IODisplayWrangler (id 0x100000502)
+- IOClass: IODisplayWrangler
+- CFBundleIdentifier: com.apple.iokit.IOGraphicsFamily
+- Power State: 4 (Active)
+- "IOGraphicsIgnoreParameters" = {"aupc"=Yes,"auph"=Yes," bpc"=Yes,"aums"=Yes,"aupp"=Yes}
+- "IOGraphicsPrefsParameters" = {"thue"=Yes,"pscn"=Yes,"vbst"=Yes,"oscn"=Yes,"tbri"=Yes}
+
+### IOAccelerationUserClient (id 0x100000632)
+- Created by: pid 166 (WindowServer)
+- IOUserClientDefaultLocking: Yes
+- Non-registered but active
+
+### IOGDiagnosticGTraceClient (id 0x1000005fa)
+- Created by: pid 166 (WindowServer)
+- IOUserClientDefaultLocking: Yes
+- Non-registered but active
+
+## Analysis
+- IODisplayWrangler: ACTIVE (power state 4)
+- WindowServer successfully connected to display services
+- IOAccelerationUserClient created by WindowServer
+- Display services functioning

@@ -1594,9 +1594,11 @@ private:
 	
 	static bool  initHardwareCaps(void *this_ptr);  // query HW capabilities
 	mach_vm_address_t oinitHardwareCaps {};
-	
+
 	static uint8_t IGMappedBuffergetMemory(void *that);
 	mach_vm_address_t oIGMappedBuffergetMemory {};
+	mach_vm_address_t oIGMappedBuffergetGPUVirtualAddress {};
+	mach_vm_address_t oIGSharedMappedBuffergetVirtualAddress {};
 	
 	static void *  IGHardwareBlit3DContextoperatornew(void *that,unsigned long param_1);
 	mach_vm_address_t oIGHardwareBlit3DContextoperatornew {};
@@ -1689,8 +1691,61 @@ private:
 	static unsigned long resetGraphicsEngine(void *that,void *param_1);  // GT engine reset
 	mach_vm_address_t oresetGraphicsEngine {};
 
+	static bool isRcsEngineType(IGHwCsType type);
+	static void dumpRCSSubmissionState(const char *stage);
+	static bool IGScheduler5initWithAccelerator(void *that, void *accelerator);
+	mach_vm_address_t oIGScheduler5initWithAccelerator {};
+
 	static void  IGScheduler5resume(void *that);  // GPU command scheduler resume
 	mach_vm_address_t oIGScheduler5resume {};
+
+	static bool IGScheduler5push(void *that, void *context, uint32_t arg2, uint32_t arg3, bool arg4, bool arg5);
+	mach_vm_address_t oIGScheduler5push {};
+
+	static void IGScheduler5notify(void *that, IGHwCsType type);
+	mach_vm_address_t oIGScheduler5notify {};
+
+	static void IGScheduler5enableStampInterrupt(void *that, int stampIndex);
+	mach_vm_address_t oIGScheduler5enableStampInterrupt {};
+
+	static void IGScheduler5enableContextSwitchInterrupts(void *that);
+	mach_vm_address_t oIGScheduler5enableContextSwitchInterrupts {};
+
+	static bool IGScheduler5checkForProgress(void *that, IGHwCsType type);
+	mach_vm_address_t oIGScheduler5checkForProgress {};
+
+	static void IGHardwareContextinitRingGPUVirtualAddress(void *that);
+	mach_vm_address_t oIGHardwareContextinitRingGPUVirtualAddress {};
+
+	static void IGHardwareContextinitRingRegisters(void *that);
+	mach_vm_address_t oIGHardwareContextinitRingRegisters {};
+
+	static void IGHardwareContextinitRingControl(void *that, bool enable);
+	mach_vm_address_t oIGHardwareContextinitRingControl {};
+
+	static void IGHardwareContextresetRingHead(void *that);
+	mach_vm_address_t oIGHardwareContextresetRingHead {};
+
+	static void IGHardwareContextupdateRingTail(void *that, uint32_t tail);
+	mach_vm_address_t oIGHardwareContextupdateRingTail {};
+
+	static bool IGHardwareRingBufferinit(void *that, void *context);
+	mach_vm_address_t oIGHardwareRingBufferinit {};
+
+	static void IGHardwareRingBuffersubmitToRing(void *that);
+	mach_vm_address_t oIGHardwareRingBuffersubmitToRing {};
+
+	static bool IGHardwareRenderCommandStreamerinit(void *that, void *accelerator, void *workLoop, void *scheduler);
+	mach_vm_address_t oIGHardwareRenderCommandStreamerinit {};
+
+	static void IGHardwareCommandStreamerresumeScheduling(void *that);
+	mach_vm_address_t oIGHardwareCommandStreamerresumeScheduling {};
+
+	static void IGHardwareCommandStreamersubmitExecList(void *that, uint32_t stamp);
+	mach_vm_address_t oIGHardwareCommandStreamersubmitExecList {};
+
+	static void IGHardwareCommandStreamerprepareExecListAndSubmit(void *that, uint32_t arg1, uint32_t arg2, const uint32_t *arg3);
+	mach_vm_address_t oIGHardwareCommandStreamerprepareExecListAndSubmit {};
 
 	static uint8_t connectionChanged(void *that);
 	mach_vm_address_t oconnectionChanged {};
@@ -1730,6 +1785,10 @@ public:
 	// Direct MMIO access helpers (bypass the kext's register methods)
 	static void tWriteRegister32(unsigned long a, unsigned int b);
 	static void tWriteRegister64(void volatile* a, unsigned long b, unsigned long long c);
+	static bool tmmioReady();
+	static const IGHwCsDesc *tGetHwCsDesc();
+	static void *tGetSharedMappedBufferVirtualAddress(void *buffer);
+	static uint64_t tGetMappedBufferGPUVirtualAddress(void *buffer);
 	static unsigned int tReadRegister32(unsigned long a);
 	static unsigned long long tReadRegister64(void volatile* a, unsigned long b);
 	static uint64_t tgetPMTNow();              // read GT timestamp

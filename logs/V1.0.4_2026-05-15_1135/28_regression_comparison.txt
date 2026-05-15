@@ -1,0 +1,68 @@
+# Regression Comparison
+
+## Version Folders
+- **Previous version folder**: V1.0.4_2026-05-12_2254
+- **Current version folder**: V1.0.4_2026-05-15_1135
+
+## Overall Comparison Result
+**MOSTLY UNCHANGED**
+
+## Comparison Table
+
+| Item | Previous Version | Current Version | Change Type | Meaning | Evidence |
+|------|------------------|-----------------|-------------|---------|----------|
+| Boot result | Successful | Successful | UNCHANGED | Both boots successful | Desktop reached |
+| NootedGreen version | 1.0.4 | 1.0.4 | UNCHANGED | Same version | kextstat index 58 |
+| Lilu version | 1.7.3 | 1.7.3 | UNCHANGED | Same version | kextstat index 56 |
+| IGPU device-id | 0x9a49 | 0x9a49 | UNCHANGED | Spoof working | system_profiler |
+| Display resolution | 1920x1080 | 1920x1080 | UNCHANGED | Same display | system_profiler |
+| Metal support | Supported | Supported | UNCHANGED | Metal works | system_profiler |
+| WindowServer | Started | Started | UNCHANGED | WS running | ioreg pid 166 |
+| AppleIntel TGL FB | Loaded | Loaded | UNCHANGED | FB working | kextstat index 138 |
+| IOAccelerator | Loaded | Loaded | UNCHANGED | Accel available | kextstat index 136 |
+| Display online | Yes | Yes | UNCHANGED | Display works | system_profiler |
+| DMC firmware | v2.12 | Enabled flag | UNCHANGED | DMC working | ngreen-dmc=tgl |
+| -disablegfxfirmware | SET | REMOVED | CHANGE | GuC/HuC may load | Boot args change |
+| -liludbgall | NOT SET | SET | NEW | More Lilu debug | Boot args change |
+| liludump=80 | NOT SET | SET | NEW | Lilu dump | Boot args change |
+| -ngreenTglTrace | NOT SET | SET | NEW | TGL tracing | Boot args change |
+| ngreenSched | 5 | 3 | CHANGE | Different scheduler | Boot args change |
+| Platform-id injection | 0x00000000 | UNKNOWN | UNKNOWN | Not verified | No dmesg data |
+| ERROR_GEN6=0x37 | Present | UNKNOWN | UNKNOWN | Not in logs | No dmesg |
+| CoreDisplay DisplayPipe error | Present | UNKNOWN | UNKNOWN | Not verified | No logs |
+| IOAccelDisplayPipeUserClient2 | Unknown | UNKNOWN | UNKNOWN | Not verified | No logs |
+
+## Most Important Improvement
+**No clear improvement over previous boot**
+- Boot result: Same (successful)
+- Display: Same (online)
+- Metal: Same (supported)
+- The main change is in debug flags (more verbose logging enabled)
+
+## Most Important Regression
+**No clear regression found**
+- System works the same as previous boot
+- No new failures detected
+
+## Most Important New Evidence
+1. **Boot args changed**: Added -liludbgall, liludump=80, -ngreenTglTrace
+2. **-disablegfxfirmware removed**: GuC/HuC may now attempt to load
+3. **ngreenSched changed**: 5 -> 3 (different scheduler behavior)
+4. **Debug logging enhanced**: More verbose Lilu/NootedGreen logs expected
+
+## Most Suspicious Unexpected Change
+**-disablegfxfirmware removed**
+- Previous boot had: -disablegfxfirmware
+- Current boot does NOT have it
+- This means GuC/HuC firmware loading is NOT explicitly disabled
+- Could affect power management and ring initialization
+- May need to add it back if issues appear
+
+## Recommended Next Action Based on Comparison
+**Continue from current version with monitoring**
+
+1. Monitor if GuC/HuC loading (without -disablegfxfirmware) causes issues
+2. Collect verbose Lilu logs to see if more debug info available
+3. Test if ngreenSched=3 (vs previous 5) affects stability
+4. If no issues: continue current path
+5. If issues appear: restore -disablegfxfirmware and test

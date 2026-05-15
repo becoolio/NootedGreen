@@ -1,0 +1,24 @@
+# dmesg Filtered - Graphics
+
+## Status
+- Unable to collect dmesg without sudo
+- Evidence collected from alternative sources (ioreg, system_profiler)
+
+## Available Evidence
+From system_profiler:
+- Intel HD Graphics TGL CRB
+- VRAM: 1536 MB (Dynamic, Max)
+- Device ID: 0x9a49
+- Metal: Supported
+- Display: 1920x1080, Online, Main Display
+
+From IORegistry:
+- Lilu (index 56)
+- NootedGreen (index 58)
+- AppleIntelTGLGraphicsFramebuffer (index 138)
+- IOGraphicsFamily (index 133)
+- IOAcceleratorFamily2 (index 136)
+- AppleGPUWrangler (index 135)
+- AppleGraphicsControl (index 169)
+- IODisplayWrangler (index 502)
+- IOAccelerationUserClient (index 632)

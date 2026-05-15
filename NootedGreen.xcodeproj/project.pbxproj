@@ -12,6 +12,10 @@
 		2E1CC3E32BA5DBD9004EC8F6 /* DisplayMergeNub.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E1CC3E12BA5DBD9004EC8F6 /* DisplayMergeNub.cpp */; };
 		2E315A612BC6EA4D008411AA /* DYLDPatches.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 2E315A5F2BC6EA4D008411AA /* DYLDPatches.hpp */; };
 		2E315A622BC6EA4D008411AA /* DYLDPatches.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E315A602BC6EA4D008411AA /* DYLDPatches.cpp */; };
+		5AA100013D9A000100000001 /* TglGpuBringup.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5AA100023D9A000100000001 /* TglGpuBringup.cpp */; };
+		5AA100033D9A000100000001 /* TglGpuBringup.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 5AA100043D9A000100000001 /* TglGpuBringup.hpp */; };
+		5AA100053D9A000100000001 /* RcsEngineTrace.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5AA100063D9A000100000001 /* RcsEngineTrace.cpp */; };
+		5AA100073D9A000100000001 /* RcsEngineTrace.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 5AA100083D9A000100000001 /* RcsEngineTrace.hpp */; };
 		2E5BF5832BCC212F0095BDCF /* HDMI.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E5BF5812BCC212F0095BDCF /* HDMI.cpp */; };
 		2E5BF5842BCC212F0095BDCF /* HDMI.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 2E5BF5822BCC212F0095BDCF /* HDMI.hpp */; };
 		2E7C04D72C8A51F000B07113 /* IGGucBinary.h in Headers */ = {isa = PBXBuildFile; fileRef = 2E7C04D52C8A51F000B07113 /* IGGucBinary.h */; };
@@ -55,6 +59,10 @@
 		2E1CC3E12BA5DBD9004EC8F6 /* DisplayMergeNub.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = DisplayMergeNub.cpp; sourceTree = "<group>"; };
 		2E315A5F2BC6EA4D008411AA /* DYLDPatches.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = DYLDPatches.hpp; sourceTree = "<group>"; };
 		2E315A602BC6EA4D008411AA /* DYLDPatches.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = DYLDPatches.cpp; sourceTree = "<group>"; };
+		5AA100023D9A000100000001 /* TglGpuBringup.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = TglGpuBringup.cpp; sourceTree = "<group>"; };
+		5AA100043D9A000100000001 /* TglGpuBringup.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = TglGpuBringup.hpp; sourceTree = "<group>"; };
+		5AA100063D9A000100000001 /* RcsEngineTrace.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = RcsEngineTrace.cpp; sourceTree = "<group>"; };
+		5AA100083D9A000100000001 /* RcsEngineTrace.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = RcsEngineTrace.hpp; sourceTree = "<group>"; };
 		2E5BF5812BCC212F0095BDCF /* HDMI.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = HDMI.cpp; sourceTree = "<group>"; };
 		2E5BF5822BCC212F0095BDCF /* HDMI.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = HDMI.hpp; sourceTree = "<group>"; };
 		2E7C04D52C8A51F000B07113 /* IGGucBinary.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IGGucBinary.h; sourceTree = "<group>"; };
@@ -125,6 +133,10 @@
 				2EE18C182CE558A300E96D38 /* Firmware.cpp */,
 				2EF1AD012CE558A400000001 /* FirmwareADLP.cpp */,
 				2EE18C192CE558A300E96D38 /* Firmware.hpp */,
+				5AA100063D9A000100000001 /* RcsEngineTrace.cpp */,
+				5AA100083D9A000100000001 /* RcsEngineTrace.hpp */,
+				5AA100023D9A000100000001 /* TglGpuBringup.cpp */,
+				5AA100043D9A000100000001 /* TglGpuBringup.hpp */,
 				2E7C04D52C8A51F000B07113 /* IGGucBinary.h */,
 				2E7C04D62C8A51F000B07113 /* IGHucBinary.h */,
 				2E5BF5812BCC212F0095BDCF /* HDMI.cpp */,
@@ -201,6 +213,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F0AF08BC2A0F373F00B63C2B /* kern_gen11.hpp in Headers */,
+				5AA100073D9A000100000001 /* RcsEngineTrace.hpp in Headers */,
+				5AA100033D9A000100000001 /* TglGpuBringup.hpp in Headers */,
 				2E315A612BC6EA4D008411AA /* DYLDPatches.hpp in Headers */,
 				2E1CC3E22BA5DBD9004EC8F6 /* DisplayMergeNub.h in Headers */,
 				2E7C04D82C8A51F000B07113 /* IGHucBinary.h in Headers */,
@@ -313,6 +327,8 @@
 			files = (
 				F009B7A129E4EE3C00786AFF /* kern_start.cpp in Sources */,
 				F067C22629D84710004BB52E /* (null) in Sources */,
+				5AA100053D9A000100000001 /* RcsEngineTrace.cpp in Sources */,
+				5AA100013D9A000100000001 /* TglGpuBringup.cpp in Sources */,
 				F009B7A329E4EEBA00786AFF /* kern_green.cpp in Sources */,
 				F0BB9E552A57A0340081F5FA /* kern_patcherplus.cpp in Sources */,
 				2E5BF5832BCC212F0095BDCF /* HDMI.cpp in Sources */,

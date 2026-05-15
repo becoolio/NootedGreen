@@ -1,0 +1,15 @@
+# Kernel Log Filtered - Graphics
+
+## Filter Pattern
+NootedGreen|Lilu|AppleIntel|IntelGraphics|Framebuffer|IOGraphics|IOAccelerator|
+CoreDisplay|WindowServer|display|pipe|stamp|timeout|hang|GPU|GuC|guc|HuC|DMC|
+forcewake|power well|powerwell|BCS|RCS|VCS|VECS|ring|execlist|submission|fence|
+MMIO|BAR|OpRegion|VBT|EDID|backlight|DPCD|AUX|DDI|CDCLK|GT|Metal|
+
+## Collection Status
+- Status: FAILED due to log show command syntax issue
+- Using ioreg data as primary evidence source
+
+## Evidence from IORegistry and System Profiler
+See 14_system_profiler_graphics.txt for Metal support evidence
+See ioreg output for framebuffer and accelerator evidence

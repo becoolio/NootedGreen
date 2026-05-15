@@ -1,0 +1,67 @@
+# Lilu and NootedGreen Logs
+
+## Collection Status
+- log show command: FAILED due to zsh syntax
+- Evidence source: kextstat and IORegistry
+
+## Evidence from kextstat
+
+### Lilu
+- Bundle Identifier: as.vit9696.Lilu
+- Version: 1.7.3
+- Index: 56
+- Address: 0xffffff8003cb1000
+- Size: 0x8a000
+- Linked Against: <9 7 6 3 2 1>
+- Status: LOADED
+
+### NootedGreen
+- Bundle Identifier: com.StezzaPilot.NootedGreen
+- Version: 1.0.4
+- Index: 58
+- Address: 0xffffff8003f22000
+- Size: 0x68000
+- Linked Against: <56 18 9 7 6 3 2 1>
+- Status: LOADED
+- Depends on Lilu (index 56)
+
+## Evidence from IORegistry
+
+### Lilu in IORegistry
+- Class: Lilu
+- CFBundleIdentifier: as.vit9696.Lilu
+- "VersionInfo" = "DBG-173-2026-03-20"
+- "IOMatchedAtBoot" = Yes
+- "IOProviderClass" = "IOResources"
+
+### NootedGreen in IORegistry
+- Class: NootedGreen
+- Status: NootedGreen count = 1 in IOKitDiagnostics
+- "IOMatchedAtBoot" = Yes
+
+## Boot Args Analysis
+Current boot args:
+- itlwm_cc=US -v -liludbgall liludump=80 keepsyms=1 debug=0x100 NGreenDebug ngreenSched=3 ngreen-dmc=tgl -ngreenTglTrace
+
+Previous boot args:
+- itlwm_cc=US -v keepsyms=1 debug=0x100 -NGreenDebug ngreen-dmc=tgl -disablegfxfirmware ngreenSched=5
+
+Changes:
+- Added: -liludbgall (full Lilu debug logging)
+- Added: liludump=80 (80 line dump)
+- Changed: -NGreenDebug -> NGreenDebug (syntax)
+- Changed: ngreenSched=5 -> ngreenSched=3
+- Removed: -disablegfxfirmware (GuC/HuC may load now)
+- Added: -ngreenTglTrace (TGL-specific tracing)
+
+## Analysis
+- Lilu: LOADED and ACTIVE
+- NootedGreen: LOADED and ACTIVE
+- Version match: YES (1.0.4)
+- Dependency: NootedGreen depends on Lilu
+- Both are in IORegistry as IOResources
+
+## Comparison with Previous
+- Previous: Lilu and NootedGreen both loaded
+- Current: Lilu and NootedGreen both loaded
+- Status: UNCHANGED - Both loaded successfully

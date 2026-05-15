@@ -1,0 +1,15 @@
+# Kernel Log Collection
+
+## Collection Status
+- Command: log show --last boot --style syslog --info --debug
+- Status: FAILED - zsh:log:1: too many arguments
+- Note: log show predicate syntax issue, will use alternative methods
+
+## Alternative Collection
+- Using ioreg -lw0 for IORegistry data
+- Using system_profiler for system info
+- Using kextstat/kmutil for kext status
+
+## Log Collection Notes
+Unable to use standard log show command due to zsh argument parsing issues.
+Using ioreg and system_profiler as primary log sources.

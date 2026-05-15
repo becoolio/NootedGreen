@@ -1,0 +1,36 @@
+# WindowServer and CoreDisplay Combined Logs
+
+## Collection Status
+- log show command: FAILED due to zsh syntax
+- Evidence source: IORegistry
+
+## Evidence from IORegistry
+
+### WindowServer Activity
+- WindowServer PID: 166
+- IOAccelerationUserClient created by WindowServer (id 0x100000632)
+- IOGDiagnosticGTraceClient created by WindowServer (id 0x1000005fa)
+- IOSurfaceRootUserClient created by WindowServer (id 0x100000634)
+- AppleGPUWranglerClient created by WindowServer (id 0x1000005fb)
+
+### IODisplayWrangler Status
+- id 0x100000502: IODisplayWrangler
+- Power State: 4 (Active)
+- "IOGraphicsIgnoreParameters" present
+- "IOGraphicsPrefsParameters" present
+
+### WindowServer Connection Evidence
+- WindowServer successfully connected to display services
+- IOAccelerationUserClient created by WindowServer
+- Display services responding
+
+## Analysis
+- WindowServer: STARTED and ACTIVE
+- WindowServer created IOAccelerationUserClient
+- Display services active
+- No evidence of WindowServer crash or restart
+
+## Comparison with Previous Boot
+- Previous: WindowServer started at 22:44:55
+- Current: WindowServer active (evidenced by user client creation)
+- Status: UNCHANGED - WindowServer running normally
