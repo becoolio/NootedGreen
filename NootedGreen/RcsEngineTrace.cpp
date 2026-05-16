@@ -24,10 +24,66 @@ static uint32_t readMem32(const volatile uint32_t *base, size_t dwordOffset) {
 	return base ? base[dwordOffset] : 0;
 }
 
+static bool looksLikeKernelPtr(uint64_t value) {
+	return value >= 0xffffff8000000000ULL;
+}
+
+static bool vtableMatches(mach_vm_address_t objectVtable, mach_vm_address_t symbolVtable) {
+	return symbolVtable != 0 && (objectVtable == symbolVtable || objectVtable == symbolVtable + 0x10);
+}
+
+static const char *candidateTypeName(void *candidate) {
+	if (!candidate) return "null";
+	auto objectVtable = *reinterpret_cast<mach_vm_address_t *>(candidate);
+	if (vtableMatches(objectVtable, Gen11::tGetIGSharedMappedBufferVtable())) return "IGSharedMappedBuffer";
+	if (vtableMatches(objectVtable, Gen11::tGetIGMappedBufferVtable())) return "IGMappedBuffer";
+	return "unknown";
+}
+
+static void dumpObjectQwords(const char *prefix, const char *stage, void *object) {
+	if (!object) {
+		SYSLOG("ngreen", "%s[%s]: object=null", prefix, stage ? stage : "<null>");
+		return;
+	}
+	auto *q = reinterpret_cast<uint64_t *>(object);
+	for (uint32_t i = 0; i < 0x120 / 8; i++) {
+		SYSLOG("ngreen", "%s[%s]: qword[0x%x]=0x%016llx", prefix, stage ? stage : "<null>", i * 8,
+		       static_cast<unsigned long long>(q[i]));
+	}
+}
+
+static void dumpCandidateMappedBuffers(const char *prefix, const char *stage, void *object) {
+	if (!object) return;
+	auto *q = reinterpret_cast<uint64_t *>(object);
+	for (uint32_t i = 0; i < 0x120 / 8; i++) {
+		uint64_t value = q[i];
+		if (!looksLikeKernelPtr(value)) continue;
+		void *candidate = reinterpret_cast<void *>(value);
+		const char *type = candidateTypeName(candidate);
+		auto objectVtable = *reinterpret_cast<mach_vm_address_t *>(candidate);
+		SYSLOG("ngreen", "%s[%s]: candidate[0x%x]=%p vtable=0x%llx type=%s",
+		       prefix, stage ? stage : "<null>", i * 8, candidate,
+		       static_cast<unsigned long long>(objectVtable), type);
+		if (strcmp(type, "IGSharedMappedBuffer") == 0) {
+			void *cpu = Gen11::tGetSharedMappedBufferVirtualAddress(candidate);
+			SYSLOG("ngreen", "%s[%s]: candidate[0x%x] sharedCpu=%p",
+			       prefix, stage ? stage : "<null>", i * 8, cpu);
+		}
+		if (strcmp(type, "IGMappedBuffer") == 0) {
+			uint64_t gpu = Gen11::tGetMappedBufferGPUVirtualAddress(candidate);
+			SYSLOG("ngreen", "%s[%s]: candidate[0x%x] mappedGpu=0x%llx",
+			       prefix, stage ? stage : "<null>", i * 8, static_cast<unsigned long long>(gpu));
+		}
+	}
+}
+
 void dumpContextImageKnownFields(const char *stage, void *context) {
 	if (!isRcsEngineTraceEnabled() || !context) {
 		return;
 	}
+
+	dumpObjectQwords("NG_CONTEXT_OBJ", stage, context);
+	dumpCandidateMappedBuffers("NG_CONTEXT_OBJ", stage, context);
 
 	auto *ctxImage = reinterpret_cast<volatile uint32_t *>(Gen11::tGetSharedMappedBufferVirtualAddress(getMember<void *>(context, 0x98)));
 	uint64_t lrcaGpu = Gen11::tGetMappedBufferGPUVirtualAddress(getMember<void *>(context, 0xb0));
@@ -68,6 +124,9 @@ void dumpRingMemoryKnownFields(const char *stage, void *ringBuffer) {
 	if (!isRcsEngineTraceEnabled() || !ringBuffer) {
 		return;
 	}
+
+	dumpObjectQwords("NG_RING_OBJ", stage, ringBuffer);
+	dumpCandidateMappedBuffers("NG_RING_OBJ", stage, ringBuffer);
 
 	auto *ringCpu = reinterpret_cast<volatile uint32_t *>(Gen11::tGetSharedMappedBufferVirtualAddress(getMember<void *>(ringBuffer, 0x80)));
 	uint32_t tailCursor = getMember<uint32_t>(ringBuffer, 0x64);

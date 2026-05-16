@@ -81,7 +81,9 @@ bool Gen11::tmmioReady() {
 }
 
 const IGHwCsDesc *Gen11::tGetHwCsDesc() {
-	return callback ? reinterpret_cast<const IGHwCsDesc *>(callback->kIGHwCsDesc) : nullptr;
+	if (!callback) return nullptr;
+	auto addr = callback->kIGHwCsDesc ? callback->kIGHwCsDesc : callback->kIGHwCsDescSymbol;
+	return addr ? reinterpret_cast<const IGHwCsDesc *>(addr) : nullptr;
 }
 
 void *Gen11::tGetSharedMappedBufferVirtualAddress(void *buffer) {
@@ -96,6 +98,14 @@ uint64_t Gen11::tGetMappedBufferGPUVirtualAddress(void *buffer) {
 		return 0;
 	}
 	return FunctionCast(tGetMappedBufferGPUVirtualAddress, callback->oIGMappedBuffergetGPUVirtualAddress)(buffer);
+}
+
+mach_vm_address_t Gen11::tGetIGMappedBufferVtable() {
+	return callback ? callback->vtableIGMappedBuffer : 0;
+}
+
+mach_vm_address_t Gen11::tGetIGSharedMappedBufferVtable() {
+	return callback ? callback->vtableIGSharedMappedBuffer : 0;
 }
 
 void Gen11::tWriteRegister32(unsigned long a, unsigned int b) {
@@ -1162,6 +1172,9 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{"__ZN32IGHardwareRenderCommandStreamer54initEP22IOGraphicsAccelerator2P10IOWorkLoopP12IGScheduler5", 0, false},
 				{"__ZNK20IGSharedMappedBuffer17getVirtualAddressEv", this->oIGSharedMappedBuffergetVirtualAddress, false},
 				{"__ZNK14IGMappedBuffer20getGPUVirtualAddressEv", this->oIGMappedBuffergetGPUVirtualAddress, false},
+				{"__ZL11kIGHwCsDesc", this->kIGHwCsDescSymbol, false},
+				{"__ZTV14IGMappedBuffer", this->vtableIGMappedBuffer, false},
+				{"__ZTV20IGSharedMappedBuffer", this->vtableIGSharedMappedBuffer, false},
 			};
 
 			for (auto &entry : traceSymbols) {
@@ -6267,6 +6280,16 @@ bool Gen11::IGHardwareRingBufferinit(void *that, void *context) {
 void Gen11::IGHardwareRingBuffersubmitToRing(void *that) {
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareRingBuffer::submitToRing this=%p", that);
+		auto *accel = getMember<void *>(that, 0x10);
+		void *dispatcher = accel ? getMember<void *>(accel, 0x1250) : nullptr;
+		mach_vm_address_t vtable = dispatcher ? *reinterpret_cast<mach_vm_address_t *>(dispatcher) : 0;
+		mach_vm_address_t target = vtable ? *reinterpret_cast<mach_vm_address_t *>(vtable + 0x148) : 0;
+		const char *targetName = "unknown";
+		if (target == callback->oIGHardwareCommandStreamersubmitExecList) targetName = "IGHardwareCommandStreamer::submitExecList";
+		else if (target == callback->oIGHardwareCommandStreamerprepareExecListAndSubmit) targetName = "IGHardwareCommandStreamer::prepareExecListAndSubmit";
+		else if (target == callback->oIGHardwareCommandStreamerresumeScheduling) targetName = "IGHardwareCommandStreamer::resumeScheduling";
+		SYSLOG("ngreen", "NG_ELSP_WRITE[IGHardwareRingBuffer::submitToRing pre]: accel=%p dispatcher=%p vtable=0x%llx target=0x%llx targetName=%s",
+		       accel, dispatcher, static_cast<unsigned long long>(vtable), static_cast<unsigned long long>(target), targetName);
 		dumpRcsEngineActivationState("IGHardwareRingBuffer::submitToRing pre");
 		dumpRingMemoryKnownFields("IGHardwareRingBuffer::submitToRing pre", that);
 		dumpContextImageKnownFields("IGHardwareRingBuffer::submitToRing pre", getMember<void *>(that, 0x20));
@@ -6277,6 +6300,16 @@ void Gen11::IGHardwareRingBuffersubmitToRing(void *that) {
 	}
 
 	if (isRcsEngineTraceEnabled()) {
+		auto *accel = getMember<void *>(that, 0x10);
+		void *dispatcher = accel ? getMember<void *>(accel, 0x1250) : nullptr;
+		mach_vm_address_t vtable = dispatcher ? *reinterpret_cast<mach_vm_address_t *>(dispatcher) : 0;
+		mach_vm_address_t target = vtable ? *reinterpret_cast<mach_vm_address_t *>(vtable + 0x148) : 0;
+		const char *targetName = "unknown";
+		if (target == callback->oIGHardwareCommandStreamersubmitExecList) targetName = "IGHardwareCommandStreamer::submitExecList";
+		else if (target == callback->oIGHardwareCommandStreamerprepareExecListAndSubmit) targetName = "IGHardwareCommandStreamer::prepareExecListAndSubmit";
+		else if (target == callback->oIGHardwareCommandStreamerresumeScheduling) targetName = "IGHardwareCommandStreamer::resumeScheduling";
+		SYSLOG("ngreen", "NG_ELSP_WRITE[IGHardwareRingBuffer::submitToRing post]: accel=%p dispatcher=%p vtable=0x%llx target=0x%llx targetName=%s",
+		       accel, dispatcher, static_cast<unsigned long long>(vtable), static_cast<unsigned long long>(target), targetName);
 		dumpRcsEngineActivationState("IGHardwareRingBuffer::submitToRing post");
 		dumpRingMemoryKnownFields("IGHardwareRingBuffer::submitToRing post", that);
 		dumpContextImageKnownFields("IGHardwareRingBuffer::submitToRing post", getMember<void *>(that, 0x20));

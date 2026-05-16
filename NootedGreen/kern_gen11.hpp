@@ -1599,6 +1599,9 @@ private:
 	mach_vm_address_t oIGMappedBuffergetMemory {};
 	mach_vm_address_t oIGMappedBuffergetGPUVirtualAddress {};
 	mach_vm_address_t oIGSharedMappedBuffergetVirtualAddress {};
+	mach_vm_address_t kIGHwCsDescSymbol {};
+	mach_vm_address_t vtableIGMappedBuffer {};
+	mach_vm_address_t vtableIGSharedMappedBuffer {};
 	
 	static void *  IGHardwareBlit3DContextoperatornew(void *that,unsigned long param_1);
 	mach_vm_address_t oIGHardwareBlit3DContextoperatornew {};
@@ -1789,6 +1792,8 @@ public:
 	static const IGHwCsDesc *tGetHwCsDesc();
 	static void *tGetSharedMappedBufferVirtualAddress(void *buffer);
 	static uint64_t tGetMappedBufferGPUVirtualAddress(void *buffer);
+	static mach_vm_address_t tGetIGMappedBufferVtable();
+	static mach_vm_address_t tGetIGSharedMappedBufferVtable();
 	static unsigned int tReadRegister32(unsigned long a);
 	static unsigned long long tReadRegister64(void volatile* a, unsigned long b);
 	static uint64_t tgetPMTNow();              // read GT timestamp
