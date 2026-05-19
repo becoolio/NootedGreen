@@ -354,6 +354,9 @@ bool Genx::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t a
 IOReturn Genx::wrapICLReadAUX(void *that, uint32_t address, void *buffer, uint32_t length) {
 
 	IOReturn retVal = FunctionCast(wrapICLReadAUX, callback->orgICLReadAUX)(that, address, buffer, length);
+	if (retVal != kIOReturnSuccess) {
+		return retVal;
+	}
 
 	static int auxLogCount = 0;
 	if (auxLogCount < 40) {
@@ -372,8 +375,11 @@ IOReturn Genx::wrapICLReadAUX(void *that, uint32_t address, void *buffer, uint32
 		// Some panel/driver combinations oscillate with aggressive defaults (HBR3 / 4-lane bits).
 		auto *raw = reinterpret_cast<uint8_t *>(buffer);
 		if (raw[0] > 0x14) raw[0] = 0x14;      // LINK_BW_SET <= HBR2
-		if (length >= 2) {
-			raw[1] = (raw[1] & 0xE0) | 0x02;   // lane count = 2, keep upper feature bits
+		if (length >= 2 && NGreen::callback->dpcdCapsValid) {
+			uint8_t cachedLaneCount = static_cast<uint8_t>(NGreen::callback->dpcdMaxLaneCountRaw & 0x1F);
+			if (cachedLaneCount == 1 || cachedLaneCount == 2 || cachedLaneCount == 4) {
+				raw[1] = (raw[1] & 0xE0) | cachedLaneCount;
+			}
 		}
 		static int v98tLogs = 0;
 		if (v98tLogs < 10) {
@@ -387,20 +393,54 @@ IOReturn Genx::wrapICLReadAUX(void *that, uint32_t address, void *buffer, uint32
 		}
 	}
 
+	if (address == 0x0700 && buffer && length >= 1) {
+		auto *raw = reinterpret_cast<uint8_t *>(buffer);
+		NGreen::callback->dpcdBacklightCaps = raw[0];
+		NGreen::callback->dpcdBacklightCapsValid = true;
+
+		static int backlightLogs = 0;
+		if (backlightLogs < 8) {
+			backlightLogs++;
+			SYSLOG("ngreen", "DPCD backlight caps[%d]: caps=0x%02x auxBacklight=%d",
+			       backlightLogs, raw[0], !!(raw[0] & 0x1));
+		}
+		return retVal;
+	}
+
 	if (address != 0x0000 && address != 0x2200) return retVal;
 
 	if (length < sizeof(DPCDCap16) || buffer == nullptr)
 		return retVal;
 
 	auto caps = reinterpret_cast<DPCDCap16*>(buffer);
+	const uint8_t sinkRevision = caps->revision;
+	const uint8_t sinkMaxLinkRate = caps->maxLinkRate;
+	const uint8_t sinkMaxLaneCount = caps->maxLaneCount;
+
+	NGreen::callback->dpcdRevision = sinkRevision;
+	NGreen::callback->dpcdMaxLinkRate = sinkMaxLinkRate;
+	NGreen::callback->dpcdMaxLaneCountRaw = sinkMaxLaneCount;
+	NGreen::callback->dpcdCapsValid = true;
+
+	static int dpcdCapLogs = 0;
+	if (dpcdCapLogs < 12) {
+		dpcdCapLogs++;
+		SYSLOG("ngreen", "DPCD caps[%d]: addr=0x%04x rev=0x%02x maxLink=0x%02x maxLaneRaw=0x%02x",
+		       dpcdCapLogs, address, sinkRevision, sinkMaxLinkRate, sinkMaxLaneCount);
+	}
 
 	if (!NGreen::callback->isRealTGL) {
 		// V98: Spoofed RPL path is unstable with aggressive sink caps (HBR3/deep-color).
-		// Advertise a conservative max link rate so Apple's training chooses safer timings.
+		// Keep a conservative link-rate ceiling, but preserve the sink-advertised lane count
+		// so computeLaneCount can follow the actual panel instead of a fixed 2-lane default.
 		if (caps->maxLinkRate > 0x14) {
 			caps->maxLinkRate = 0x14; // HBR2 (5.4 Gbps)
 		}
-		caps->maxLaneCount = (caps->maxLaneCount & 0xE0) | 0x02; // advertise max 2 lanes
+		uint8_t laneCount = static_cast<uint8_t>(sinkMaxLaneCount & 0x1F);
+		if (laneCount != 1 && laneCount != 2 && laneCount != 4) {
+			laneCount = 2;
+		}
+		caps->maxLaneCount = static_cast<uint8_t>((caps->maxLaneCount & 0xE0) | laneCount);
 		static int v98Logs = 0;
 		if (v98Logs < 10) {
 			v98Logs++;

@@ -32,6 +32,44 @@ static int getRcsDeepSchedulerType() {
 	return schedType;
 }
 
+static constexpr uint32_t PCH_PP_CONTROL = 0xC7204;
+static constexpr uint32_t PCH_PP_STATUS = 0xC7200;
+static constexpr uint32_t PCH_PP_STATUS_POWER_ON = (1U << 31);
+static constexpr uint32_t PCH_PP_STATUS_POWER_SEQUENCE_ACTIVE = (1U << 30);
+
+static unsigned int getConfiguredLaneCountOverride() {
+	int lanesArg = 0;
+	if (PE_parse_boot_argn("ngreenLanes", &lanesArg, sizeof(lanesArg)) &&
+	    (lanesArg == 1 || lanesArg == 2 || lanesArg == 4)) {
+		return static_cast<unsigned int>(lanesArg);
+	}
+
+	return 0;
+}
+
+static unsigned int sanitizeDpcdLaneCount(uint8_t rawLaneCount) {
+	switch (rawLaneCount & 0x1F) {
+		case 1:
+		case 2:
+		case 4:
+			return static_cast<unsigned int>(rawLaneCount & 0x1F);
+		default:
+			return 0;
+	}
+}
+
+static uint8_t readPanelPowerStatusBits() {
+	if (!NGreen::callback || !NGreen::callback->mmioReady()) {
+		return 0;
+	}
+
+	uint32_t status = NGreen::callback->readMMIO32(PCH_PP_STATUS);
+	uint8_t result = 0;
+	if (status & PCH_PP_STATUS_POWER_ON) result |= 0x1;
+	if (status & PCH_PP_STATUS_POWER_SEQUENCE_ACTIVE) result |= 0x2;
+	return result;
+}
+
 // ==== 4 kextInfos: TGL from /Library/Extensions, ICL fallback from /System/Library/Extensions ====
 
 // ICL FB — com.apple (fallback path)
@@ -5328,8 +5366,9 @@ uint8_t Gen11::hwRegsNeedUpdate
 		   void *param_5)
 {
 	// Return the original result so that register reprogramming proceeds normally.
-	// The lane count mismatch (4→2) that previously broke the display is now fixed
-	// by the computeLaneCount hook forcing 4 lanes.  Without register updates, the
+	// The lane count mismatch that previously broke the display is now handled by
+	// the computeLaneCount hook using boot-arg override or cached DPCD sink lanes.
+	// Without register updates, the
 	// plane surface address and stride never get written, leaving the stale BIOS
 	// framebuffer on screen (grey/black vertical bars with only cursor visible).
 	return FunctionCast(hwRegsNeedUpdate, callback->ohwRegsNeedUpdate)(that, param_1, param_2, param_3, param_4, param_5);
@@ -5341,20 +5380,28 @@ void Gen11::computeLaneCount(void *that, const void *timing, unsigned int linkRa
 	if (!NGreen::callback->isRealTGL) {
 		// V90L4: Apple's TGL computeLaneCount only handles standard DP rates (6/10/20/30).
 		// RPL-P VBT/panel uses rate=24 (24×270=6480 Mbps custom eDP rate) — Apple returns 0.
-		// Skip the original entirely for spoofed paths: default to 2 lanes (most common
-		// eDP configuration). Override via boot-arg "ngreenLanes=4" for 4-lane panels.
+		// Skip the original entirely for spoofed paths. Prefer explicit boot-arg override,
+		// otherwise follow the sink-advertised DPCD lane count observed via AUX reads.
 		unsigned int lanes = 2;
-		int lanesArg = 0;
-		if (PE_parse_boot_argn("ngreenLanes", &lanesArg, sizeof(lanesArg)) &&
-		    (lanesArg == 1 || lanesArg == 2 || lanesArg == 4))
-			lanes = static_cast<unsigned int>(lanesArg);
+		const unsigned int lanesOverride = getConfiguredLaneCountOverride();
+		const unsigned int dpcdLaneCount = NGreen::callback->dpcdCapsValid ?
+			sanitizeDpcdLaneCount(NGreen::callback->dpcdMaxLaneCountRaw) : 0;
+		if (lanesOverride != 0) {
+			lanes = lanesOverride;
+		} else if (dpcdLaneCount != 0) {
+			lanes = dpcdLaneCount;
+		}
 		*laneCount = lanes;
 
 		static int v90L4Logs = 0;
 		if (v90L4Logs < 20) {
 			v90L4Logs++;
-			SYSLOG("ngreen", "V90L4[%d]: linkRate=%u bpp=%u laneCount=%u (bypassed Apple)",
-			       v90L4Logs, linkRate, bpp, *laneCount);
+			SYSLOG("ngreen", "V90L4[%d]: linkRate=%u bpp=%u laneCount=%u override=%u dpcd=%u raw=0x%02x backlightCaps=0x%02x (bypassed Apple)",
+			       v90L4Logs, linkRate, bpp, *laneCount,
+			       lanesOverride,
+			       dpcdLaneCount,
+			       NGreen::callback->dpcdMaxLaneCountRaw,
+			       NGreen::callback->dpcdBacklightCapsValid ? NGreen::callback->dpcdBacklightCaps : 0);
 		}
 		return;
 	}
@@ -5389,7 +5436,7 @@ long blti=0;
 
 uint8_t Gen11::isPanelPowerOn()
 {
-	return 1;
+	return (readPanelPowerStatusBits() & 0x1) ? 1 : 0;
 }
 
 // Stub that does nothing (void)
@@ -5620,7 +5667,24 @@ void Gen11::blit3d_initialize_scratch_space(void *that)
 
 uint8_t Gen11::isPanelPowerOn(void *that)
 {
-	return 1;//FunctionCast(isPanelPowerOn, callback->oisPanelPowerOn)(that);
+	static int panelPowerLogs = 0;
+	const uint8_t statusBits = readPanelPowerStatusBits();
+	const uint32_t ppStatus = (NGreen::callback && NGreen::callback->mmioReady()) ? NGreen::callback->readMMIO32(PCH_PP_STATUS) : 0;
+	const uint32_t ppControl = (NGreen::callback && NGreen::callback->mmioReady()) ? NGreen::callback->readMMIO32(PCH_PP_CONTROL) : 0;
+	const uint8_t powered = (statusBits & 0x1) ? 1 : 0;
+	if (panelPowerLogs < 12) {
+		panelPowerLogs++;
+		SYSLOG("ngreen", "panelPower[%d]: that=%p powered=%u seqActive=%u PP_STATUS=0x%x PP_CONTROL=0x%x dpcdBacklight=%d caps=0x%02x",
+		       panelPowerLogs,
+		       that,
+		       powered,
+		       !!(statusBits & 0x2),
+		       ppStatus,
+		       ppControl,
+		       NGreen::callback ? NGreen::callback->dpcdBacklightCapsValid : 0,
+		       (NGreen::callback && NGreen::callback->dpcdBacklightCapsValid) ? NGreen::callback->dpcdBacklightCaps : 0);
+	}
+	return powered;
 }
 
 uint8_t  Gen11::IGHardwareExtendedContextinitWithOptions(void *that,void *param_1,void *param_2)
@@ -6177,6 +6241,8 @@ void Gen11::IGHardwareContextinitRingGPUVirtualAddress(void *that) {
 		validateRcsDescriptorOrEngineObject("IGHardwareContext::initRingGPUVirtualAddress pre", that);
 		dumpRcsEngineActivationState("IGHardwareContext::initRingGPUVirtualAddress pre");
 		dumpContextImageKnownFields("IGHardwareContext::initRingGPUVirtualAddress pre", that);
+		dumpIGHardwareContextObject("initRingGPUVirtualAddress", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 	if (callback->oIGHardwareContextinitRingGPUVirtualAddress) {
 		FunctionCast(IGHardwareContextinitRingGPUVirtualAddress, callback->oIGHardwareContextinitRingGPUVirtualAddress)(that);
@@ -6185,6 +6251,8 @@ void Gen11::IGHardwareContextinitRingGPUVirtualAddress(void *that) {
 		dumpRcsEngineActivationState("IGHardwareContext::initRingGPUVirtualAddress post");
 		dumpContextImageKnownFields("IGHardwareContext::initRingGPUVirtualAddress post", that);
 		markRcsRegisterTransition("IGHardwareContext::initRingGPUVirtualAddress post");
+		dumpIGHardwareContextObject("initRingGPUVirtualAddress", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 }
 
@@ -6193,6 +6261,8 @@ void Gen11::IGHardwareContextinitRingRegisters(void *that) {
 		validateRcsDescriptorOrEngineObject("IGHardwareContext::initRingRegisters pre", that);
 		dumpRcsEngineActivationState("IGHardwareContext::initRingRegisters pre");
 		dumpContextImageKnownFields("IGHardwareContext::initRingRegisters pre", that);
+		dumpIGHardwareContextObject("initRingRegisters", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 	if (callback->oIGHardwareContextinitRingRegisters) {
 		FunctionCast(IGHardwareContextinitRingRegisters, callback->oIGHardwareContextinitRingRegisters)(that);
@@ -6201,6 +6271,8 @@ void Gen11::IGHardwareContextinitRingRegisters(void *that) {
 		dumpRcsEngineActivationState("IGHardwareContext::initRingRegisters post");
 		dumpContextImageKnownFields("IGHardwareContext::initRingRegisters post", that);
 		markRcsRegisterTransition("IGHardwareContext::initRingRegisters post");
+		dumpIGHardwareContextObject("initRingRegisters", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 }
 
@@ -6209,6 +6281,8 @@ void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareContext::initRingControl this=%p enable=%d", that, enable);
 		dumpRcsEngineActivationState("IGHardwareContext::initRingControl pre");
 		dumpContextImageKnownFields("IGHardwareContext::initRingControl pre", that);
+		dumpIGHardwareContextObject("initRingControl", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 	if (callback->oIGHardwareContextinitRingControl) {
 		FunctionCast(IGHardwareContextinitRingControl, callback->oIGHardwareContextinitRingControl)(that, enable);
@@ -6217,12 +6291,16 @@ void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
 		dumpRcsEngineActivationState("IGHardwareContext::initRingControl post");
 		dumpContextImageKnownFields("IGHardwareContext::initRingControl post", that);
 		markRcsRegisterTransition("IGHardwareContext::initRingControl post");
+		dumpIGHardwareContextObject("initRingControl", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 }
 
 void Gen11::IGHardwareContextresetRingHead(void *that) {
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::resetRingHead pre");
+		dumpIGHardwareContextObject("resetRingHead", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 	if (callback->oIGHardwareContextresetRingHead) {
 		FunctionCast(IGHardwareContextresetRingHead, callback->oIGHardwareContextresetRingHead)(that);
@@ -6230,6 +6308,8 @@ void Gen11::IGHardwareContextresetRingHead(void *that) {
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::resetRingHead post");
 		markRcsRegisterTransition("IGHardwareContext::resetRingHead post");
+		dumpIGHardwareContextObject("resetRingHead", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 }
 
@@ -6238,6 +6318,8 @@ void Gen11::IGHardwareContextupdateRingTail(void *that, uint32_t tail) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareContext::updateRingTail this=%p tail=0x%x", that, tail);
 		dumpRcsEngineActivationState("IGHardwareContext::updateRingTail pre");
 		dumpContextImageKnownFields("IGHardwareContext::updateRingTail pre", that);
+		dumpIGHardwareContextObject("updateRingTail", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 	if (callback->oIGHardwareContextupdateRingTail) {
 		FunctionCast(IGHardwareContextupdateRingTail, callback->oIGHardwareContextupdateRingTail)(that, tail);
@@ -6246,6 +6328,8 @@ void Gen11::IGHardwareContextupdateRingTail(void *that, uint32_t tail) {
 		dumpRcsEngineActivationState("IGHardwareContext::updateRingTail post");
 		dumpContextImageKnownFields("IGHardwareContext::updateRingTail post", that);
 		markRcsRegisterTransition("IGHardwareContext::updateRingTail post");
+		dumpIGHardwareContextObject("updateRingTail", that);
+		scanMappedCandidates("context", that, 0x180);
 	}
 }
 
@@ -6257,6 +6341,10 @@ bool Gen11::IGHardwareRingBufferinit(void *that, void *context) {
 		dumpRcsEngineActivationState("IGHardwareRingBuffer::init pre");
 		dumpContextImageKnownFields("IGHardwareRingBuffer::init pre", context);
 		dumpRingMemoryKnownFields("IGHardwareRingBuffer::init pre", that);
+		dumpIGHardwareRingBufferObject("init", that);
+		scanMappedCandidates("ring", that, 0x180);
+		dumpIGHardwareContextObject("initWithContext", context);
+		scanMappedCandidates("context", context, 0x180);
 	}
 
 	if (!callback->oIGHardwareRingBufferinit) {
@@ -6273,6 +6361,10 @@ bool Gen11::IGHardwareRingBufferinit(void *that, void *context) {
 		dumpContextImageKnownFields("IGHardwareRingBuffer::init post", context);
 		dumpRingMemoryKnownFields("IGHardwareRingBuffer::init post", that);
 		markRcsRegisterTransition("IGHardwareRingBuffer::init post");
+		dumpIGHardwareRingBufferObject("init", that);
+		scanMappedCandidates("ring", that, 0x180);
+		dumpIGHardwareContextObject("initWithContext", context);
+		scanMappedCandidates("context", context, 0x180);
 	}
 	return ret;
 }
@@ -6280,6 +6372,14 @@ bool Gen11::IGHardwareRingBufferinit(void *that, void *context) {
 void Gen11::IGHardwareRingBuffersubmitToRing(void *that) {
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareRingBuffer::submitToRing this=%p", that);
+		traceVirtualCallInSubmitToRing(that);
+		dumpIGHardwareRingBufferObject("submitToRing", that);
+		scanMappedCandidates("ring", that, 0x180);
+		auto *context = getMember<void *>(that, 0x20);
+		if (context) {
+			dumpIGHardwareContextObject("submitToRing", context);
+			scanMappedCandidates("context", context, 0x180);
+		}
 		auto *accel = getMember<void *>(that, 0x10);
 		void *dispatcher = accel ? getMember<void *>(accel, 0x1250) : nullptr;
 		mach_vm_address_t vtable = dispatcher ? *reinterpret_cast<mach_vm_address_t *>(dispatcher) : 0;
@@ -6292,7 +6392,7 @@ void Gen11::IGHardwareRingBuffersubmitToRing(void *that) {
 		       accel, dispatcher, static_cast<unsigned long long>(vtable), static_cast<unsigned long long>(target), targetName);
 		dumpRcsEngineActivationState("IGHardwareRingBuffer::submitToRing pre");
 		dumpRingMemoryKnownFields("IGHardwareRingBuffer::submitToRing pre", that);
-		dumpContextImageKnownFields("IGHardwareRingBuffer::submitToRing pre", getMember<void *>(that, 0x20));
+		dumpContextImageKnownFields("IGHardwareRingBuffer::submitToRing pre", context);
 	}
 
 	if (callback->oIGHardwareRingBuffersubmitToRing) {
@@ -6300,6 +6400,14 @@ void Gen11::IGHardwareRingBuffersubmitToRing(void *that) {
 	}
 
 	if (isRcsEngineTraceEnabled()) {
+		traceVirtualCallInSubmitToRing(that);
+		dumpIGHardwareRingBufferObject("submitToRing", that);
+		scanMappedCandidates("ring", that, 0x180);
+		auto *context = getMember<void *>(that, 0x20);
+		if (context) {
+			dumpIGHardwareContextObject("submitToRing", context);
+			scanMappedCandidates("context", context, 0x180);
+		}
 		auto *accel = getMember<void *>(that, 0x10);
 		void *dispatcher = accel ? getMember<void *>(accel, 0x1250) : nullptr;
 		mach_vm_address_t vtable = dispatcher ? *reinterpret_cast<mach_vm_address_t *>(dispatcher) : 0;
@@ -6312,7 +6420,7 @@ void Gen11::IGHardwareRingBuffersubmitToRing(void *that) {
 		       accel, dispatcher, static_cast<unsigned long long>(vtable), static_cast<unsigned long long>(target), targetName);
 		dumpRcsEngineActivationState("IGHardwareRingBuffer::submitToRing post");
 		dumpRingMemoryKnownFields("IGHardwareRingBuffer::submitToRing post", that);
-		dumpContextImageKnownFields("IGHardwareRingBuffer::submitToRing post", getMember<void *>(that, 0x20));
+		dumpContextImageKnownFields("IGHardwareRingBuffer::submitToRing post", context);
 		markRcsRegisterTransition("IGHardwareRingBuffer::submitToRing post");
 	}
 }

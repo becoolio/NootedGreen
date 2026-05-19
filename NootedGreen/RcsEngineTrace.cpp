@@ -4,6 +4,7 @@
 #include "kern_green.hpp"
 
 #include <Headers/kern_api.hpp>
+#include <mach/mach_time.h>
 
 static int getTraceSchedulerType() {
 	int schedType = 5;
@@ -26,6 +27,14 @@ static uint32_t readMem32(const volatile uint32_t *base, size_t dwordOffset) {
 
 static bool looksLikeKernelPtr(uint64_t value) {
 	return value >= 0xffffff8000000000ULL;
+}
+
+static bool isCanonicalPtr(uint64_t value) {
+	return (value >> 63) == 0 || (value >> 47) >= 0x1FFFF;
+}
+
+static bool isAlignedPtr(uint64_t value, uint32_t alignment) {
+	return (value & (alignment - 1)) == 0;
 }
 
 static bool vtableMatches(mach_vm_address_t objectVtable, mach_vm_address_t symbolVtable) {
@@ -408,4 +417,224 @@ void dumpNearbyKnownEngineGlobals(const char *stage) {
 		       desc.mmioGlobalStatusPage, desc.mmioForcewakeReq, desc.mmioForcewakeAck,
 		       mmioBase == RENDER_RING_BASE);
 	}
+}
+
+void dumpIGHardwareContextObject(const char *functionName, void *context) {
+	if (!isRcsEngineTraceEnabled() || !context) {
+		return;
+	}
+
+	SYSLOG("ngreen", "NG_OBJ_DUMP[context][%s]: this=%p", functionName, context);
+
+	auto *q = reinterpret_cast<uint64_t *>(context);
+	for (uint32_t i = 0; i < 0x180 / 8; i++) {
+		uint64_t value = q[i];
+		if (value != 0) {
+			SYSLOG("ngreen", "NG_OBJ_DUMP[context][%s]: this=%p +0x%02X=0x%016llx",
+			       functionName, context, i * 8, static_cast<unsigned long long>(value));
+		}
+	}
+}
+
+void dumpIGHardwareRingBufferObject(const char *functionName, void *ringBuffer) {
+	if (!isRcsEngineTraceEnabled() || !ringBuffer) {
+		return;
+	}
+
+	SYSLOG("ngreen", "NG_OBJ_DUMP[ring][%s]: this=%p", functionName, ringBuffer);
+
+	auto *q = reinterpret_cast<uint64_t *>(ringBuffer);
+	for (uint32_t i = 0; i < 0x180 / 8; i++) {
+		uint64_t value = q[i];
+		if (value != 0) {
+			SYSLOG("ngreen", "NG_OBJ_DUMP[ring][%s]: this=%p +0x%02X=0x%016llx",
+			       functionName, ringBuffer, i * 8, static_cast<unsigned long long>(value));
+		}
+	}
+}
+
+void scanMappedCandidates(const char *owner, void *object, uint32_t objectSize) {
+	if (!isRcsEngineTraceEnabled() || !object) {
+		return;
+	}
+
+	auto *q = reinterpret_cast<uint64_t *>(object);
+	for (uint32_t i = 0; i < objectSize / 8; i++) {
+		uint64_t value = q[i];
+		if (!value || !looksLikeKernelPtr(value) || !isCanonicalPtr(value) || !isAlignedPtr(value, 8)) {
+			continue;
+		}
+
+		void *candidate = reinterpret_cast<void *>(value);
+
+		void *cpuShared = nullptr;
+		uint64_t gpuMapped = 0;
+		const char *result = "invalid";
+
+		cpuShared = Gen11::tGetSharedMappedBufferVirtualAddress(candidate);
+		if (cpuShared) {
+			result = "valid";
+			gpuMapped = Gen11::tGetMappedBufferGPUVirtualAddress(candidate);
+		} else {
+			uint64_t testGpu = Gen11::tGetMappedBufferGPUVirtualAddress(candidate);
+			if (testGpu != 0) {
+				result = "valid";
+				gpuMapped = testGpu;
+			}
+		}
+
+		SYSLOG("ngreen", "NG_MAPPED_CANDIDATE: owner=%s ownerOffset=0x%02X candidate=%p cpu=%p gpu=0x%llx result=%s",
+		       owner, i * 8, candidate, cpuShared, static_cast<unsigned long long>(gpuMapped), result);
+	}
+}
+
+void scanContextImageFields(const char *candidateOwnerOffset, void *cpuPtr, uint64_t gpuAddr) {
+	if (!isRcsEngineTraceEnabled() || !cpuPtr) {
+		return;
+	}
+
+	auto *ctxImage = reinterpret_cast<volatile uint32_t *>(cpuPtr);
+
+	uint32_t headField = readMem32(ctxImage, 0x1014 / sizeof(uint32_t));
+	uint32_t tailField = readMem32(ctxImage, 0x101c / sizeof(uint32_t));
+	uint32_t ringBase = readMem32(ctxImage, 0x1024 / sizeof(uint32_t));
+	uint32_t ringCtl = readMem32(ctxImage, 0x102c / sizeof(uint32_t));
+
+	SYSLOG("ngreen", "NG_CONTEXT_IMAGE_SCAN: candidateOwnerOffset=%s imageCpu=%p imageGpu=0x%llx head=0x%x tail=0x%x ringBase=0x%x ringCtl=0x%x",
+	       candidateOwnerOffset, cpuPtr, static_cast<unsigned long long>(gpuAddr), headField, tailField, ringBase, ringCtl);
+
+	char dwordsBuf[256] = {0};
+	char *bufPtr = dwordsBuf;
+	size_t bufLeft = sizeof(dwordsBuf);
+	for (uint32_t i = 0; i < 8 && bufLeft > 16; i++) {
+		int written = snprintf(bufPtr, bufLeft, "%s0x%x", i == 0 ? "" : ",", ctxImage[i]);
+		if (written > 0) {
+			bufPtr += written;
+			bufLeft -= written;
+		}
+	}
+	SYSLOG("ngreen", "NG_CONTEXT_IMAGE_SCAN: candidateOwnerOffset=%s first8Dwords=%s",
+	       candidateOwnerOffset, dwordsBuf);
+}
+
+void scanRingMemoryFields(const char *ringInfo, void *cpuPtr, uint64_t gpuAddr, uint32_t ringSize, uint32_t oldTail, uint32_t newTail) {
+	if (!isRcsEngineTraceEnabled() || !cpuPtr || ringSize == 0) {
+		return;
+	}
+
+	auto *ringCpu = reinterpret_cast<volatile uint32_t *>(cpuPtr);
+	uint32_t mask = ringSize - 1;
+
+	SYSLOG("ngreen", "NG_RING_MEMORY_SCAN: ring=%s cpu=%p gpu=0x%llx oldTail=0x%x newTail=0x%x",
+	       ringInfo, cpuPtr, static_cast<unsigned long long>(gpuAddr), oldTail, newTail);
+
+	char dwordsAt0[256] = {0};
+	char *bufPtr = dwordsAt0;
+	size_t bufLeft = sizeof(dwordsAt0);
+	for (uint32_t i = 0; i < 16 && bufLeft > 16; i++) {
+		int written = snprintf(bufPtr, bufLeft, "%s0x%x", i == 0 ? "" : ",", ringCpu[i]);
+		if (written > 0) {
+			bufPtr += written;
+			bufLeft -= written;
+		}
+	}
+	SYSLOG("ngreen", "NG_RING_MEMORY_SCAN: ring=%s dwordsAt0=%s", ringInfo, dwordsAt0);
+
+	if (oldTail > 0) {
+		uint32_t oldOffset = oldTail & mask;
+		char dwordsAtOld[256] = {0};
+		bufPtr = dwordsAtOld;
+		bufLeft = sizeof(dwordsAtOld);
+		for (uint32_t i = 0; i < 16 && bufLeft > 16; i++) {
+			uint32_t idx = ((oldOffset >> 2) + i) & (mask >> 2);
+			int written = snprintf(bufPtr, bufLeft, "%s0x%x", i == 0 ? "" : ",", ringCpu[idx]);
+			if (written > 0) {
+				bufPtr += written;
+				bufLeft -= written;
+			}
+		}
+		SYSLOG("ngreen", "NG_RING_MEMORY_SCAN: ring=%s dwordsAtOldTail=%s", ringInfo, dwordsAtOld);
+	}
+
+	if (newTail > 0 && newTail != oldTail) {
+		uint32_t newOffset = newTail & mask;
+		char dwordsAtNew[256] = {0};
+		bufPtr = dwordsAtNew;
+		bufLeft = sizeof(dwordsAtNew);
+		for (uint32_t i = 0; i < 16 && bufLeft > 16; i++) {
+			uint32_t idx = ((newOffset >> 2) + i) & (mask >> 2);
+			int written = snprintf(bufPtr, bufLeft, "%s0x%x", i == 0 ? "" : ",", ringCpu[idx]);
+			if (written > 0) {
+				bufPtr += written;
+				bufLeft -= written;
+			}
+		}
+		SYSLOG("ngreen", "NG_RING_MEMORY_SCAN: ring=%s dwordsAtNewTail=%s", ringInfo, dwordsAtNew);
+	}
+}
+
+static mach_vm_address_t findVtableEntry(void *object, uint32_t vtableOffset) {
+	if (!object) return 0;
+	mach_vm_address_t vtablePtr = *reinterpret_cast<mach_vm_address_t *>(object);
+	return vtablePtr + vtableOffset;
+}
+
+void traceVirtualCallInSubmitToRing(void *ringBuffer) {
+	if (!isRcsEngineTraceEnabled() || !ringBuffer) {
+		return;
+	}
+
+	void *context = getMember<void *>(ringBuffer, 0x20);
+	SYSLOG("ngreen", "NG_VCALL_TRACE: caller=submitToRing ringBuffer=%p context=%p", ringBuffer, context);
+
+	if (context) {
+		auto ctxVtable = *reinterpret_cast<mach_vm_address_t *>(context);
+		SYSLOG("ngreen", "NG_VCALL_TRACE: caller=submitToRing context=%p vtable=0x%llx",
+		       context, static_cast<unsigned long long>(ctxVtable));
+
+		auto submitEntry = findVtableEntry(context, 0x100);
+		if (submitEntry) {
+			SYSLOG("ngreen", "NG_VCALL_TRACE: caller=submitToRing dispatchObject=%p vtable=0x%llx slot=0x100 target=0x%llx",
+			       context, static_cast<unsigned long long>(ctxVtable), static_cast<unsigned long long>(submitEntry));
+		}
+	}
+}
+
+void scanHwsCandidates(const char *candidateOwnerOffset, void *cpuPtr, uint64_t gpuAddr) {
+	if (!isRcsEngineTraceEnabled() || !cpuPtr) {
+		return;
+	}
+
+	auto *hws = reinterpret_cast<volatile uint32_t *>(cpuPtr);
+
+	char dwordsBuf[256] = {0};
+	char *bufPtr = dwordsBuf;
+	size_t bufLeft = sizeof(dwordsBuf);
+	for (uint32_t i = 0; i < 16 && bufLeft > 16; i++) {
+		int written = snprintf(bufPtr, bufLeft, "%s0x%x", i == 0 ? "" : ",", hws[i]);
+		if (written > 0) {
+			bufPtr += written;
+			bufLeft -= written;
+		}
+	}
+
+	SYSLOG("ngreen", "NG_HWS_SCAN: candidateOffset=%s cpu=%p gpu=0x%llx dwords=%s",
+	       candidateOwnerOffset, cpuPtr, static_cast<unsigned long long>(gpuAddr), dwordsBuf);
+
+	SYSLOG("ngreen", "NG_HWS_SCAN: candidateOffset=%s stampIdx3Ptr=%p stampIdx3Value=0x%08x",
+	       candidateOwnerOffset, &hws[3], hws[3]);
+}
+
+void logBuildMarker() {
+	if (!isRcsEngineTraceEnabled()) {
+		return;
+	}
+
+	mach_timebase_info_data_t tb;
+	mach_timebase_info(&tb);
+	uint64_t now = mach_absolute_time();
+	uint64_t nowNanos = now * tb.numer / tb.denom;
+
+	SYSLOG("ngreen", "NG_BUILD_MARKER: date/time=%llu features=OBJ_DUMP,MAPPED_CANDIDATE,VCALL_TRACE,ELSP_MMIO_WATCH,HWS_SCAN",
+	       static_cast<unsigned long long>(nowNanos));
 }

@@ -8,6 +8,7 @@
 #include "DYLDPatches.hpp"
 #include "HDMI.hpp"
 #include "kern_patcherplus.hpp"
+#include "RcsEngineTrace.hpp"
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_devinfo.hpp>
 #include <IOKit/IOCatalogue.h>
@@ -254,6 +255,8 @@ void NGreen::init() {
 	if (!hasAllow3DBootArg()) {
 		SYSLOG("ngreen", "Acceleration gate: boot is missing -allow3d; acceleration probe results are not authoritative");
 	}
+
+	logBuildMarker();
 
     lilu.onKextLoadForce(&kextAGDP);
 	/*lilu.onKextLoadForce(&kextBacklight);

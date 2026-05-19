@@ -68,6 +68,8 @@ class NGreen {
 	
 	UInt32 stolen_size;
 	uint32_t framebufferId {0};
+	bool mmioReady() const { return mmioValid(); }
+	uint32_t readMMIO32(unsigned long reg) { return readReg32(reg); }
 	
     private:
 	
@@ -276,12 +278,18 @@ class NGreen {
     bool isJslDerivative = false;
     bool isGen9LPDerivative = false;
     bool isGen8LPDerivative = false;
-    bool isRealTGL = false;  // true if CPU is genuine TGL (model 0x8C/0x8D), false if spoofed (RPL/ADL)
-    uint32_t cpuModel {0};  // full display model (family_model)
-    uint32_t deviceId {0};
-    uint16_t revision {0};
-    uint32_t pciRevision {0};
-    IOPCIDevice *iGPU {nullptr};
+	bool isRealTGL = false;  // true if CPU is genuine TGL (model 0x8C/0x8D), false if spoofed (RPL/ADL)
+	uint32_t cpuModel {0};  // full display model (family_model)
+	uint32_t deviceId {0};
+	uint16_t revision {0};
+	uint32_t pciRevision {0};
+	uint8_t dpcdRevision {0};
+	uint8_t dpcdMaxLinkRate {0};
+	uint8_t dpcdMaxLaneCountRaw {0};
+	uint8_t dpcdBacklightCaps {0};
+	bool dpcdCapsValid {false};
+	bool dpcdBacklightCapsValid {false};
+	IOPCIDevice *iGPU {nullptr};
 	
 	IOMemoryMap *rmmio {nullptr};
 	volatile UInt32 *rmmioPtr {nullptr};
@@ -331,4 +339,3 @@ struct DPCDCap16 { // 16 bytes
 	// Detailed information can be found in the specification
 	uint8_t others[12] {};
 };
-
