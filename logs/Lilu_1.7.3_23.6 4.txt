@@ -1,0 +1,1383 @@
+Lilu    config: @ (DBG) version DBG-173-2026-03-20 (x86_64), args: disabled 0, debug 1, slow 0, decompress 1
+Lilu       dev: @ (DBG) got MacBookAir9,1 model from /efi/platform
+Lilu       dev: @ (DBG) got Mac-0CFF9C7C2B63DF8D board-id from /efi/platform
+Lilu    config: @ (DBG) initialising policy
+Lilu     iokit: @ (DBG) OSPrelinkKextCount equals to 5
+Lilu      mach: @ (DBG) MachInfo asKernel 1 object constructed
+Lilu      mach: @ (DBG) found kernel nouveau mach-o header address at ffffff8012c00000
+Lilu      mach: @ (DBG) memory init mode - 1
+Lilu      mach: @ (DBG) looking up inner kernel in 876 commands at 0xFFFFFF8012C00000
+Lilu      mach: @ (DBG) got nouveau mach-o for kernel at 0xFFFFFF8012CE4000
+Lilu      mach: @ (DBG) kernel has segment is __TEXT from 0xFFFFFF8012CE4000 to 0xFFFFFF80136E4000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF8012CE53E8 - 0xFFFFFF8012DBB000 : 0xFFFFFF80136E3648 - 0xFFFFFF80136E4000
+Lilu      mach: @ (DBG) activating slots for kernel in 0xFFFFFF8012CE53E8 - 0xFFFFFF8012DBB000
+Lilu      mach: @ (DBG) kernel has segment is __DATA from 0xFFFFFF8013AD4000 to 0xFFFFFF8013D64000
+Lilu      mach: @ (DBG) kernel has segment is __DATA_CONST from 0xFFFFFF8012C10000 to 0xFFFFFF8012CE0000
+Lilu      mach: @ (DBG) kernel has segment is __KLDDATA from 0xFFFFFF8013D64000 to 0xFFFFFF8013DA0000
+Lilu      mach: @ (DBG) kernel has segment is __HIB from 0xFFFFFF8012B00000 to 0xFFFFFF8012B9F000
+Lilu      mach: @ (DBG) kernel has segment is __VECTORS from 0xFFFFFF8013DA0000 to 0xFFFFFF8013DA1000
+Lilu      mach: @ (DBG) kernel has segment is __KLD from 0xFFFFFF80136E4000 to 0xFFFFFF80136F6000
+Lilu      mach: @ (DBG) kernel has segment is __LASTDATA_CONST from 0xFFFFFF8012CE0000 to 0xFFFFFF8012CE1000
+Lilu      mach: @ (DBG) kernel has segment is __LAST from 0xFFFFFF8013DA1000 to 0xFFFFFF8013DA1000
+Lilu      mach: @ (DBG) kernel has segment is __PRELINK_TEXT from 0xFFFFFF80136F6000 to 0xFFFFFF80136F6000
+Lilu      mach: @ (DBG) kernel has segment is __PRELINK_INFO from 0xFFFFFF8018670000 to 0xFFFFFF8018A26000
+Lilu      mach: @ (DBG) kernel has segment is __LINKINFO from 0xFFFFFF8015A98000 to 0xFFFFFF8015AE3000
+Lilu      mach: @ (DBG) kernel has segment is __CTF from 0xFFFFFF8012C10000 to 0xFFFFFF8012C10000
+Lilu      mach: @ (DBG) kernel has segment is __LINKEDIT from 0xFFFFFF8015B2C000 to 0xFFFFFF8016626B17
+Lilu      mach: @ (DBG) found symbol _PE_initialize_console at 0xffffff80135a8300 (non-aslr 0xffffff80135a8300), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF80135A8300 to 0xFFFFFF80166C58C0 diff 0x000000000311D5BB argument 311D5BB
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFC36 to 0xFFFFFF80135A8306 diff 0xFFFFFFFFFCEE86CB argument FCEE86CB
+Lilu   patcher: @ (DBG) wrapped _PE_initialize_console
+Lilu       api: @ (DBG) got load request from AppleALC (198)
+Lilu       api: @ (DBG) got load request from NootedBlue (100)
+NootedBlue      init: @ (DBG) NootedBlue bootstrap DBG-100-2026-05-09
+NootedBlue     nblue: @ TGL_ONLY_TEST enabled: registering renamed TGL framebuffer + Apple TGL accelerator only
+NootedBlue     nblue: @ TGL_ONLY_TEST: skipping ICL framebuffer, ICL accelerator, and renamed TGL accelerator registration
+Lilu       api: @ (DBG) got load request from DebugEnhancer (111)
+Lilu       api: @ (DBG) got load request from RealtekCardReaderFriend (104)
+Lilu       api: @ automatically disabling RealtekCardReaderFriend (104) on an unsupported operating system
+RealtekCardReaderFriend      init: @ parent said we should not continue 4
+Lilu       api: @ (DBG) got load request from VirtualSMC (138)
+Lilu     nvram: @ failed to get IODeviceTree:/options
+Lilu       efi: @ (DBG) successful efi64 call GetVariable with response 800000000000000E
+VirtualSMC     efend: @ authenticated restart support is unavailable (800000000000000E, 8)
+Lilu       api: @ (DBG) got load request from BlueToolFixup (272)
+BlueToolFixup     btlfx: @ start
+Lilu       api: @ (DBG) got load request from IntelBTPatcher (250)
+Lilu       api: @ (DBG) got load request from CpuTscSync (112)
+Lilu       api: @ (DBG) got load request from CPUFriend (130)
+Lilu       api: @ (DBG) got load request from NVMeFix (113)
+Lilu    config: @ (DBG) PE_initialize_console 7
+Lilu     nvram: @ failed to get IODeviceTree:/options
+Lilu       efi: @ (DBG) successful efi64 call GetVariable with response 00000000
+Lilu       efi: @ (DBG) successful efi64 call GetVariable with response 00000000
+Lilu    config: @ (DBG) PE_initialize_console 8
+Lilu    config: @ (DBG) PE_initialize_console 6
+Lilu    config: @ (DBG) PE_initialize_console 6 performing init
+Lilu       dev: @ (DBG) creating device info
+Lilu       dev: @ (DBG) found root device chosen
+Lilu       dev: @ (DBG) found root device efi
+Lilu       dev: @ (DBG) found root device cpus
+Lilu       dev: @ (DBG) found root device memory
+Lilu       dev: @ (DBG) found root device rom
+Lilu       dev: @ (DBG) found root device PC00
+Lilu       dev: @ (DBG) found PCI root PC00
+Lilu       dev: @ (DBG) pci bridge PC00 is configured 0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device PEG1 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device PEG2 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device IPU0 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device GNA0 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device XDCI 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP01 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP02 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP03 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP04 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP05 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP08 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP10 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP11 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP12 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP13 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP14 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP15 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP16 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP17 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP18 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP19 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP20 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP21 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP22 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP23 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device RP24 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device SAT0 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device SPI0 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device SPI1 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device SPI2 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device SPI3 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device SPI4 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device SPI5 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device SPI6 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device I2C2 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device I2C3 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device I2C4 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device I2C5 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device I2C6 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device I2C7 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device UA00 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device UA01 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device UA02 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device UA03 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device UA04 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device UA05 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device UA06 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device THC0 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device THC1 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device HEC3 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device CNVW 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData class-code was not found
+Lilu       dev: @ (DBG) found pci device PDRC 0x0 0x0
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 60000 value
+Lilu       dev: @ (DBG) found pci device pci8086,9a14 0x8086 0x60000
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 30000 value
+Lilu       dev: @ (DBG) found pci device GFX0 0x8086 0x30000
+Lilu       dev: @ (DBG) found IGPU device GFX0
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 118000 value
+Lilu       dev: @ (DBG) found pci device TCPU 0x8086 0x118000
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 60400 value
+Lilu       dev: @ (DBG) found pci device PEG0 0x8086 0x60400
+Lilu       dev: @ (DBG) found pci bridge PEG0
+Lilu       dev: @ (DBG) pci bridge PEG0 is configured 0
+Lilu       dev: @ (DBG) found PEGP on pci bridge
+Lilu     iokit: @ (DBG) getOSData vendor-id has 144D value
+Lilu     iokit: @ (DBG) getOSData class-code has 10802 value
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 60400 value
+Lilu       dev: @ (DBG) found pci device TRP0 0x8086 0x60400
+Lilu       dev: @ (DBG) found pci bridge TRP0
+Lilu       dev: @ (DBG) pci bridge TRP0 is configured 0
+Lilu       dev: @ (DBG) found PXSX on pci bridge
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 60400 value
+Lilu       dev: @ (DBG) found pci device TRP1 0x8086 0x60400
+Lilu       dev: @ (DBG) found pci bridge TRP1
+Lilu       dev: @ (DBG) pci bridge TRP1 is configured 0
+Lilu       dev: @ (DBG) found PXSX on pci bridge
+Lilu     iokit: @ (DBG) getOSData vendor-id was not found
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has C0330 value
+Lilu       dev: @ (DBG) found pci device TXHC 0x8086 0xc0330
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has C0340 value
+Lilu       dev: @ (DBG) found pci device TDM0 0x8086 0xc0340
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 70000 value
+Lilu       dev: @ (DBG) found pci device ISHD 0x8086 0x70000
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has C0330 value
+Lilu       dev: @ (DBG) found pci device XHCI 0x8086 0xc0330
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 50000 value
+Lilu       dev: @ (DBG) found pci device pci8086,a0ef 0x8086 0x50000
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has C8000 value
+Lilu       dev: @ (DBG) found pci device I2C0 0x8086 0xc8000
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has C8000 value
+Lilu       dev: @ (DBG) found pci device I2C1 0x8086 0xc8000
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 78000 value
+Lilu       dev: @ (DBG) found pci device IMEI 0x8086 0x78000
+Lilu       dev: @ (DBG) found IMEI device IMEI
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 60400 value
+Lilu       dev: @ (DBG) found pci device RP06 0x8086 0x60400
+Lilu       dev: @ (DBG) found pci bridge RP06
+Lilu       dev: @ (DBG) pci bridge RP06 is configured 0
+Lilu       dev: @ (DBG) found PXSX on pci bridge
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 28000 value
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 60400 value
+Lilu       dev: @ (DBG) found pci device RP07 0x8086 0x60400
+Lilu       dev: @ (DBG) found pci bridge RP07
+Lilu       dev: @ (DBG) pci bridge RP07 is configured 0
+Lilu       dev: @ (DBG) found PXSX on pci bridge
+Lilu     iokit: @ (DBG) getOSData vendor-id has 10EC value
+Lilu     iokit: @ (DBG) getOSData class-code has FF0000 value
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 60400 value
+Lilu       dev: @ (DBG) found pci device RP09 0x8086 0x60400
+Lilu       dev: @ (DBG) found pci bridge RP09
+Lilu       dev: @ (DBG) pci bridge RP09 is configured 0
+Lilu       dev: @ (DBG) found PXSX on pci bridge
+Lilu     iokit: @ (DBG) getOSData vendor-id has 144D value
+Lilu     iokit: @ (DBG) getOSData class-code has 10802 value
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 60100 value
+Lilu       dev: @ (DBG) found pci device LPCB 0x8086 0x60100
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 40380 value
+Lilu       dev: @ (DBG) found pci device HDAS 0x8086 0x40380
+Lilu       dev: @ (DBG) found HDEF device HDAS
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has C0500 value
+Lilu       dev: @ (DBG) found pci device SBUS 0x8086 0xc0500
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has C8000 value
+Lilu       dev: @ (DBG) found pci device pci8086,a0a4 0x8086 0xc8000
+Lilu     iokit: @ (DBG) getOSData vendor-id has 8086 value
+Lilu     iokit: @ (DBG) getOSData class-code has 20000 value
+Lilu       dev: @ (DBG) found pci device GLAN 0x8086 0x20000
+Lilu       dev: @ (DBG) found root device PRRE
+Lilu       dev: @ (DBG) found root device IOTR
+Lilu       dev: @ (DBG) found root device GPI0
+Lilu       dev: @ (DBG) found root device URSC
+Lilu       dev: @ (DBG) found root device WFDE
+Lilu       dev: @ (DBG) found root device WFTE
+Lilu       dev: @ (DBG) found root device PEPD
+Lilu       dev: @ (DBG) found root device AMW0
+Lilu       dev: @ (DBG) found root device AMW2
+Lilu       dev: @ (DBG) found root device AMW5
+Lilu       dev: @ (DBG) found root device AMW4
+Lilu       dev: @ (DBG) found root device DIAG
+Lilu       dev: @ (DBG) found root device LID0
+Lilu       dev: @ (DBG) found root device PBTN
+Lilu       dev: @ (DBG) found root device SBTN
+Lilu       dev: @ (DBG) found root device AC
+Lilu       dev: @ (DBG) found root device BAT0
+Lilu       dev: @ (DBG) found root device HIDD
+Lilu       dev: @ (DBG) found root device IETM
+Lilu       dev: @ (DBG) found root device UBTC
+Lilu       dev: @ (DBG) found root device PTID
+Lilu       dev: @ (DBG) found root device TPM
+Lilu       dev: @ (DBG) found root device ALS0
+Lilu     iokit: @ (DBG) getOSData apple-layout-id was not found
+Lilu     iokit: @ (DBG) getOSData AAPL,ig-platform-id was not found
+Lilu     iokit: @ (DBG) compatible property starts with pci1028,a21 and is 46 bytes
+Lilu     iokit: @ (DBG) fixing compatible to have HDEF
+Lilu       dev: @ (DBG) processing 0 external GPUs to disable - selective
+Lilu     iokit: @ (DBG) getOSData disable-gpu-min was not found
+Lilu     iokit: @ (DBG) getOSData disable-gpu-max was not found
+Lilu       dev: @ (DBG) disable GFX0 GPU request from 0 to 23 on 23 kernel
+Lilu     iokit: @ (DBG) compatible property starts with pci1028,a21 and is 46 bytes
+Lilu     iokit: @ (DBG) fixing compatible to have IGPU
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 0, polling
+Lilu       rtc: @ (DBG) successful rtc read client obtain
+Lilu       rtc: @ (DBG) successful rtc read client obtain
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 1, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 2, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 3, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 4, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 5, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 6, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 7, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 8, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 9, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 10, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 11, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 12, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 13, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 14, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 15, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 16, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 17, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 18, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 19, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 20, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 21, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 22, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 23, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 24, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 25, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 26, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 27, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 28, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 29, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 30, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 31, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 32, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 33, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 34, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 35, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 36, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 37, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 38, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 39, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 40, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 41, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 42, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 43, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 44, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 45, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 46, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 47, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 48, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 49, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 50, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 51, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 52, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 53, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 54, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 55, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 56, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 57, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 58, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 59, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 60, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 61, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 62, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 63, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 64, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 65, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 66, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 67, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 68, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 69, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 70, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 71, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 72, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 73, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 74, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 75, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 76, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 77, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 78, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 79, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 80, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 81, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 82, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 83, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 84, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 85, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 86, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 87, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 88, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 89, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 90, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 91, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 92, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 93, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 94, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 95, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 96, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 97, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 98, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 99, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 100, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 101, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 102, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 103, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 104, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 105, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 106, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 107, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 108, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 109, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 110, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 111, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 112, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 113, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 114, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 115, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 116, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 117, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 118, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 119, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 120, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 121, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 122, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 123, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 124, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 125, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 126, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 127, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 128, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 129, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 130, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 131, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 132, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 133, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 134, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 135, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 136, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 137, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 138, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 139, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 140, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 141, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 142, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 143, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 144, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 145, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 146, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 147, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 148, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 149, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 150, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 151, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 152, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 153, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 154, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 155, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 156, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 157, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 158, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 159, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 160, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 161, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 162, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 163, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 164, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 165, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 166, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 167, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 168, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 169, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 170, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 171, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 172, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 173, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 174, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 175, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 176, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 177, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 178, polling
+Lilu       dev: @ (DBG) pci device IGPU is not in service plane 179, polling
+Lilu       dev: @ (DBG) pci device IGPU is in service plane 180
+Lilu       dev: @ (DBG) pci device IGPU is in service plane 0
+Lilu     iokit: @ (DBG) read pci config discovered IGPU space to be 0x00001000
+Lilu       dev: @ (DBG) pci device IGPU is in service plane 0
+Lilu     iokit: @ (DBG) read pci config discovered IGPU space to be 0x00001000
+NootedBlue    ngreen: @ V52: CPU family=0x6 model=0x8c stepping=1 isRealTGL=1
+NootedBlue      DYLD: @ (DBG) Setting hwgva-id to iMacPro1,1
+Lilu      mach: @ (DBG) found symbol _cs_validate_page at 0xffffff801336c100 (non-aslr 0xffffff801336c100), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF801336C100 to 0xFFFFFF801692CF70 diff 0x00000000035C0E6B argument 35C0E6B
+Lilu   patcher: @ (DBG) using slotted jumping via 0xFFFFFF8012CE53E8
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFC4A to 0xFFFFFF801336C106 diff 0xFFFFFFFFFCCAC4B7 argument FCCAC4B7
+Lilu   patcher: @ (DBG) wrapped _cs_validate_page
+Lilu      mach: @ (DBG) found symbol __ZN11IOCatalogue10addDriversEP7OSArrayb at 0xffffff8013505da0 (non-aslr 0xffffff8013505da0), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF8013505DA0 to 0xFFFFFF80169264F0 diff 0x000000000342074B argument 342074B
+Lilu   patcher: @ (DBG) using slotted jumping via 0xFFFFFF8012CE53F0
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFC5E to 0xFFFFFF8013505DA6 diff 0xFFFFFFFFFCE46143 argument FCE46143
+Lilu   patcher: @ (DBG) wrapped __ZN11IOCatalogue10addDriversEP7OSArrayb
+Lilu      mach: @ (DBG) found symbol _kernel_debugger_entry_count at 0xffffff8013ce7360 (non-aslr 0xffffff8013ce7360), type f, sect e, desc 0
+Lilu      mach: @ (DBG) found symbol _gIOKitDebug at 0xffffff8013b5bdc8 (non-aslr 0xffffff8013b5bdc8), type f, sect 9, desc 0
+Lilu      mach: @ (DBG) found symbol _vprintf at 0xffffff8012e43df0 (non-aslr 0xffffff8012e43df0), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol _kdb_printf at 0xffffff8012e440e0 (non-aslr 0xffffff8012e440e0), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol _kprintf at 0xffffff80135a9060 (non-aslr 0xffffff80135a9060), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol _hibernate_write_image at 0xffffff80134c79f0 (non-aslr 0xffffff80134c79f0), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol _IOHibernateSystemSleep at 0xffffff80134c5390 (non-aslr 0xffffff80134c5390), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF8012E440E0 to 0xFFFFFF801694D2D0 diff 0x0000000003B091EB argument 3B091EB
+Lilu   patcher: @ (DBG) routed _kdb_printf
+Lilu   patcher: @ (DBG) from 0xFFFFFF80135A9060 to 0xFFFFFF801694D390 diff 0x00000000033A432B argument 33A432B
+Lilu   patcher: @ (DBG) routed _kprintf
+Lilu   patcher: @ (DBG) from 0xFFFFFF80134C79F0 to 0xFFFFFF801694D440 diff 0x0000000003485A4B argument 3485A4B
+Lilu   patcher: @ (DBG) using slotted jumping via 0xFFFFFF8012CE53F8
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFC72 to 0xFFFFFF80134C79F6 diff 0xFFFFFFFFFCE07D7F argument FCE07D7F
+Lilu   patcher: @ (DBG) wrapped _hibernate_write_image
+Lilu   patcher: @ (DBG) from 0xFFFFFF80134C5390 to 0xFFFFFF801694D4A0 diff 0x000000000348810B argument 348810B
+Lilu   patcher: @ (DBG) using slotted jumping via 0xFFFFFF8012CE5400
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFC86 to 0xFFFFFF80134C5396 diff 0xFFFFFFFFFCE0570B argument FCE0570B
+Lilu   patcher: @ (DBG) wrapped _IOHibernateSystemSleep
+Lilu      mach: @ (DBG) found symbol _kalloc_data at 0xffffff8012e32360 (non-aslr 0xffffff8012e32360), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol _bsd_log_lock_safe at 0xffffff8012e43bb0 (non-aslr 0xffffff8012e43bb0), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol _bsd_log_unlock at 0xffffff8012e43bf0 (non-aslr 0xffffff8012e43bf0), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol _msgbuf at 0xffffff8013b51fc8 (non-aslr 0xffffff8013b51fc8), type f, sect 9, desc 0
+Lilu      mach: @ (DBG) found symbol _kernel_trap at 0xffffff8012f77580 (non-aslr 0xffffff8012f77580), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF8012F77580 to 0xFFFFFF8016746070 diff 0x00000000037CEAEB argument 37CEAEB
+Lilu   patcher: @ (DBG) using slotted jumping via 0xFFFFFF8012CE5408
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFC9A to 0xFFFFFF8012F77586 diff 0xFFFFFFFFFC8B78E7 argument FC8B78E7
+Lilu   patcher: @ (DBG) wrapped _kernel_trap
+Lilu      mach: @ (DBG) found symbol _cs_validate_page at 0xffffff801336c100 (non-aslr 0xffffff801336c100), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF801336C100 to 0xFFFFFF8017A2F79A diff 0x00000000046C3695 argument 46C3695
+Lilu   patcher: @ (DBG) using slotted jumping for previous via 0xFFFFFF8012CE5410
+Lilu   patcher: @ (DBG) wrapped _cs_validate_page
+Lilu      mach: @ (DBG) found symbol _IOHibernateSystemHasSlept at 0xffffff80134c6fe0 (non-aslr 0xffffff80134c6fe0), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF80134C6FE0 to 0xFFFFFF801853D4A6 diff 0x00000000050764C1 argument 50764C1
+Lilu   patcher: @ (DBG) using slotted jumping via 0xFFFFFF8012CE5418
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFCAE to 0xFFFFFF80134C6FE6 diff 0xFFFFFFFFFCE07333 argument FCE07333
+Lilu   patcher: @ (DBG) wrapped _IOHibernateSystemHasSlept
+Lilu      mach: @ (DBG) found symbol _xcpm_urgency at 0xffffff8012f922f0 (non-aslr 0xffffff8012f922f0), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN14IOPMrootDomain10tracePointEh at 0xffffff801359c3f0 (non-aslr 0xffffff801359c3f0), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF8012F922F0 to 0xFFFFFF801853D4D6 diff 0x00000000055AB1E1 argument 55AB1E1
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFCC2 to 0xFFFFFF8012F922F6 diff 0xFFFFFFFFFC8D262F argument FC8D262F
+Lilu   patcher: @ (DBG) wrapped _xcpm_urgency
+Lilu   patcher: @ (DBG) from 0xFFFFFF801359C3F0 to 0xFFFFFF801853D4F0 diff 0x0000000004FA10FB argument 4FA10FB
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFCD6 to 0xFFFFFF801359C3F6 diff 0xFFFFFFFFFCEDC71B argument FCEDC71B
+Lilu   patcher: @ (DBG) wrapped __ZN14IOPMrootDomain10tracePointEh
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.AppleHDA at 1 index
+Lilu      mach: @ (DBG) found symbol _kmod at 0xffffff8013ce61c8 (non-aslr 0xffffff8013ce61c8), type f, sect e, desc 0
+Lilu   patcher: @ (DBG) _kmod address 0xffffff8013ce61c8
+Lilu      mach: @ (DBG) found symbol __ZN6OSKext6unloadEv at 0xffffff801346caf0 (non-aslr 0xffffff801346caf0), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN6OSKext23saveLoadedKextPanicListEv at 0xffffff80134767c0 (non-aslr 0xffffff80134767c0), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF801346CAF0 to 0xFFFFFF80166BBCF0 diff 0x000000000324F1FB argument 324F1FB
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFCEA to 0xFFFFFF801346CAF6 diff 0xFFFFFFFFFCDACE07 argument FCDACE07
+Lilu   patcher: @ (DBG) wrapped __ZN6OSKext6unloadEv
+Lilu   patcher: @ (DBG) from 0xFFFFFF80134767C0 to 0xFFFFFF80166BBDA0 diff 0x00000000032455DB argument 32455DB
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFCFD to 0xFFFFFF80134767C5 diff 0xFFFFFFFFFCDB6AC3 argument FCDB6AC3
+Lilu   patcher: @ (DBG) wrapped __ZN6OSKext23saveLoadedKextPanicListEv
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.AppleHDAController at 2 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.AppleGFXHDA at 3 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.iokit.IOHDAFamily at 4 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.AppleGraphicsDevicePolicy at 5 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.AppleBacklight at 6 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.AppleMCCSControl at 7 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.iokit.IOGraphicsFamily at 8 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.iokit.IOAcceleratorFamily2 at 9 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer at 10 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.AppleIntelTGLGraphics at 11 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.AppleSMC at 12 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.iokit.IOUSBHostFamily at 13 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.ACPI_SMC_PlatformPlugin at 14 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.driver.X86PlatformPlugin at 15 index
+Lilu      mach: @ (DBG) MachInfo asKernel 0 object constructed
+Lilu   patcher: @ (DBG) loaded kinfo com.apple.iokit.IONVMeFamily at 16 index
+Lilu      user: @ disabling user patcher on request!
+Lilu   patcher: @ (DBG) processing already loaded kexts by iterating over all kmods
+Lilu   patcher: @ (DBG) caught the right kext com.apple.iokit.IOUSBHostFamily at 0xFFFFFF801550D000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.iokit.IOUSBHostFamily at 0xFFFFFF801550D000
+Lilu      mach: @ (DBG) com.apple.iokit.IOUSBHostFamily has segment is __TEXT from 0xFFFFFF801550D000 to 0xFFFFFF8015587000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF801550D5E0 - 0xFFFFFF801550E0DC : 0xFFFFFF8015586FF4 - 0xFFFFFF8015587000
+Lilu      mach: @ (DBG) activating slots for com.apple.iokit.IOUSBHostFamily in 0xFFFFFF801550D5E0 - 0xFFFFFF801550E0DC
+Lilu      mach: @ (DBG) com.apple.iokit.IOUSBHostFamily has segment is __DATA from 0xFFFFFF8015587000 to 0xFFFFFF801559C000
+Lilu      mach: @ (DBG) com.apple.iokit.IOUSBHostFamily has segment is __DATA_CONST from 0xFFFFFF801559C000 to 0xFFFFFF801559E000
+Lilu      mach: @ (DBG) com.apple.iokit.IOUSBHostFamily has segment is __LINKEDIT from 0xFFFFFF8015B2C000 to 0xFFFFFF8016626B17
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff801550d000 of memory 593920 size
+IntelBTPatcher      ibtp: @ com.apple.iokit.IOUSBHostFamily
+Lilu      mach: @ (DBG) found symbol __ZN15IOUSBHostDevice13deviceRequestEP9IOServiceRN11StandardUSB13DeviceRequestEPvP18IOMemoryDescriptorRjP19IOUSBHostCompletionj at 0xffffff801554e3fc (non-aslr 0xffffff801554e3fc), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF801554E3FC to 0xFFFFFF8018532892 diff 0x0000000002FE4491 argument 2FE4491
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFD11 to 0xFFFFFF801554E402 diff 0xFFFFFFFFFEE8E6EC argument FEE8E6EC
+Lilu   patcher: @ (DBG) wrapped __ZN15IOUSBHostDevice13deviceRequestEP9IOServiceRN11StandardUSB13DeviceRequestEPvP18IOMemoryDescriptorRjP19IOUSBHostCompletionj
+IntelBTPatcher      ibtp: @ routed __ZN15IOUSBHostDevice13deviceRequestEP9IOServiceRN11StandardUSB13DeviceRequestEPvP18IOMemoryDescriptorRjP19IOUSBHostCompletionj
+Lilu   patcher: @ (DBG) caught the right kext com.apple.driver.AppleSMC at 0xFFFFFF8014584000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.driver.AppleSMC at 0xFFFFFF8014584000
+Lilu      mach: @ (DBG) com.apple.driver.AppleSMC has segment is __TEXT from 0xFFFFFF8014584000 to 0xFFFFFF80145A0000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF8014584590 - 0xFFFFFF80145849C0 : 0xFFFFFF801459FFFE - 0xFFFFFF80145A0000
+Lilu      mach: @ (DBG) activating slots for com.apple.driver.AppleSMC in 0xFFFFFF8014584590 - 0xFFFFFF80145849C0
+Lilu      mach: @ (DBG) com.apple.driver.AppleSMC has segment is __DATA from 0xFFFFFF80145A0000 to 0xFFFFFF80145A4000
+Lilu      mach: @ (DBG) com.apple.driver.AppleSMC has segment is __DATA_CONST from 0xFFFFFF80145A4000 to 0xFFFFFF80145A5000
+Lilu      mach: @ (DBG) com.apple.driver.AppleSMC has segment is __LINKEDIT from 0xFFFFFF8015B2C000 to 0xFFFFFF8016626B17
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff8014584000 of memory 135168 size
+Lilu      mach: @ (DBG) found symbol __ZN8AppleSMC20callPlatformFunctionEPK8OSSymbolbPvS3_S3_S3_ at 0xffffff801459364e (non-aslr 0xffffff801459364e), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF801459364E to 0xFFFFFF8016745910 diff 0x00000000021B22BD argument 21B22BD
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFD25 to 0xFFFFFF8014593654 diff 0xFFFFFFFFFDED392A argument FDED392A
+Lilu   patcher: @ (DBG) wrapped __ZN8AppleSMC20callPlatformFunctionEPK8OSSymbolbPvS3_S3_S3_
+Lilu      mach: @ (DBG) found symbol __ZN8AppleSMC20smcStopWatchdogTimerEv at 0xffffff80145881f8 (non-aslr 0xffffff80145881f8), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF80145881F8 to 0xFFFFFF80167459A0 diff 0x00000000021BD7A3 argument 21BD7A3
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFD38 to 0xFFFFFF80145881FD diff 0xFFFFFFFFFDEC84C0 argument FDEC84C0
+Lilu   patcher: @ (DBG) wrapped __ZN8AppleSMC20smcStopWatchdogTimerEv
+VirtualSMC    kstore: @ key [REV ] not found for info
+VirtualSMC    kstore: @ key [MPRO] not found for info
+VirtualSMC    kstore: @ key [MPRD] not found for info
+VirtualSMC    kstore: @ key [LGPB] not found for info
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8015725000 and its name is com.apple.private.KextAudit (start func is 0xFFFFFF8015725EA4)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8015638000 and its name is com.apple.driver.usb.AppleUSBXHCI (start func is 0xFFFFFF801566C409)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8015683000 and its name is com.apple.driver.usb.AppleUSBXHCIPCI (start func is 0xFFFFFF80156A133A)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80185E4000 and its name is com.alexandred.VoodooI2C (start func is 0xFFFFFF80185EBD6A)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF801437F000 and its name is com.apple.driver.AppleIntelLpssGspi (start func is 0xFFFFFF80143845E2)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8016A51000 and its name is com.insanelymac.IntelMausiEthernet (start func is 0xFFFFFF8016A62EEB)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014EBF000 and its name is com.apple.iokit.IONVMeFamily (start func is 0xFFFFFF8014EE2E02)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.iokit.IONVMeFamily at 0xFFFFFF8014EBF000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.iokit.IONVMeFamily at 0xFFFFFF8014EBF000
+Lilu      mach: @ (DBG) com.apple.iokit.IONVMeFamily has segment is __TEXT from 0xFFFFFF8014EBF000 to 0xFFFFFF8014EEA000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF8014EBF540 - 0xFFFFFF8014EC0040 : 0xFFFFFF8014EEA000 - 0xFFFFFF8014EEA000
+Lilu      mach: @ (DBG) activating slots for com.apple.iokit.IONVMeFamily in 0xFFFFFF8014EBF540 - 0xFFFFFF8014EC0040
+Lilu      mach: @ (DBG) com.apple.iokit.IONVMeFamily has segment is __DATA from 0xFFFFFF8014EEA000 to 0xFFFFFF8014EF1000
+Lilu      mach: @ (DBG) com.apple.iokit.IONVMeFamily has segment is __DATA_CONST from 0xFFFFFF8014EF1000 to 0xFFFFFF8014EF2000
+Lilu      mach: @ (DBG) com.apple.iokit.IONVMeFamily has segment is __LINKEDIT from 0xFFFFFF8015B2C000 to 0xFFFFFF8016626B17
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff8014ebf000 of memory 208896 size
+Lilu      mach: @ (DBG) found symbol __ZN16IONVMeController20IssueIdentifyCommandEP18IOMemoryDescriptorjb at 0xffffff8014eca320 (non-aslr 0xffffff8014eca320), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16IONVMeController22ProcessSyncNVMeRequestEP16AppleNVMeRequest at 0xffffff8014eca514 (non-aslr 0xffffff8014eca514), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16IONVMeController10GetRequestEjh at 0xffffff8014ece938 (non-aslr 0xffffff8014ece938), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16AppleNVMeRequest23BuildCommandGetFeaturesEh at 0xffffff8014ed7dca (non-aslr 0xffffff8014ed7dca), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16AppleNVMeRequest29BuildCommandSetFeaturesCommonEh at 0xffffff8014ed7e00 (non-aslr 0xffffff8014ed7e00), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16IONVMeController13ReturnRequestEP16AppleNVMeRequest at 0xffffff8014eceb46 (non-aslr 0xffffff8014eceb46), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16AppleNVMeRequest9GetStatusEv at 0xffffff8014ed6760 (non-aslr 0xffffff8014ed6760), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16AppleNVMeRequest9GetOpcodeEv at 0xffffff8014ed6746 (non-aslr 0xffffff8014ed6746), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16AppleNVMeRequest20GenerateIOVMSegmentsEyy at 0xffffff8014ed6f48 (non-aslr 0xffffff8014ed6f48), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16IONVMeController22FilterInterruptRequestEP28IOFilterInterruptEventSource at 0xffffff8014eccaec (non-aslr 0xffffff8014eccaec), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZTV16IONVMeController at 0xffffff8014eed2d0 (non-aslr 0xffffff8014eed2d0), type f, sect 7, desc 0
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8016A2E000 and its name is ru.joedm.SMCSuperIO (start func is 0xFFFFFF8016A2EEE0)
+SMCSuperIO      ssio: @ starting up SuperIO sensors
+Lilu   patcher: @ (DBG) invoked at kext loading
+SMCSuperIO      ssio: @ failed to detect supported SuperIO chip
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8016956000 and its name is science.firewolf.rtsx (start func is 0xFFFFFF8016971562)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF801599B000 and its name is com.apple.driver.corecapture (start func is 0xFFFFFF801599BD94)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014A65000 and its name is com.apple.iokit.IO80211Family (start func is 0xFFFFFF8014A65F80)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8016A86000 and its name is com.zxystd.AirportItlwm (start func is 0xFFFFFF8016A99DD0)
+VirtualSMC    kstore: @ key [AC-N] not found for reading
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8015461000 and its name is com.apple.iokit.IOUSBFamily (start func is 0xFFFFFF80154BC6B8)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80145B6000 and its name is com.apple.driver.AppleSmartBatteryManager (start func is 0xFFFFFF80145CD6D6)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80155EB000 and its name is com.apple.driver.usb.AppleUSBHostPacketFilter (start func is 0xFFFFFF80155EDC46)
+VirtualSMC    kstore: @ key [B0IV] not found for info
+VirtualSMC    kstore: @ key [BMSN] not found for info
+VirtualSMC    kstore: @ key [BSSC] not found for info
+VirtualSMC    kstore: @ key [BSSA] not found for info
+VirtualSMC    kstore: @ key [B0OS] not found for info
+VirtualSMC    kstore: @ key [B0AT] not found for info
+VirtualSMC    kstore: @ key [B0TE] not found for info
+VirtualSMC    kstore: @ key [B0CU] not found for info
+VirtualSMC    kstore: @ key [B0RC] not found for info
+VirtualSMC    kstore: @ key [BMDN] not found for info
+VirtualSMC    kstore: @ key [B0DC] not found for info
+VirtualSMC    kstore: @ key [BDVT] not found for info
+VirtualSMC    kstore: @ key [BNCB] not found for info
+VirtualSMC    kstore: @ key [BC4V] not found for info
+VirtualSMC    kstore: @ key [BC3V] not found for info
+VirtualSMC    kstore: @ key [BC2V] not found for info
+VirtualSMC    kstore: @ key [UPOF] not found for info
+VirtualSMC    kstore: @ key [UB0C] not found for writing
+VirtualSMC    kstore: @ key [BFUE] not found for info
+VirtualSMC    kstore: @ key [sDBI] not found for info
+VirtualSMC    kstore: @ key [B0RS] not found for info
+VirtualSMC    kstore: @ key [PDTR] not found for info
+VirtualSMC    kstore: @ key [PSTR] not found for info
+VirtualSMC    kstore: @ key [CHGI] not found for info
+VirtualSMC    kstore: @ key [BMDA] not found for info
+VirtualSMC    kstore: @ key [BMDT] not found for info
+VirtualSMC    kstore: @ key [BAAC] not found for info
+VirtualSMC    kstore: @ key [BACC] not found for info
+VirtualSMC    kstore: @ key [BCCA] not found for info
+VirtualSMC    kstore: @ key [B0SS] not found for info
+VirtualSMC    kstore: @ key [BRSS] not found for info
+VirtualSMC    kstore: @ key [B0CI] not found for info
+VirtualSMC    kstore: @ key [B0CJ] not found for info
+VirtualSMC    kstore: @ key [BISS] not found for info
+VirtualSMC    kstore: @ key [BCST] not found for info
+VirtualSMC    kstore: @ key [B0CM] not found for info
+VirtualSMC    kstore: @ key [B0HM] not found for info
+VirtualSMC    kstore: @ key [BR0C] not found for info
+VirtualSMC    kstore: @ key [B0FG] not found for info
+VirtualSMC    kstore: @ key [BR00] not found for info
+VirtualSMC    kstore: @ key [BR01] not found for info
+VirtualSMC    kstore: @ key [BR02] not found for info
+VirtualSMC    kstore: @ key [BR03] not found for info
+VirtualSMC    kstore: @ key [BR04] not found for info
+VirtualSMC    kstore: @ key [BR05] not found for info
+VirtualSMC    kstore: @ key [BR06] not found for info
+VirtualSMC    kstore: @ key [BR07] not found for info
+VirtualSMC    kstore: @ key [BR08] not found for info
+VirtualSMC    kstore: @ key [BR09] not found for info
+VirtualSMC    kstore: @ key [BR10] not found for info
+VirtualSMC    kstore: @ key [BR11] not found for info
+VirtualSMC    kstore: @ key [BR12] not found for info
+VirtualSMC    kstore: @ key [BR13] not found for info
+VirtualSMC    kstore: @ key [BR14] not found for info
+VirtualSMC    kstore: @ key [GGRC] not found for info
+VirtualSMC    kstore: @ key [B0S1] not found for info
+VirtualSMC    kstore: @ key [BMSC] not found for info
+VirtualSMC    kstore: @ key [BNSC] not found for info
+VirtualSMC    kstore: @ key [B0ID] not found for info
+VirtualSMC    kstore: @ key [BLRD] not found for info
+VirtualSMC    kstore: @ key [BLRC] not found for info
+VirtualSMC    kstore: @ key [BLRF] not found for info
+VirtualSMC    kstore: @ key [BLRH] not found for info
+VirtualSMC    kstore: @ key [BLRS] not found for info
+VirtualSMC    kstore: @ key [BLRW] not found for info
+VirtualSMC    kstore: @ key [B0QD] not found for info
+VirtualSMC    kstore: @ key [B0CH] not found for info
+VirtualSMC    kstore: @ key [B0SR] not found for info
+VirtualSMC    kstore: @ key [B0IF] not found for info
+VirtualSMC    kstore: @ key [BI03] not found for info
+VirtualSMC    kstore: @ key [BI04] not found for info
+VirtualSMC    kstore: @ key [B0IS] not found for info
+VirtualSMC    kstore: @ key [BQCC] not found for info
+VirtualSMC    kstore: @ key [B0QS] not found for info
+VirtualSMC    kstore: @ key [BAST] not found for info
+VirtualSMC    kstore: @ key [B0MS] not found for info
+VirtualSMC    kstore: @ key [B0MT] not found for info
+VirtualSMC    kstore: @ key [B0FI] not found for info
+VirtualSMC    kstore: @ key [BFC1] not found for info
+VirtualSMC    kstore: @ key [BFC2] not found for info
+VirtualSMC    kstore: @ key [B0WD] not found for info
+VirtualSMC    kstore: @ key [BFWC] not found for info
+VirtualSMC    kstore: @ key [B0SA] not found for info
+VirtualSMC    kstore: @ key [B0VC] not found for info
+VirtualSMC    kstore: @ key [TG0A] not found for info
+VirtualSMC    kstore: @ key [BDDE] not found for info
+VirtualSMC    kstore: @ key [B0TC] not found for info
+VirtualSMC    kstore: @ key [BDAQ] not found for info
+VirtualSMC    kstore: @ key [BDFU] not found for info
+VirtualSMC    kstore: @ key [BQX1] not found for info
+VirtualSMC    kstore: @ key [BMW1] not found for info
+VirtualSMC    kstore: @ key [BC1A] not found for info
+VirtualSMC    kstore: @ key [BQD1] not found for info
+VirtualSMC    kstore: @ key [BDD1] not found for info
+VirtualSMC    kstore: @ key [B0R1] not found for info
+VirtualSMC    kstore: @ key [BR1W] not found for info
+VirtualSMC    kstore: @ key [BL0A] not found for info
+VirtualSMC    kstore: @ key [BL0B] not found for info
+VirtualSMC    kstore: @ key [BLCC] not found for info
+VirtualSMC    kstore: @ key [BLCF] not found for info
+VirtualSMC    kstore: @ key [BLCH] not found for info
+VirtualSMC    kstore: @ key [BLCL] not found for info
+VirtualSMC    kstore: @ key [BLCR] not found for info
+VirtualSMC    kstore: @ key [BLDM] not found for info
+VirtualSMC    kstore: @ key [BLDX] not found for info
+VirtualSMC    kstore: @ key [BLFM] not found for info
+VirtualSMC    kstore: @ key [BLFX] not found for info
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80142DE000 and its name is com.apple.AppleFSCompression.AppleFSCompressionTypeDataless (start func is 0xFFFFFF80142DEA9E)
+VirtualSMC    kstore: @ key [BLIC] not found for info
+VirtualSMC    kstore: @ key [BLID] not found for info
+VirtualSMC    kstore: @ key [BLPM] not found for info
+VirtualSMC    kstore: @ key [BLPX] not found for info
+VirtualSMC    kstore: @ key [BLQC] not found for info
+VirtualSMC    kstore: @ key [BLQD] not found for info
+VirtualSMC    kstore: @ key [BLQM] not found for info
+VirtualSMC    kstore: @ key [BLQX] not found for info
+VirtualSMC    kstore: @ key [BLRM] not found for info
+VirtualSMC    kstore: @ key [BLRX] not found for info
+VirtualSMC    kstore: @ key [BLTA] not found for info
+VirtualSMC    kstore: @ key [BLTM] not found for info
+VirtualSMC    kstore: @ key [BLTO] not found for info
+VirtualSMC    kstore: @ key [BLTS] not found for info
+VirtualSMC    kstore: @ key [BLTX] not found for info
+VirtualSMC    kstore: @ key [BLCR] not found for info
+VirtualSMC    kstore: @ key [BLNM] not found for info
+VirtualSMC    kstore: @ key [BLNX] not found for info
+VirtualSMC    kstore: @ key [BLRO] not found for info
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80142E2000 and its name is com.apple.AppleFSCompression.AppleFSCompressionTypeZlib (start func is 0xFFFFFF80142EE761)
+VirtualSMC    kstore: @ key [BLRN] not found for info
+VirtualSMC    kstore: @ key [BLRC] not found for info
+VirtualSMC    kstore: @ key [BLQN] not found for info
+VirtualSMC    kstore: @ key [BLQO] not found for info
+VirtualSMC    kstore: @ key [BLTP] not found for info
+VirtualSMC    kstore: @ key [BLSC] not found for info
+VirtualSMC    kstore: @ key [BLTV] not found for info
+VirtualSMC    kstore: @ key [BFLE] not found for info
+VirtualSMC    kstore: @ key [BFLF] not found for info
+VirtualSMC    kstore: @ key [BLSD] not found for info
+VirtualSMC    kstore: @ key [BLSE] not found for info
+VirtualSMC    kstore: @ key [BLSF] not found for info
+VirtualSMC    kstore: @ key [BLSG] not found for info
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF801461D000 and its name is com.apple.driver.AppleSyntheticGameController (start func is 0xFFFFFF80146213BA)
+VirtualSMC    kstore: @ key [BLSH] not found for info
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014859000 and its name is com.apple.BootCache (start func is 0xFFFFFF8014864809)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014A61000 and its name is com.apple.filesystems.hfs.encodings.kext (start func is 0xFFFFFF8014A62A7C)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80149FD000 and its name is com.apple.filesystems.hfs.kext (start func is 0xFFFFFF80149FD7E0)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80152B8000 and its name is com.apple.iokit.IOSurface (start func is 0xFFFFFF80152D9961)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80157D2000 and its name is com.apple.filesystems.apfs (start func is 0xFFFFFF80157D3917)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8015A57000 and its name is com.apple.filesystems.lifs (start func is 0xFFFFFF8015A71C47)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014173000 and its name is com.apple.driver.AppleBSDKextStarter (start func is 0xFFFFFF8014173EE8)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8015A82000 and its name is com.apple.filesystems.tmpfs (start func is 0xFFFFFF8015A8C64A)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80142F8000 and its name is com.apple.driver.AppleFileSystemDriver (start func is 0xFFFFFF80142F9D2C)
+VirtualSMC    kstore: @ key [BVVL] not found for info
+VirtualSMC    kstore: @ key [BNCR] not found for info
+VirtualSMC    kstore: @ key [CHNC] not found for info
+VirtualSMC    kstore: @ key [CHSL] not found for info
+VirtualSMC    kstore: @ key [CH0D] not found for info
+VirtualSMC    kstore: @ key [CHTC] not found for info
+VirtualSMC    kstore: @ key [CH0R] not found for info
+VirtualSMC    kstore: @ key [SBOF] not found for info
+VirtualSMC    kstore: @ key [SBOP] not found for info
+VirtualSMC    kstore: @ key [SBOR] not found for info
+VirtualSMC    kstore: @ key [SBOT] not found for info
+VirtualSMC    kstore: @ key [B0LP] not found for info
+VirtualSMC    kstore: @ key [SBST] not found for info
+VirtualSMC    kstore: @ key [OBOF] not found for info
+VirtualSMC    kstore: @ key [OBOO] not found for info
+VirtualSMC    kstore: @ key [OBOR] not found for info
+VirtualSMC    kstore: @ key [OBOQ] not found for info
+VirtualSMC    kstore: @ key [OBTO] not found for info
+VirtualSMC    kstore: @ key [WASM] not found for info
+VirtualSMC    kstore: @ key [AC-N] not found for info
+VirtualSMC    kstore: @ key [D0VR] not found for info
+VirtualSMC    kstore: @ key [AY-N] not found for info
+VirtualSMC    kstore: @ key [AP-N] not found for info
+VirtualSMC    kstore: @ key [ANWP] not found for info
+VirtualSMC    kstore: @ key [zSPp] not found for info
+VirtualSMC    kstore: @ key [BPEX] not found for info
+VirtualSMC    kstore: @ key [BSDC] not found for info
+VirtualSMC    kstore: @ key [BSDS] not found for info
+VirtualSMC    kstore: @ key [BSDF] not found for info
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF801860F000 and its name is com.alexandred.VoodooI2CHID (start func is 0xFFFFFF80186180E8)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014804000 and its name is com.apple.driver.AppleXsanScheme (start func is 0xFFFFFF8014806BBE)
+Lilu     nvram: @ (DBG) read oem-product is missing
+Lilu     nvram: @ (DBG) read oem-vendor is missing
+Lilu     nvram: @ (DBG) read oem-board is missing
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80185C9000 and its name is me.kishorprins.VoodooInput (start func is 0xFFFFFF80185CC9FA)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014D99000 and its name is com.apple.driver.IOBluetoothHIDDriver (start func is 0xFFFFFF8014DA61BA)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014756000 and its name is com.apple.driver.AppleHSBluetoothDriver (start func is 0xFFFFFF801475BBA8)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014361000 and its name is com.apple.driver.AppleInputDeviceSupport (start func is 0xFFFFFF801436F402)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80144E5000 and its name is com.apple.driver.AppleMultitouchDriver (start func is 0xFFFFFF80144F635C)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014761000 and its name is com.apple.driver.AppleTopCaseHIDEventDriver (start func is 0xFFFFFF80147680AB)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8013E6E000 and its name is com.apple.driver.AppleActuatorDriver (start func is 0xFFFFFF8013E74A1A)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80155E1000 and its name is com.apple.driver.usb.AppleUSBHostCompositeDevice (start func is 0xFFFFFF80155E46F9)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80147B4000 and its name is com.apple.driver.usb.networking (start func is 0xFFFFFF80147B5D50)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8014772000 and its name is com.apple.driver.usb.cdc (start func is 0xFFFFFF8014773D8C)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8017A39000 and its name is com.zxystd.IntelBluetoothFirmware (start func is 0xFFFFFF8017A3A116)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80145F2000 and its name is com.apple.driver.AppleUSBMassStorageInterfaceNub (start func is 0xFFFFFF80145F3D5E)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF801520D000 and its name is com.apple.iokit.SCSITaskUserClient (start func is 0xFFFFFF8015211D6C)
+Lilu     nvram: @ (DBG) read oem-product is missing
+Lilu     nvram: @ (DBG) read oem-vendor is missing
+Lilu     nvram: @ (DBG) read oem-board is missing
+NootedBlue     nblue: @ TGL_ONLY_TEST: forcing Driverf2.xml + Drivera2.xml and skipping ICL fallback
+NootedBlue     nblue: @ Injecting framebuffer personality from Driverf2.xml as com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer
+NootedBlue     nblue: @ Framebuffer personality injection occurred
+NootedBlue     nblue: @ Injecting accelerator personality from Drivera2.xml as com.apple.driver.AppleIntelTGLGraphics
+NootedBlue     nblue: @ Accelerator personality injection occurred
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF801522E000 and its name is com.apple.iokit.IOSerialFamily (start func is 0xFFFFFF8015234B9B)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA833D000 and its name is com.apple.driver.driverkit.serial (start func is 0xFFFFFF7FA8342E5F)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA81E8000 and its name is com.apple.driver.IOPlatformPluginFamily (start func is 0xFFFFFF7FA81EB7E4)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8215000 and its name is com.apple.driver.X86PlatformPlugin (start func is 0xFFFFFF7FA8221A6C)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.driver.X86PlatformPlugin at 0xFFFFFF7FA8215000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.driver.X86PlatformPlugin at 0xFFFFFF7FA8215000
+Lilu      mach: @ (DBG) com.apple.driver.X86PlatformPlugin has segment is __TEXT from 0xFFFFFF7FA8215000 to 0xFFFFFF7FA8228000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA82155A0 - 0xFFFFFF7FA82156FC : 0xFFFFFF7FA8227FFA - 0xFFFFFF7FA8228000
+Lilu      mach: @ (DBG) activating slots for com.apple.driver.X86PlatformPlugin in 0xFFFFFF7FA82155A0 - 0xFFFFFF7FA82156FC
+Lilu      mach: @ (DBG) com.apple.driver.X86PlatformPlugin has segment is __DATA from 0xFFFFFF7FA8228000 to 0xFFFFFF7FA8229000
+Lilu      mach: @ (DBG) com.apple.driver.X86PlatformPlugin has segment is __DATA_CONST from 0xFFFFFF7FA8229000 to 0xFFFFFF7FA822A000
+Lilu      mach: @ (DBG) com.apple.driver.X86PlatformPlugin has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa8215000 of memory 86016 size
+Lilu      mach: @ (DBG) found symbol __ZN17X86PlatformPlugin22configResourceCallbackEjiPKvjPv at 0xffffff7fa8216cbc (non-aslr 0xffffff7fa8216cbc), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA8216CBC to 0xFFFFFF8018547768 diff 0x0000000070330AA7 argument 70330AA7
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFD4C to 0xFFFFFF7FA8216CC2 diff 0xFFFFFFFF91B56F71 argument 91B56F71
+Lilu   patcher: @ (DBG) wrapped __ZN17X86PlatformPlugin22configResourceCallbackEjiPKvjPv
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8205000 and its name is com.apple.driver.IOPlatformPluginLegacy (start func is 0xFFFFFF7FA820D375)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA81EF000 and its name is com.apple.driver.ACPI_SMC_PlatformPlugin (start func is 0xFFFFFF7FA81FB590)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.driver.ACPI_SMC_PlatformPlugin at 0xFFFFFF7FA81EF000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.driver.ACPI_SMC_PlatformPlugin at 0xFFFFFF7FA81EF000
+Lilu      mach: @ (DBG) com.apple.driver.ACPI_SMC_PlatformPlugin has segment is __TEXT from 0xFFFFFF7FA81EF000 to 0xFFFFFF7FA81FD000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA81EF5A0 - 0xFFFFFF7FA81F03FC : 0xFFFFFF7FA81FCFF8 - 0xFFFFFF7FA81FD000
+Lilu      mach: @ (DBG) activating slots for com.apple.driver.ACPI_SMC_PlatformPlugin in 0xFFFFFF7FA81EF5A0 - 0xFFFFFF7FA81F03FC
+Lilu      mach: @ (DBG) com.apple.driver.ACPI_SMC_PlatformPlugin has segment is __DATA from 0xFFFFFF7FA81FD000 to 0xFFFFFF7FA8200000
+Lilu      mach: @ (DBG) com.apple.driver.ACPI_SMC_PlatformPlugin has segment is __DATA_CONST from 0xFFFFFF7FA8200000 to 0xFFFFFF7FA8201000
+Lilu      mach: @ (DBG) com.apple.driver.ACPI_SMC_PlatformPlugin has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa81ef000 of memory 73728 size
+Lilu      mach: @ (DBG) found symbol __ZL22configResourceCallbackjiPKvjPv at 0xffffff7fa81f069f (non-aslr 0xffffff7fa81f069f), type e, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA81F069F to 0xFFFFFF80185476D8 diff 0x0000000070357034 argument 70357034
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFD60 to 0xFFFFFF7FA81F06A5 diff 0xFFFFFFFF91B30940 argument 91B30940
+Lilu   patcher: @ (DBG) wrapped __ZL22configResourceCallbackjiPKvjPv
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7435000 and its name is com.apple.driver.AppleFIVRDriver (start func is 0xFFFFFF7FA7436E22)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8185000 and its name is com.apple.iokit.IOGraphicsFamily (start func is 0xFFFFFF7FA81AEB0F)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.iokit.IOGraphicsFamily at 0xFFFFFF7FA8185000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.iokit.IOGraphicsFamily at 0xFFFFFF7FA8185000
+Lilu      mach: @ (DBG) com.apple.iokit.IOGraphicsFamily has segment is __TEXT from 0xFFFFFF7FA8185000 to 0xFFFFFF7FA81B4000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA81855F0 - 0xFFFFFF7FA8186340 : 0xFFFFFF7FA81B3FFA - 0xFFFFFF7FA81B4000
+Lilu      mach: @ (DBG) activating slots for com.apple.iokit.IOGraphicsFamily in 0xFFFFFF7FA81855F0 - 0xFFFFFF7FA8186340
+Lilu      mach: @ (DBG) com.apple.iokit.IOGraphicsFamily has segment is __DATA from 0xFFFFFF7FA81B4000 to 0xFFFFFF7FA81C5000
+Lilu      mach: @ (DBG) com.apple.iokit.IOGraphicsFamily has segment is __DATA_CONST from 0xFFFFFF7FA81C5000 to 0xFFFFFF7FA81C7000
+Lilu      mach: @ (DBG) com.apple.iokit.IOGraphicsFamily has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa8185000 of memory 270336 size
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA74D0000 and its name is com.apple.AppleGraphicsDeviceControl (start func is 0xFFFFFF7FA74D3CB8)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7FF5000 and its name is com.apple.iokit.IOAcceleratorFamily2 (start func is 0xFFFFFF7FA804DCF6)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.iokit.IOAcceleratorFamily2 at 0xFFFFFF7FA7FF5000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.iokit.IOAcceleratorFamily2 at 0xFFFFFF7FA7FF5000
+Lilu      mach: @ (DBG) com.apple.iokit.IOAcceleratorFamily2 has segment is __TEXT from 0xFFFFFF7FA7FF5000 to 0xFFFFFF7FA8060000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA7FF55F0 - 0xFFFFFF7FA7FF6374 : 0xFFFFFF7FA805FFFC - 0xFFFFFF7FA8060000
+Lilu      mach: @ (DBG) activating slots for com.apple.iokit.IOAcceleratorFamily2 in 0xFFFFFF7FA7FF55F0 - 0xFFFFFF7FA7FF6374
+Lilu      mach: @ (DBG) com.apple.iokit.IOAcceleratorFamily2 has segment is __DATA from 0xFFFFFF7FA8060000 to 0xFFFFFF7FA8078000
+Lilu      mach: @ (DBG) com.apple.iokit.IOAcceleratorFamily2 has segment is __DATA_CONST from 0xFFFFFF7FA8078000 to 0xFFFFFF7FA807B000
+Lilu      mach: @ (DBG) com.apple.iokit.IOAcceleratorFamily2 has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7ff5000 of memory 548864 size
+NootedBlue     NBlue: @ IOAcceleratorFamily2 loaded, trying acceleration gate patch
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7ff5000 of memory 548864 size
+Lilu   patcher: @ lookup patching applied only 0 patches out of 1
+NootedBlue     NBlue: @ Failed to apply kextIOAcceleratorFamily2 patch
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA9493000 and its name is org.smichaud.HookCase (start func is 0xFFFFFF7FA94A77AA)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA9081000 and its name is com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer (start func is 0xFFFFFF7FA91706C0)
+Lilu   patcher: @ (DBG) caught the right kext com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer at 0xFFFFFF7FA9081000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer at 0xFFFFFF7FA9081000
+Lilu      mach: @ (DBG) com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer has segment is __TEXT from 0xFFFFFF7FA9081000 to 0xFFFFFF7FA91B9000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA9081690 - 0xFFFFFF7FA9084540 : 0xFFFFFF7FA91B9000 - 0xFFFFFF7FA91B9000
+Lilu      mach: @ (DBG) activating slots for com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer in 0xFFFFFF7FA9081690 - 0xFFFFFF7FA9084540
+Lilu      mach: @ (DBG) com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer has segment is __DATA from 0xFFFFFF7FA91B9000 to 0xFFFFFF7FA924D000
+Lilu      mach: @ (DBG) com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer has segment is __LLVM_COV from 0xFFFFFF7FA924D000 to 0xFFFFFF7FA93F9000
+Lilu      mach: @ (DBG) com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer has segment is __LINKEDIT from 0xFFFFFF7FA94AE000 to 0xFFFFFF7FA950776D
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue     nblue: @ AppleIntelTGLGraphicsFramebuffer
+Lilu      mach: @ (DBG) found symbol __ZN24AppleIntelBaseController5startEP9IOService at 0xffffff7fa90db8a0 (non-aslr 0xffffff7fa90db8a0), type 1e, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol _gPlatformInformationList at 0xffffff7fa9243fa0 (non-aslr 0xffffff7fa9243fa0), type 1e, sect d, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN16AppleIntelScaler4initE10IGScalerID at 0xffffff7fa9119c48 (non-aslr 0xffffff7fa9119c48), type 1e, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA9119C48 to 0xFFFFFF801692AB30 diff 0x000000006D810EE3 argument 6D810EE3
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFD74 to 0xFFFFFF7FA9119C4E diff 0xFFFFFFFF92A59ED5 argument 92A59ED5
+Lilu   patcher: @ (DBG) wrapped __ZN16AppleIntelScaler4initE10IGScalerID
+Lilu      mach: @ (DBG) found symbol __ZN15AppleIntelPlane4initE9IGPlaneID at 0xffffff7fa9084758 (non-aslr 0xffffff7fa9084758), type 1e, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA9084758 to 0xFFFFFF801692AC00 diff 0x000000006D8A64A3 argument 6D8A64A3
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFD88 to 0xFFFFFF7FA908475E diff 0xFFFFFFFF929C49D1 argument 929C49D1
+Lilu   patcher: @ (DBG) wrapped __ZN15AppleIntelPlane4initE9IGPlaneID
+Lilu      mach: @ (DBG) found symbol __ZN21AppleIntelFramebuffer4initEP24AppleIntelBaseControllerj at 0xffffff7fa90bdfe8 (non-aslr 0xffffff7fa90bdfe8), type 1e, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA90BDFE8 to 0xFFFFFF801692AD00 diff 0x000000006D86CD13 argument 6D86CD13
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFD9C to 0xFFFFFF7FA90BDFEE diff 0xFFFFFFFF929FE24D argument 929FE24D
+Lilu   patcher: @ (DBG) wrapped __ZN21AppleIntelFramebuffer4initEP24AppleIntelBaseControllerj
+Lilu      mach: @ (DBG) found symbol __ZN24AppleIntelBaseController13FBMemMgr_InitEv at 0xffffff7fa90df17a (non-aslr 0xffffff7fa90df17a), type 1e, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA90DF17A to 0xFFFFFF801692ADD0 diff 0x000000006D84BC51 argument 6D84BC51
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFDB0 to 0xFFFFFF7FA90DF180 diff 0xFFFFFFFF92A1F3CB argument 92A1F3CB
+Lilu   patcher: @ (DBG) wrapped __ZN24AppleIntelBaseController13FBMemMgr_InitEv
+Lilu      mach: @ (DBG) found symbol __ZN24AppleIntelBaseController23initPlatformWorkaroundsEv at 0xffffff7fa90e1502 (non-aslr 0xffffff7fa90e1502), type 1e, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA90E1502 to 0xFFFFFF801692AE30 diff 0x000000006D849929 argument 6D849929
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFDC4 to 0xFFFFFF7FA90E1508 diff 0xFFFFFFFF92A2173F argument 92A2173F
+Lilu   patcher: @ (DBG) wrapped __ZN24AppleIntelBaseController23initPlatformWorkaroundsEv
+Lilu      mach: @ (DBG) found symbol __ZN24AppleIntelBaseController16getOSInformationEv at 0xffffff7fa90de1a0 (non-aslr 0xffffff7fa90de1a0), type 1e, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA90DE1A0 to 0xFFFFFF801692AE70 diff 0x000000006D84CCCB argument 6D84CCCB
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFDD8 to 0xFFFFFF7FA90DE1A6 diff 0xFFFFFFFF92A1E3C9 argument 92A1E3C9
+Lilu   patcher: @ (DBG) wrapped __ZN24AppleIntelBaseController16getOSInformationEv
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[0]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[1]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[2]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[3]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[4]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[5]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[6]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[7]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[8]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[9]
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa9081000 of memory 3637248 size
+NootedBlue  Patcher+: @ (DBG) Applied patches[10]
+NootedBlue     nblue: @ (DBG) Processed Generation 11 configuration
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA81D9000 and its name is com.apple.iokit.IONDRVSupport (start func is 0xFFFFFF7FA81E17DC)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7DBB000 and its name is com.apple.driver.AppleSMCLMU (start func is 0xFFFFFF7FA7DBE5FC)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF8015285000 and its name is com.apple.iokit.IOSlowAdaptiveClockingFamily (start func is 0xFFFFFF80152878ED)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7BFB000 and its name is com.apple.driver.AppleIntelSlowAdaptiveClocking (start func is 0xFFFFFF7FA7BFBEC2)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA74C5000 and its name is com.apple.AppleGPUWrangler (start func is 0xFFFFFF7FA74CB9C0)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7735000 and its name is com.apple.driver.AppleHV (start func is 0xFFFFFF7FA7747596)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA774D000 and its name is com.apple.driver.AppleIPAppender (start func is 0xFFFFFF7FA77518F9)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8234000 and its name is com.apple.iokit.IORSMFamily (start func is 0xFFFFFF7FA8237D4E)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7DA2000 and its name is com.apple.driver.AppleRSMChannel (start func is 0xFFFFFF7FA7DA6B84)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7DF1000 and its name is com.apple.driver.AppleSunrise (start func is 0xFFFFFF7FA7DF44FE)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7E4F000 and its name is com.apple.driver.AppleUIO (start func is 0xFFFFFF7FA7E516C4)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8257000 and its name is com.apple.plugin.IOgPTPPlugin (start func is 0xFFFFFF7FA82AF353)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7F81000 and its name is com.apple.iokit.IOAVBFamily (start func is 0xFFFFFF7FA7F8D838)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA741F000 and its name is com.apple.driver.AppleCallbackPowerSource (start func is 0xFFFFFF7FA7423FCF)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA81CE000 and its name is com.apple.driver.IOHIDPowerSource (start func is 0xFFFFFF7FA81D424C)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8312000 and its name is com.apple.driver.usb.AppleUSBUserHCI (start func is 0xFFFFFF7FA832318D)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8334000 and its name is com.apple.iokit.IOUserEthernet (start func is 0xFFFFFF7FA83385D8)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA86E8000 and its name is com.apple.kext.triggers (start func is 0xFFFFFF7FA86EAB84)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8591000 and its name is com.apple.filesystems.nfs (start func is 0xFFFFFF7FA862D938)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA863C000 and its name is com.apple.driver.pmtelemetry (start func is 0xFFFFFF7FA8642C46)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7BFE000 and its name is com.apple.driver.AppleIntelTGLGraphics (start func is 0xFFFFFF7FA7C018F0)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.driver.AppleIntelTGLGraphics at 0xFFFFFF7FA7BFE000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.driver.AppleIntelTGLGraphics at 0xFFFFFF7FA7BFE000
+Lilu      mach: @ (DBG) com.apple.driver.AppleIntelTGLGraphics has segment is __TEXT from 0xFFFFFF7FA7BFE000 to 0xFFFFFF7FA7CC6000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA7BFE508 - 0xFFFFFF7FA7C018F0 : 0xFFFFFF7FA7CC5FF9 - 0xFFFFFF7FA7CC6000
+Lilu      mach: @ (DBG) activating slots for com.apple.driver.AppleIntelTGLGraphics in 0xFFFFFF7FA7BFE508 - 0xFFFFFF7FA7C018F0
+Lilu      mach: @ (DBG) com.apple.driver.AppleIntelTGLGraphics has segment is __DATA from 0xFFFFFF7FA7CC6000 to 0xFFFFFF7FA7D4A000
+Lilu      mach: @ (DBG) com.apple.driver.AppleIntelTGLGraphics has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7bfe000 of memory 1359872 size
+NootedBlue     nblue: @ Processing TGL accelerator path for com.apple.driver.AppleIntelTGLGraphics
+NootedBlue     nblue: @ TGL accelerator: resolving kIGHwCsDesc for com.apple.driver.AppleIntelTGLGraphics
+Lilu      mach: @ (DBG) found symbol __ZL11kIGHwCsDesc at 0xffffff7fa7cc8b00 (non-aslr 0xffffff7fa7cc8b00), type e, sect 8, desc 0
+NootedBlue     nblue: @ TGL accelerator: resolved kIGHwCsDesc for com.apple.driver.AppleIntelTGLGraphics at 0xffffff7fa7cc8b00
+NootedBlue     nblue: @ TGL accelerator: routing PAVPCommandCallback for com.apple.driver.AppleIntelTGLGraphics
+Lilu      mach: @ (DBG) found symbol __ZN16IntelAccelerator19PAVPCommandCallbackE22PAVPSessionCommandID_tjPjb at 0xffffff7fa7c27c50 (non-aslr 0xffffff7fa7c27c50), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA7C27C50 to 0xFFFFFF801692B260 diff 0x000000006ED0360B argument 6ED0360B
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFDEC to 0xFFFFFF7FA7C27C56 diff 0xFFFFFFFF91567E65 argument 91567E65
+Lilu   patcher: @ (DBG) wrapped __ZN16IntelAccelerator19PAVPCommandCallbackE22PAVPSessionCommandID_tjPjb
+NootedBlue     nblue: @ TGL accelerator: routed PAVPCommandCallback for com.apple.driver.AppleIntelTGLGraphics
+NootedBlue     nblue: @ TGL accelerator: applying f3 getGPUInfo patch for com.apple.driver.AppleIntelTGLGraphics
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7bfe000 of memory 1359872 size
+NootedBlue     nblue: @ TGL accelerator: applied f3 getGPUInfo patch for com.apple.driver.AppleIntelTGLGraphics
+NootedBlue     nblue: @ TGL accelerator: applying f3a slice/L3 patch for com.apple.driver.AppleIntelTGLGraphics
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7bfe000 of memory 1359872 size
+NootedBlue     nblue: @ TGL accelerator: applied f3a slice/L3 patch for com.apple.driver.AppleIntelTGLGraphics
+NootedBlue     nblue: @ TGL accelerator: applying f5 blit3d allocation patch for com.apple.driver.AppleIntelTGLGraphics
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7bfe000 of memory 1359872 size
+NootedBlue     nblue: @ TGL accelerator: applied f5 blit3d allocation patch for com.apple.driver.AppleIntelTGLGraphics
+NootedBlue     nblue: @ (DBG) Loaded AppleIntelTGLGraphics!
+NootedBlue     nblue: @ (DBG) Processed Generation 11 configuration
+VirtualSMC    kstore: @ key [QENA] not found for info
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA74C1000 and its name is com.apple.AGDCPluginDisplayMetrics (start func is 0xFFFFFF7FA74C2F08)
+NootedBlue     iokit: @ (DBG) getOSData device-id has 9A49 value
+NootedBlue     iokit: @ (DBG) getOSData device-id has 9A49 value
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA74B8000 and its name is com.apple.driver.AppleGraphicsControl (start func is 0xFFFFFF7FA74B8F8A)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA74D9000 and its name is com.apple.driver.AppleGraphicsDevicePolicy (start func is 0xFFFFFF7FA74E4A06)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.driver.AppleGraphicsDevicePolicy at 0xFFFFFF7FA74D9000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.driver.AppleGraphicsDevicePolicy at 0xFFFFFF7FA74D9000
+Lilu      mach: @ (DBG) com.apple.driver.AppleGraphicsDevicePolicy has segment is __TEXT from 0xFFFFFF7FA74D9000 to 0xFFFFFF7FA74E6000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA74D9550 - 0xFFFFFF7FA74DA498 : 0xFFFFFF7FA74E6000 - 0xFFFFFF7FA74E6000
+Lilu      mach: @ (DBG) activating slots for com.apple.driver.AppleGraphicsDevicePolicy in 0xFFFFFF7FA74D9550 - 0xFFFFFF7FA74DA498
+Lilu      mach: @ (DBG) com.apple.driver.AppleGraphicsDevicePolicy has segment is __DATA from 0xFFFFFF7FA74E6000 to 0xFFFFFF7FA74F1000
+Lilu      mach: @ (DBG) com.apple.driver.AppleGraphicsDevicePolicy has segment is __DATA_CONST from 0xFFFFFF7FA74F1000 to 0xFFFFFF7FA74F2000
+Lilu      mach: @ (DBG) com.apple.driver.AppleGraphicsDevicePolicy has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa74d9000 of memory 102400 size
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa74d9000 of memory 102400 size
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF80156DD000 and its name is com.apple.driver.usb.IOUSBHostHIDDevice (start func is 0xFFFFFF80156E39A6)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7DB8000 and its name is com.apple.driver.AppleSMBusPCI (start func is 0xFFFFFF7FA7DB8DF4)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8723000 and its name is com.apple.vecLib.kext (start func is 0xFFFFFF7FA87E3C50)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA807B000 and its name is com.apple.iokit.IOAudioFamily (start func is 0xFFFFFF7FA80929BA)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA743F000 and its name is com.apple.driver.AppleGFXHDA (start func is 0xFFFFFF7FA74989DD)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.driver.AppleGFXHDA at 0xFFFFFF7FA743F000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.driver.AppleGFXHDA at 0xFFFFFF7FA743F000
+Lilu      mach: @ (DBG) com.apple.driver.AppleGFXHDA has segment is __TEXT from 0xFFFFFF7FA743F000 to 0xFFFFFF7FA749E000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA743F640 - 0xFFFFFF7FA743FCDC : 0xFFFFFF7FA749E000 - 0xFFFFFF7FA749E000
+Lilu      mach: @ (DBG) activating slots for com.apple.driver.AppleGFXHDA in 0xFFFFFF7FA743F640 - 0xFFFFFF7FA743FCDC
+Lilu      mach: @ (DBG) com.apple.driver.AppleGFXHDA has segment is __DATA from 0xFFFFFF7FA749E000 to 0xFFFFFF7FA74B6000
+Lilu      mach: @ (DBG) com.apple.driver.AppleGFXHDA has segment is __DATA_CONST from 0xFFFFFF7FA74B6000 to 0xFFFFFF7FA74B8000
+Lilu      mach: @ (DBG) com.apple.driver.AppleGFXHDA has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa743f000 of memory 495616 size
+Lilu      mach: @ (DBG) found symbol __ZN21AppleGFXHDAController5probeEP9IOServicePi at 0xffffff7fa7441a02 (non-aslr 0xffffff7fa7441a02), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA7441A02 to 0xFFFFFF801675A260 diff 0x000000006F318859 argument 6F318859
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFE00 to 0xFFFFFF7FA7441A08 diff 0xFFFFFFFF90D81C03 argument 90D81C03
+Lilu   patcher: @ (DBG) wrapped __ZN21AppleGFXHDAController5probeEP9IOServicePi
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA772C000 and its name is com.apple.iokit.IOHDAFamily (start func is 0xFFFFFF7FA772FABE)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.iokit.IOHDAFamily at 0xFFFFFF7FA772C000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.iokit.IOHDAFamily at 0xFFFFFF7FA772C000
+Lilu      mach: @ (DBG) com.apple.iokit.IOHDAFamily has segment is __TEXT from 0xFFFFFF7FA772C000 to 0xFFFFFF7FA7730000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA772C500 - 0xFFFFFF7FA772CE98 : 0xFFFFFF7FA772FFFC - 0xFFFFFF7FA7730000
+Lilu      mach: @ (DBG) activating slots for com.apple.iokit.IOHDAFamily in 0xFFFFFF7FA772C500 - 0xFFFFFF7FA772CE98
+Lilu      mach: @ (DBG) com.apple.iokit.IOHDAFamily has segment is __DATA from 0xFFFFFF7FA7730000 to 0xFFFFFF7FA7734000
+Lilu      mach: @ (DBG) com.apple.iokit.IOHDAFamily has segment is __DATA_CONST from 0xFFFFFF7FA7734000 to 0xFFFFFF7FA7735000
+Lilu      mach: @ (DBG) com.apple.iokit.IOHDAFamily has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa772c000 of memory 36864 size
+Lilu      mach: @ (DBG) found symbol __ZN16IOHDACodecDevice11executeVerbEtttPjb at 0xffffff7fa772d1fa (non-aslr 0xffffff7fa772d1fa), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA772D1FA to 0xFFFFFF801675A6C0 diff 0x000000006F02D4C1 argument 6F02D4C1
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFE14 to 0xFFFFFF7FA772D200 diff 0xFFFFFFFF9106D3E7 argument 9106D3E7
+Lilu   patcher: @ (DBG) wrapped __ZN16IOHDACodecDevice11executeVerbEtttPjb
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA760E000 and its name is com.apple.driver.AppleHDAController (start func is 0xFFFFFF7FA761F2B2)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.driver.AppleHDAController at 0xFFFFFF7FA760E000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.driver.AppleHDAController at 0xFFFFFF7FA760E000
+Lilu      mach: @ (DBG) com.apple.driver.AppleHDAController has segment is __TEXT from 0xFFFFFF7FA760E000 to 0xFFFFFF7FA7621000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA760E5A0 - 0xFFFFFF7FA760E6B8 : 0xFFFFFF7FA7620FF4 - 0xFFFFFF7FA7621000
+Lilu      mach: @ (DBG) activating slots for com.apple.driver.AppleHDAController in 0xFFFFFF7FA760E5A0 - 0xFFFFFF7FA760E6B8
+Lilu      mach: @ (DBG) com.apple.driver.AppleHDAController has segment is __DATA from 0xFFFFFF7FA7621000 to 0xFFFFFF7FA7624000
+Lilu      mach: @ (DBG) com.apple.driver.AppleHDAController has segment is __DATA_CONST from 0xFFFFFF7FA7624000 to 0xFFFFFF7FA7625000
+Lilu      mach: @ (DBG) com.apple.driver.AppleHDAController has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa760e000 of memory 94208 size
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa760e000 of memory 94208 size
+Lilu      mach: @ (DBG) found symbol __ZN18AppleHDAController5startEP9IOService at 0xffffff7fa760f240 (non-aslr 0xffffff7fa760f240), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA760F240 to 0xFFFFFF801675A6D0 diff 0x000000006F14B48B argument 6F14B48B
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFE27 to 0xFFFFFF7FA760F245 diff 0xFFFFFFFF90F4F419 argument 90F4F419
+Lilu   patcher: @ (DBG) wrapped __ZN18AppleHDAController5startEP9IOService
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7BF4000 and its name is com.apple.driver.AppleIntelPCHPMC (start func is 0xFFFFFF7FA7BF640C)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7DAC000 and its name is com.apple.driver.AppleSMBusController (start func is 0xFFFFFF7FA7DB16F5)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA73E1000 and its name is com.apple.driver.Apple16X50Serial (start func is 0xFFFFFF7FA73E7BB6)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7403000 and its name is com.apple.driver.AppleAudioClockLibs (start func is 0xFFFFFF7FA7403C59)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7E5C000 and its name is com.apple.driver.AppleUSBAudio (start func is 0xFFFFFF7FA7EAAF44)
+NootedBlue     iokit: @ (DBG) getOSData device-id has 9A49 value
+NootedBlue     iokit: @ (DBG) getOSData device-id has 9A49 value
+NootedBlue     iokit: @ (DBG) getOSData device-id has 9A49 value
+NootedBlue     iokit: @ (DBG) getOSData device-id has 9A49 value
+NootedBlue     iokit: @ (DBG) getOSData device-id has 9A49 value
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA83C0000 and its name is com.apple.UVCService (start func is 0xFFFFFF7FA83C0E75)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA8356000 and its name is com.apple.kext.OSvKernDSPLib (start func is 0xFFFFFF7FA83620C2)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA763E000 and its name is com.apple.driver.DspFuncLib (start func is 0xFFFFFF7FA76BF5D6)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7557000 and its name is com.apple.driver.AppleHDA (start func is 0xFFFFFF7FA75E1FCD)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.driver.AppleHDA at 0xFFFFFF7FA7557000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.driver.AppleHDA at 0xFFFFFF7FA7557000
+Lilu      mach: @ (DBG) com.apple.driver.AppleHDA has segment is __TEXT from 0xFFFFFF7FA7557000 to 0xFFFFFF7FA75E7000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA75575F0 - 0xFFFFFF7FA7557D78 : 0xFFFFFF7FA75E6FF0 - 0xFFFFFF7FA75E7000
+Lilu      mach: @ (DBG) activating slots for com.apple.driver.AppleHDA in 0xFFFFFF7FA75575F0 - 0xFFFFFF7FA7557D78
+Lilu      mach: @ (DBG) com.apple.driver.AppleHDA has segment is __DATA from 0xFFFFFF7FA75E7000 to 0xFFFFFF7FA760C000
+Lilu      mach: @ (DBG) com.apple.driver.AppleHDA has segment is __DATA_CONST from 0xFFFFFF7FA760C000 to 0xFFFFFF7FA760E000
+Lilu      mach: @ (DBG) com.apple.driver.AppleHDA has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+AppleALC       alc: @ failed to find IOHDACodecVendorID, retrying 0
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+Lilu   patcher: @ lookup patching applied only 0 patches out of 1
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+Lilu   patcher: @ lookup patching applied only 0 patches out of 1
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7557000 of memory 749568 size
+Lilu      mach: @ (DBG) found symbol __ZN14AppleHDADriver23performPowerStateChangeE24_IOAudioDevicePowerStateS0_Pj at 0xffffff7fa756cb78 (non-aslr 0xffffff7fa756cb78), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA756CB78 to 0xFFFFFF801675A2D0 diff 0x000000006F1ED753 argument 6F1ED753
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFE3B to 0xFFFFFF7FA756CB7E diff 0xFFFFFFFF90EACD3E argument 90EACD3E
+Lilu   patcher: @ (DBG) wrapped __ZN14AppleHDADriver23performPowerStateChangeE24_IOAudioDevicePowerStateS0_Pj
+Lilu      mach: @ (DBG) found symbol __ZN20AppleHDACodecGeneric38initializePinConfigDefaultFromOverrideEP9IOService at 0xffffff7fa75632ba (non-aslr 0xffffff7fa75632ba), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA75632BA to 0xFFFFFF801675A4D0 diff 0x000000006F1F7211 argument 6F1F7211
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFE4F to 0xFFFFFF7FA75632C0 diff 0xFFFFFFFF90EA346C argument 90EA346C
+Lilu   patcher: @ (DBG) wrapped __ZN20AppleHDACodecGeneric38initializePinConfigDefaultFromOverrideEP9IOService
+Lilu      mach: @ (DBG) found symbol __ZN14AppleHDADriver18layoutLoadCallbackEjiPKvjPv at 0xffffff7fa7567906 (non-aslr 0xffffff7fa7567906), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN14AppleHDADriver18layoutLoadCallbackEjiPKvjPv at 0xffffff7fa7567906 (non-aslr 0xffffff7fa7567906), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN14AppleHDADriver20platformLoadCallbackEjiPKvjPv at 0xffffff7fa756932a (non-aslr 0xffffff7fa756932a), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA7567906 to 0xFFFFFF801675A5D0 diff 0x000000006F1F2CC5 argument 6F1F2CC5
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFE63 to 0xFFFFFF7FA756790C diff 0xFFFFFFFF90EA7AA4 argument 90EA7AA4
+Lilu   patcher: @ (DBG) wrapped __ZN14AppleHDADriver18layoutLoadCallbackEjiPKvjPv
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA756932A to 0xFFFFFF801675A630 diff 0x000000006F1F1301 argument 6F1F1301
+Lilu   patcher: @ (DBG) from 0xFFFFFF80166BFE77 to 0xFFFFFF7FA7569330 diff 0xFFFFFFFF90EA94B4 argument 90EA94B4
+Lilu   patcher: @ (DBG) wrapped __ZN14AppleHDADriver20platformLoadCallbackEjiPKvjPv
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA854B000 and its name is com.apple.filesystems.autofs (start func is 0xFFFFFF7FA8551CF6)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7625000 and its name is com.apple.driver.AppleHDAHardwareConfigDriver (start func is 0xFFFFFF7FA7625EF8)
+VirtualSMC    kstore: @ key [BBIF] not found for reading
+VirtualSMC    kstore: @ key [AC-N] not found for info
+VirtualSMC    kstore: @ key [D0VR] not found for info
+VirtualSMC    kstore: @ key [AY-N] not found for info
+VirtualSMC    kstore: @ key [AP-N] not found for info
+VirtualSMC    kstore: @ key [ACSt] not found for reading
+VirtualSMC    kstore: @ key [CH0B] not found for writing
+VirtualSMC    kstore: @ key [CH0K] not found for writing
+VirtualSMC    kstore: @ key [CH0B] not found for writing
+VirtualSMC    kstore: @ key [CH0K] not found for writing
+VirtualSMC    kstore: @ key [CH0K] not found for writing
+VirtualSMC    kstore: @ key [QENA] not found for writing
+VirtualSMC    kstore: @ key [QCLV] not found for info
+VirtualSMC    kstore: @ key [MTLV] not found for info
+VirtualSMC    kstore: @ key [MSTS] not found for writing
+VirtualSMC    kstore: @ key [DICT] not found for info
+VirtualSMC    kstore: @ key [MPRO] not found for info
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7D9D000 and its name is com.apple.driver.ApplePlatformEnabler (start func is 0xFFFFFF7FA7D9E794)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA822A000 and its name is com.apple.driver.X86PlatformShim (start func is 0xFFFFFF7FA822E03A)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7533000 and its name is com.apple.driver.AGPM (start func is 0xFFFFFF7FA754B068)
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7EEF000 and its name is com.apple.driver.AudioAUUC (start func is 0xFFFFFF7FA7EF1E84)
+VirtualSMC    kstore: @ key [LDSE] not found for info
+VirtualSMC    kstore: @ key [HE2N] not found for info
+VirtualSMC    kstore: @ key [HI0N] not found for writing
+VirtualSMC    kstore: @ key [HI1N] not found for writing
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7D4E000 and its name is com.apple.driver.AppleMCCSControl (start func is 0xFFFFFF7FA7D585A0)
+Lilu   patcher: @ (DBG) caught the right kext com.apple.driver.AppleMCCSControl at 0xFFFFFF7FA7D4E000, invoking handler
+Lilu      mach: @ (DBG) got nouveau mach-o for com.apple.driver.AppleMCCSControl at 0xFFFFFF7FA7D4E000
+Lilu      mach: @ (DBG) com.apple.driver.AppleMCCSControl has segment is __TEXT from 0xFFFFFF7FA7D4E000 to 0xFFFFFF7FA7D59000
+Lilu      mach: @ (DBG) Potential slots: 0xFFFFFF7FA7D4E5F0 - 0xFFFFFF7FA7D4EEC8 : 0xFFFFFF7FA7D59000 - 0xFFFFFF7FA7D59000
+Lilu      mach: @ (DBG) activating slots for com.apple.driver.AppleMCCSControl in 0xFFFFFF7FA7D4E5F0 - 0xFFFFFF7FA7D4EEC8
+Lilu      mach: @ (DBG) com.apple.driver.AppleMCCSControl has segment is __DATA from 0xFFFFFF7FA7D59000 to 0xFFFFFF7FA7D5E000
+Lilu      mach: @ (DBG) com.apple.driver.AppleMCCSControl has segment is __DATA_CONST from 0xFFFFFF7FA7D5E000 to 0xFFFFFF7FA7D5F000
+Lilu      mach: @ (DBG) com.apple.driver.AppleMCCSControl has segment is __LINKEDIT from 0xFFFFFF7FA8801000 to 0xFFFFFF7FA8FCC9FA
+Lilu      mach: @ (DBG) getRunningPosition 0xffffff7fa7d4e000 of memory 69632 size
+Lilu      mach: @ (DBG) found symbol __ZN25AppleMCCSControlGibraltar5probeEP9IOServicePi at 0xffffff7fa7d512fc (non-aslr 0xffffff7fa7d512fc), type f, sect 1, desc 0
+Lilu      mach: @ (DBG) found symbol __ZN21AppleMCCSControlCello5probeEP9IOServicePi at 0xffffff7fa7d56e12 (non-aslr 0xffffff7fa7d56e12), type f, sect 1, desc 0
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA7D512FC to 0xFFFFFF80169278B0 diff 0x000000006EBD65AF argument 6EBD65AF
+Lilu   patcher: @ (DBG) routed __ZN25AppleMCCSControlGibraltar5probeEP9IOServicePi
+Lilu   patcher: @ (DBG) from 0xFFFFFF7FA7D56E12 to 0xFFFFFF80169278B0 diff 0x000000006EBD0A99 argument 6EBD0A99
+Lilu   patcher: @ (DBG) routed __ZN21AppleMCCSControlCello5probeEP9IOServicePi
+Lilu   patcher: @ (DBG) invoked at kext loading
+Lilu   patcher: @ (DBG) newly loaded kext is 0xFFFFFF7FA7EE0000 and its name is com.apple.driver.AppleUpstreamUserClient (start func is 0xFFFFFF7FA7EE2E58)
+NootedBlue     nblue: @ PAVPCommandCallback: cmd=3 appId=0x0 flag=0 data=0
+NootedBlue     nblue: @ PAVPCommandCallback: original returned 0x0 for cmd=3 appId=0x0
+Lilu    config: @ (DBG) PE_initialize_console 5
+Lilu    config: @ (DBG) PE_initialize_console 7
+NootedBlue     nblue: @ PAVPCommandCallback: cmd=3 appId=0x0 flag=0 data=0
+NootedBlue     nblue: @ PAVPCommandCallback: original returned 0x0 for cmd=3 appId=0x0
+Lilu    config: @ (DBG) PE_initialize_console 7
+NootedBlue     nblue: @ PAVPCommandCallback: cmd=3 appId=0x0 flag=0 data=0
+NootedBlue     nblue: @ PAVPCommandCallback: original returned 0x0 for cmd=3 appId=0x0
+Lilu    config: @ (DBG) PE_initialize_console 5
+Lilu    config: @ (DBG) PE_initialize_console 6
+Lilu    config: @ (DBG) PE_initialize_console 9
+IntelBTPatcher      ibtp: @ [PATCH] Sending Random Address HCI 0 05 20 06 94 50 64 d0 78 6b
+IntelBTPatcher      ibtp: @ [PATCH] Resend LE SCAN PARAM HCI 0
+Lilu    config: @ (DBG) PE_initialize_console 7
+NootedBlue     nblue: @ PAVPCommandCallback: cmd=3 appId=0x0 flag=0 data=0
+NootedBlue     nblue: @ PAVPCommandCallback: original returned 0x0 for cmd=3 appId=0x0
+Lilu    config: @ (DBG) PE_initialize_console 5
+Lilu    config: @ (DBG) PE_initialize_console 6
+NootedBlue      DYLD: @ (DBG) Applied 'kTGLGraphicsMTLDriverp' patch
+Lilu    config: @ (DBG) PE_initialize_console 7
+VirtualSMC    kstore: @ key [AC-N] not found for info
+VirtualSMC    kstore: @ key [D0VR] not found for info
+VirtualSMC    kstore: @ key [AY-N] not found for info
+VirtualSMC    kstore: @ key [AP-N] not found for info
+VirtualSMC    kstore: @ key [AC-N] not found for info
+VirtualSMC    kstore: @ key [D0VR] not found for info
+VirtualSMC    kstore: @ key [AY-N] not found for info
+VirtualSMC    kstore: @ key [AP-N] not found for info
+VirtualSMC    kstore: @ key [AC-N] not found for info
+VirtualSMC    kstore: @ key [D0VR] not found for info
+VirtualSMC    kstore: @ key [AY-N] not found for info
+VirtualSMC    kstore: @ key [AP-N] not found for info
