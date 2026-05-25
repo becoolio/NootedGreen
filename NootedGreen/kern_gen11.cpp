@@ -70,6 +70,14 @@ static uint8_t readPanelPowerStatusBits() {
 	return result;
 }
 
+static bool shouldUseSpoofedSafeSchedulerPolicy() {
+	return NGreen::callback && !NGreen::callback->runningOnRealTGL() && !NGreen::callback->tryGuC;
+}
+
+static bool shouldGateExternalDisplayBringup() {
+	return NGreen::callback && NGreen::callback->gateExternalDisplays;
+}
+
 // ==== 4 kextInfos: TGL from /Library/Extensions, ICL fallback from /System/Library/Extensions ====
 
 // ICL FB — com.apple (fallback path)
@@ -346,7 +354,12 @@ void Gen11::ensureDisplayPipeBacking(void *that) {
 		SYSLOG("ngreen", "DisplayPipe backing: displayMachine start -> %d created=%d", startOk, createdDisplayMachine);
 	}
 
-	if (callback->oDisplayMachineProbeDisplayPipes) {
+	if (shouldGateExternalDisplayBringup()) {
+		if (accelSvc) {
+			accelSvc->setProperty("NGreenExternalGateActive", true);
+		}
+		SYSLOG("ngreen", "DisplayPipe backing: external gate active, skipping probeDisplayPipes for %p", displayMachine);
+	} else if (callback->oDisplayMachineProbeDisplayPipes) {
 		reinterpret_cast<DisplayMachineProbeDisplayPipes>(callback->oDisplayMachineProbeDisplayPipes)(displayMachine);
 		SYSLOG("ngreen", "DisplayPipe backing: probeDisplayPipes forced for %p", displayMachine);
 	}
@@ -1805,6 +1818,7 @@ IOReturn Gen11::wrapFBClientDoAttribute(void *fbclient, uint32_t attribute, unsi
 }
 
 unsigned long Gen11::loadGuCBinary(void *that) {
+	const bool safeSpoofedPolicy = shouldUseSpoofedSafeSchedulerPolicy();
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "NG_RCS_BOUNDARY[IGHardwareGuC::loadGuCBinary pre]: gucDisabledByNVRAM=%d hostSchedulerRequired=%d",
 		       checkKernelArgument("-disablegfxfirmware"), getRcsDeepSchedulerType() == 5);
@@ -1812,9 +1826,9 @@ unsigned long Gen11::loadGuCBinary(void *that) {
 	}
 	dumpTglGpuBringupState("loadGuCBinary PRE");
 	// V52: Real TGL can authenticate and load GuC firmware natively.
-	// RPL cannot — stub to return 1 and use host scheduling instead.
-	if (NGreen::callback->isRealTGL) {
-		SYSLOG("ngreen", "loadGuCBinary: real TGL — calling original for GuC firmware load");
+	// Spoofed 9A49 stays non-GuC by default unless explicitly opted in.
+	if (NGreen::callback->isRealTGL || NGreen::callback->tryGuC) {
+		SYSLOG("ngreen", "loadGuCBinary: GuC path explicitly allowed — calling original firmware loader");
 		unsigned long ret = 0;
 		if (callback->oloadGuCBinary) {
 			ret = FunctionCast(loadGuCBinary, callback->oloadGuCBinary)(that);
@@ -1831,14 +1845,14 @@ unsigned long Gen11::loadGuCBinary(void *that) {
 		dumpTglGpuBringupState("loadGuCBinary POST");
 		return ret;
 	}
-	SYSLOG("ngreen", "loadGuCBinary: RPL — stubbed to return 1 (host scheduling)");
+	SYSLOG("ngreen", "loadGuCBinary: spoofed TGL safe policy active — bypassing GuC firmware load and forcing host scheduling");
 	if (isTglTraceEnabled()) {
 		auto &bringup = getTglGpuBringupState();
-		bringup.gucRequested = true;
-		bringup.gucFirmwareLoaded = true;
+		bringup.gucRequested = false;
+		bringup.gucFirmwareLoaded = false;
 	}
 	if (isRcsEngineTraceEnabled()) {
-		SYSLOG("ngreen", "NG_RCS_BOUNDARY[IGHardwareGuC::loadGuCBinary post-stub]: hostSchedulerRequired=1");
+		SYSLOG("ngreen", "NG_RCS_BOUNDARY[IGHardwareGuC::loadGuCBinary post-stub]: hostSchedulerRequired=1 safeSpoofedPolicy=%d", safeSpoofedPolicy);
 		dumpRcsEngineActivationState("IGHardwareGuC::loadGuCBinary post-stub");
 	}
 	dumpTglGpuBringupState("loadGuCBinary POST stub");
@@ -3109,12 +3123,18 @@ bool Gen11::start(void *that,void  *param_1)
 	// V52: Default depends on platform — real TGL uses GuC (3), RPL uses Host (5).
 	auto *service = static_cast<IOService *>(that);
 	int schedType = NGreen::callback->isRealTGL ? 3 : 5;
+	const bool safeSpoofedPolicy = shouldUseSpoofedSafeSchedulerPolicy();
 	{
 		// 1. Check boot-arg first (highest priority)
 		int bootArgSched = 0;
 		if (PE_parse_boot_argn("ngreenSched", &bootArgSched, sizeof(bootArgSched)) && bootArgSched >= 3 && bootArgSched <= 5) {
-			schedType = bootArgSched;
-			SYSLOG("ngreen", "V44: scheduler type %d from boot-arg ngreenSched", schedType);
+			if (safeSpoofedPolicy && bootArgSched != 5) {
+				schedType = 5;
+				SYSLOG("ngreen", "V44: ignored ngreenSched=%d on spoofed TGL safe policy; forcing scheduler 5", bootArgSched);
+			} else {
+				schedType = bootArgSched;
+				SYSLOG("ngreen", "V44: scheduler type %d from boot-arg ngreenSched", schedType);
+			}
 		} else {
 			// 2. Check NootedGreen's own IORegistry properties (from Info.plist)
 			auto *myService = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(param_1));
@@ -3122,7 +3142,10 @@ bool Gen11::start(void *that,void  *param_1)
 				auto *stProp = OSDynamicCast(OSNumber, myService->getProperty("SchedulerType"));
 				if (stProp) {
 					int val = (int)stProp->unsigned32BitValue();
-					if (val >= 3 && val <= 5) {
+					if (safeSpoofedPolicy && val != 5) {
+						schedType = 5;
+						SYSLOG("ngreen", "V44: ignored Info.plist SchedulerType=%d on spoofed TGL safe policy; forcing scheduler 5", val);
+					} else if (val >= 3 && val <= 5) {
 						schedType = val;
 						SYSLOG("ngreen", "V44: scheduler type %d from Info.plist SchedulerType", schedType);
 					}
@@ -3138,6 +3161,26 @@ bool Gen11::start(void *that,void  *param_1)
 			service->setProperty("GraphicsSchedulerSelect", schedNum);
 			schedNum->release();
 			SYSLOG("ngreen", "V44: injected GraphicsSchedulerSelect=%d", schedType);
+		}
+		service->setProperty("NGreenSchedulerPolicySafe", safeSpoofedPolicy);
+		service->setProperty("NGreenExternalGateActive", shouldGateExternalDisplayBringup());
+		auto *devDict = OSDynamicCast(OSDictionary, service->getProperty("Development"));
+		if (devDict) {
+			auto *newDevDict = OSDictionary::withDictionary(devDict);
+			if (newDevDict) {
+				auto *schedProp = OSNumber::withNumber(static_cast<unsigned long long>(schedType), 32);
+				auto *fallbackProp = OSNumber::withNumber(1ULL, 32);
+				if (schedProp) {
+					newDevDict->setObject("GraphicsSchedulerSelect", schedProp);
+					schedProp->release();
+				}
+				if (fallbackProp) {
+					newDevDict->setObject("SchedulerFallbackOnFirmwareFail", fallbackProp);
+					fallbackProp->release();
+				}
+				service->setProperty("Development", newDevDict);
+				newDevDict->release();
+			}
 		}
 	}
 	if (isTglTraceEnabled()) {

@@ -90,6 +90,24 @@ static bool hasAllow3DBootArg() {
 	return checkKernelArgument("-allow3d");
 }
 
+static bool shouldTryGuCOnSpoofedTGL() {
+	int enabled = 0;
+	if (PE_parse_boot_argn("NGreenTryGuC", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	return checkKernelArgument("-NGreenTryGuC");
+}
+
+static bool shouldDisableExternalOutputs() {
+	int enabled = 0;
+	if (PE_parse_boot_argn("NGreenNoExternal", &enabled, sizeof(enabled))) {
+		return enabled != 0;
+	}
+
+	return checkKernelArgument("-NGreenNoExternal");
+}
+
 static void publishTglFramebufferPersonality(IOPCIDevice *gpu) {
 	auto *fbDict = OSDictionary::withCapacity(8);
 	if (!fbDict) {
@@ -391,6 +409,15 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
             SYSLOG("ngreen", "V52: CPU family=0x%x model=0x%x stepping=%u isRealTGL=%d",
                    family, model, stepping, this->isRealTGL);
         }
+
+		this->request3D = hasAllow3DBootArg();
+		this->tryGuC = this->isRealTGL || shouldTryGuCOnSpoofedTGL();
+		this->gateExternalDisplays = shouldDisableExternalOutputs() || !this->isRealTGL;
+		SYSLOG("ngreen", "Bring-up policy: request3D=%d tryGuC=%d gateExternal=%d realTGL=%d",
+		       this->request3D, this->tryGuC, this->gateExternalDisplays, this->isRealTGL);
+		this->iGPU->setProperty("NGreenAllow3DRequested", this->request3D);
+		this->iGPU->setProperty("NGreenTryGuC", this->tryGuC);
+		this->iGPU->setProperty("NGreenGateExternal", this->gateExternalDisplays);
 		
 		auto gms = WIOKit::readPCIConfigValue(devInfo->videoBuiltin, WIOKit::kIOPCIConfigGraphicsControl, 0, 16) >> 8;
 		

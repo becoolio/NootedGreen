@@ -4,7 +4,7 @@
 #include "kern_green.hpp"
 
 #include <Headers/kern_api.hpp>
-#include <mach/mach_time.h>
+#include <Headers/kern_time.hpp>
 
 static int getTraceSchedulerType() {
 	int schedType = 5;
@@ -630,10 +630,7 @@ void logBuildMarker() {
 		return;
 	}
 
-	mach_timebase_info_data_t tb;
-	mach_timebase_info(&tb);
-	uint64_t now = mach_absolute_time();
-	uint64_t nowNanos = now * tb.numer / tb.denom;
+	uint64_t nowNanos = getCurrentTimeNs();
 
 	SYSLOG("ngreen", "NG_BUILD_MARKER: date/time=%llu features=OBJ_DUMP,MAPPED_CANDIDATE,VCALL_TRACE,ELSP_MMIO_WATCH,HWS_SCAN",
 	       static_cast<unsigned long long>(nowNanos));

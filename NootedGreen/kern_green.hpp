@@ -70,6 +70,10 @@ class NGreen {
 	uint32_t framebufferId {0};
 	bool mmioReady() const { return mmioValid(); }
 	uint32_t readMMIO32(unsigned long reg) { return readReg32(reg); }
+	bool runningOnRealTGL() const { return isRealTGL; }
+	bool request3D {false};
+	bool tryGuC {false};
+	bool gateExternalDisplays {true};
 	
     private:
 	
