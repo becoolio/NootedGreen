@@ -1410,8 +1410,8 @@ private:
 			   void *param_5);
 	mach_vm_address_t ohwRegsNeedUpdate {};
 
-	// Force eDP lane count to 4 — BIOS trains at 4 lanes (HBR3 x4), but the driver
-	// computes 2 (sufficient bandwidth for 60 Hz) causing a PHY/transcoder mismatch.
+	// Spoofed TGL path lane policy — prefer boot-arg override, otherwise use cached
+	// sink DPCD lane count observed via AUX reads.
 	static void computeLaneCount(void *that, const void *timing, unsigned int linkRate, unsigned int bpp, unsigned int *laneCount);
 	mach_vm_address_t ocomputeLaneCount {};
 

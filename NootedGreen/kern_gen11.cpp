@@ -78,6 +78,99 @@ static bool shouldGateExternalDisplayBringup() {
 	return NGreen::callback && NGreen::callback->gateExternalDisplays;
 }
 
+enum class NGTglTrackedEngine : uint8_t {
+	None = 0,
+	BCS,
+	RCS,
+};
+
+struct NGTglEngineState {
+	bool contextSeen {false};
+	bool ringReady {false};
+	bool controlReady {false};
+	bool submitted {false};
+	bool smokePassed {false};
+	bool quarantined {false};
+	uint32_t lastTail {0};
+};
+
+struct NGTglBringupState {
+	NGTglEngineState bcs;
+	NGTglEngineState rcs;
+};
+
+static NGTglBringupState gTglBringupState;
+
+static void markTrackedEngineContextSeen(NGTglTrackedEngine engine);
+static void markTrackedEngineRingReady(NGTglTrackedEngine engine);
+static void markTrackedEngineControlReady(NGTglTrackedEngine engine, bool ready);
+static void markTrackedEngineSubmitted(NGTglTrackedEngine engine);
+static bool evaluateTrackedEngineBootstrap(NGTglTrackedEngine engine, const char *stage);
+
+static NGTglTrackedEngine getTrackedEngineFromCsType(IGHwCsType type) {
+	switch (type) {
+		case kIGHwCsTypeBCS:
+			return NGTglTrackedEngine::BCS;
+		case kIGHwCsTypeRCS:
+			return NGTglTrackedEngine::RCS;
+		default:
+			return NGTglTrackedEngine::None;
+	}
+}
+
+static const char *trackedEngineName(NGTglTrackedEngine engine) {
+	switch (engine) {
+		case NGTglTrackedEngine::BCS:
+			return "BCS";
+		case NGTglTrackedEngine::RCS:
+			return "RCS";
+		default:
+			return "NONE";
+	}
+}
+
+static NGTglEngineState *trackedEngineState(NGTglTrackedEngine engine) {
+	switch (engine) {
+		case NGTglTrackedEngine::BCS:
+			return &gTglBringupState.bcs;
+		case NGTglTrackedEngine::RCS:
+			return &gTglBringupState.rcs;
+		default:
+			return nullptr;
+	}
+}
+
+static NGTglTrackedEngine getTrackedEngineFromContext(void *context) {
+	void *csState = context ? getMember<void *>(context, 0xb8) : nullptr;
+	if (!csState) {
+		return NGTglTrackedEngine::None;
+	}
+
+	auto type = static_cast<IGHwCsType>(getMember<int32_t>(csState, 0x20));
+	return getTrackedEngineFromCsType(type);
+}
+
+static NGTglTrackedEngine getTrackedEngineFromRingBuffer(void *ringBuffer) {
+	void *context = ringBuffer ? getMember<void *>(ringBuffer, 0x20) : nullptr;
+	return getTrackedEngineFromContext(context);
+}
+
+static bool isBuiltInFramebufferObject(void *framebuffer) {
+	return framebuffer && getMember<uint32_t>(framebuffer, 0x1dc) == 0;
+}
+
+static const char *framebufferKindString(void *framebuffer) {
+	return isBuiltInFramebufferObject(framebuffer) ? "BuiltInEDP" : "External";
+}
+
+static void setFramebufferGateState(void *framebuffer, bool connected) {
+	if (!framebuffer) {
+		return;
+	}
+
+	getMember<uint8_t>(framebuffer, 0x1e0) = connected ? 1 : 0;
+}
+
 // ==== 4 kextInfos: TGL from /Library/Extensions, ICL fallback from /System/Library/Extensions ====
 
 // ICL FB — com.apple (fallback path)
@@ -750,6 +843,9 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			// V96: Force display online — WEG's getDisplayStatus hook (FOD) fails with
 			// "err 2" on TGL kext because that symbol doesn't exist. TGL uses getOnlineInfo.
 			{"__ZN21AppleIntelFramebuffer13getOnlineInfoEP21AppleIntelDisplayPathPhS2_", getOnlineInfo, this->ogetOnlineInfo},
+			{"__ZN21AppleIntelFramebuffer16enableControllerEv", enableController, this->oenableController},
+			{"__ZN21AppleIntelFramebuffer14setDisplayModeEii", setDisplayMode, this->osetDisplayMode},
+			{"__ZN21AppleIntelFramebuffer17connectionChangedEv", connectionChanged, this->oconnectionChanged},
 			{"__ZN19AppleIntelPowerWell21hwSetPowerWellStatePGEbj", releaseDoorbell},
 			{"__ZN19AppleIntelPowerWell22hwSetPowerWellStateAuxEbj",hwSetPowerWellStateAux, this->ohwSetPowerWellStateAux},
 			{"__ZN19AppleIntelPowerWell22hwSetPowerWellStateDDIEbj",hwSetPowerWellStateDDI, this->ohwSetPowerWellStateDDI},
@@ -1274,9 +1370,24 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			// Without this hook, no GuC binary loads at all in coexist mode → ring dead.
 			RouteRequestPlus firmwareRoute[] = {
 				{"__ZN13IGHardwareGuC13loadGuCBinaryEv", loadGuCBinary, this->oloadGuCBinary},
+				{"__ZN13IGHardwareGuC16initSchedControlEv", wrapInitSchedControl, this->orgInitSchedControl},
 			};
-			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route loadGuCBinary");
+			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route GuC firmware/scheduler symbols");
 		}
+
+		RouteRequestPlus policyRoutes[] = {
+			{"__ZN25IGHardwareExtendedContext15initWithOptionsEP11IGAccelTaskRK31IGHardwareExtendedContextParams", IGHardwareExtendedContextinitWithOptions, this->oIGHardwareExtendedContextinitWithOptions},
+			{"__ZN17IGHardwareContext25initRingGPUVirtualAddressEv", IGHardwareContextinitRingGPUVirtualAddress, this->oIGHardwareContextinitRingGPUVirtualAddress},
+			{"__ZN17IGHardwareContext17initRingRegistersEv", IGHardwareContextinitRingRegisters, this->oIGHardwareContextinitRingRegisters},
+			{"__ZN17IGHardwareContext15initRingControlEb", IGHardwareContextinitRingControl, this->oIGHardwareContextinitRingControl},
+			{"__ZN17IGHardwareContext13resetRingHeadEv", IGHardwareContextresetRingHead, this->oIGHardwareContextresetRingHead},
+			{"__ZN17IGHardwareContext14updateRingTailEj", IGHardwareContextupdateRingTail, this->oIGHardwareContextupdateRingTail},
+			{"__ZN20IGHardwareRingBuffer4initEP17IGHardwareContext", IGHardwareRingBufferinit, this->oIGHardwareRingBufferinit},
+			{"__ZN20IGHardwareRingBuffer12submitToRingEv", IGHardwareRingBuffersubmitToRing, this->oIGHardwareRingBuffersubmitToRing},
+			{"__ZN26IGHardwareCommandStreamer514submitExecListEj", IGHardwareCommandStreamersubmitExecList, this->oIGHardwareCommandStreamersubmitExecList},
+			{"__ZN26IGHardwareCommandStreamer524prepareExecListAndSubmitEjjPKj", IGHardwareCommandStreamerprepareExecListAndSubmit, this->oIGHardwareCommandStreamerprepareExecListAndSubmit},
+		};
+		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, policyRoutes, address, size), "ngreen", "Failed to route TGL ring/context policy symbols");
 
 		if (isTglTraceEnabled()) {
 			RouteRequestPlus bringupTraceRoutes[] = {
@@ -1306,17 +1417,8 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				SYSLOG("ngreen", "RCS_TRACE: lower symbol %s %s", symbol, routed ? "ROUTED" : "SKIPPED");
 			};
 
-			routeTraceSymbol("__ZN17IGHardwareContext25initRingGPUVirtualAddressEv", IGHardwareContextinitRingGPUVirtualAddress, this->oIGHardwareContextinitRingGPUVirtualAddress);
-			routeTraceSymbol("__ZN17IGHardwareContext17initRingRegistersEv", IGHardwareContextinitRingRegisters, this->oIGHardwareContextinitRingRegisters);
-			routeTraceSymbol("__ZN17IGHardwareContext15initRingControlEb", IGHardwareContextinitRingControl, this->oIGHardwareContextinitRingControl);
-			routeTraceSymbol("__ZN17IGHardwareContext13resetRingHeadEv", IGHardwareContextresetRingHead, this->oIGHardwareContextresetRingHead);
-			routeTraceSymbol("__ZN17IGHardwareContext14updateRingTailEj", IGHardwareContextupdateRingTail, this->oIGHardwareContextupdateRingTail);
-			routeTraceSymbol("__ZN20IGHardwareRingBuffer4initEP17IGHardwareContext", IGHardwareRingBufferinit, this->oIGHardwareRingBufferinit);
-			routeTraceSymbol("__ZN20IGHardwareRingBuffer12submitToRingEv", IGHardwareRingBuffersubmitToRing, this->oIGHardwareRingBuffersubmitToRing);
 			routeTraceSymbol("__ZN32IGHardwareRenderCommandStreamer54initEP22IOGraphicsAccelerator2P10IOWorkLoopP12IGScheduler5", IGHardwareRenderCommandStreamerinit, this->oIGHardwareRenderCommandStreamerinit);
 			routeTraceSymbol("__ZN26IGHardwareCommandStreamer516resumeSchedulingEv", IGHardwareCommandStreamerresumeScheduling, this->oIGHardwareCommandStreamerresumeScheduling);
-			routeTraceSymbol("__ZN26IGHardwareCommandStreamer514submitExecListEj", IGHardwareCommandStreamersubmitExecList, this->oIGHardwareCommandStreamersubmitExecList);
-			routeTraceSymbol("__ZN26IGHardwareCommandStreamer524prepareExecListAndSubmitEjjPKj", IGHardwareCommandStreamerprepareExecListAndSubmit, this->oIGHardwareCommandStreamerprepareExecListAndSubmit);
 		}
 
 		if (!wegCoexist || forceFullMTL) {
@@ -1900,6 +2002,11 @@ void Gen11::wrapSystemDidWake(void *that) {
 }
 
 bool Gen11::wrapInitSchedControl(void *that) {
+	if (shouldUseSpoofedSafeSchedulerPolicy()) {
+		SYSLOG("ngreen", "TGL policy: bypassing IGHardwareGuC::initSchedControl on spoofed non-GuC path");
+		return true;
+	}
+
 	DBGLOG("ngreen", "attempting to init sched control with load %d", callback->performingFirmwareLoad);
 	bool perfLoad = callback->performingFirmwareLoad;
 	callback->performingFirmwareLoad = false;
@@ -5468,7 +5575,26 @@ void Gen11::getOnlineInfo(void *that, void *displayPath, unsigned char *online, 
 	FunctionCast(getOnlineInfo, callback->ogetOnlineInfo)(that, displayPath, online, changed);
 	static int v96Logs = 0;
 	unsigned char origOnline = online ? *online : 0xFF;
+	if (shouldGateExternalDisplayBringup() && !isBuiltInFramebufferObject(that)) {
+		if (online) *online = 0;
+		if (changed) *changed = 0;
+		setFramebufferGateState(that, false);
+		if (auto *svc = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(that))) {
+			svc->setProperty("NGreenConnectorKind", "External");
+			svc->setProperty("NGreenBringupPhase", "FBOnly");
+		}
+		if (v96Logs < 12) {
+			v96Logs++;
+			SYSLOG("ngreen", "V96: getOnlineInfo gated external fb=%p dp=%p orig=%d forced=0", that, displayPath, origOnline);
+		}
+		return;
+	}
 	if (online) *online = 1;
+	setFramebufferGateState(that, true);
+	if (auto *svc = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(that))) {
+		svc->setProperty("NGreenConnectorKind", framebufferKindString(that));
+		svc->setProperty("NGreenBringupPhase", shouldGateExternalDisplayBringup() ? "InternalReady" : "ExternalReady");
+	}
 	if (v96Logs < 8) {
 		v96Logs++;
 		SYSLOG("ngreen", "V96: getOnlineInfo: orig=%d forced=1 (fb=%p dp=%p)", origOnline, that, displayPath);
@@ -5732,8 +5858,11 @@ uint8_t Gen11::isPanelPowerOn(void *that)
 
 uint8_t  Gen11::IGHardwareExtendedContextinitWithOptions(void *that,void *param_1,void *param_2)
 {
-	
-	return FunctionCast(IGHardwareExtendedContextinitWithOptions, callback->oIGHardwareExtendedContextinitWithOptions)(that,param_1,param_2);
+	auto ret = FunctionCast(IGHardwareExtendedContextinitWithOptions, callback->oIGHardwareExtendedContextinitWithOptions)(that,param_1,param_2);
+	const auto engine = getTrackedEngineFromContext(that);
+	markTrackedEngineContextSeen(engine);
+	SYSLOG("ngreen", "[NGSEQ] eng=%s event=context-init ret=%u ctx=%p", trackedEngineName(engine), ret, that);
+	return ret;
 	
 	uint8_t ctx=getMember<uint8_t>(that, 0x6c);
 	
@@ -5902,7 +6031,20 @@ void * Gen11::ExtendedContextWithOptions(void *param_1)
 
 uint8_t Gen11::enableController(void *that)
 {
-	if (getMember<uint32_t>(that, 0x1dc)==0) getMember<uint8_t>(that, 0x1e0)=1;
+	if (shouldGateExternalDisplayBringup() && !isBuiltInFramebufferObject(that)) {
+		setFramebufferGateState(that, false);
+		if (auto *svc = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(that))) {
+			svc->setProperty("NGreenConnectorKind", "External");
+			svc->setProperty("NGreenBringupPhase", "FBOnly");
+		}
+		SYSLOG("ngreen", "FB gate: enableController blocked for external framebuffer=%p index=%u", that, getMember<uint32_t>(that, 0x1dc));
+		return 0;
+	}
+	if (isBuiltInFramebufferObject(that)) setFramebufferGateState(that, true);
+	if (auto *svc = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(that))) {
+		svc->setProperty("NGreenConnectorKind", framebufferKindString(that));
+		svc->setProperty("NGreenBringupPhase", shouldGateExternalDisplayBringup() ? "InternalReady" : "ExternalReady");
+	}
 	auto ret= FunctionCast(enableController, callback->oenableController)(that);
 	return ret;
 }
@@ -5910,16 +6052,45 @@ uint8_t Gen11::enableController(void *that)
 
 uint8_t Gen11::setDisplayMode(void *that,int param_1,int param_2)
 {
-	if (getMember<uint32_t>(that, 0x1dc)==0) getMember<uint8_t>(that, 0x1e0)=1;
+	if (shouldGateExternalDisplayBringup() && !isBuiltInFramebufferObject(that)) {
+		SYSLOG("ngreen", "FB gate: setDisplayMode blocked for external framebuffer=%p index=%u mode=%d depth=%d", that, getMember<uint32_t>(that, 0x1dc), param_1, param_2);
+		setFramebufferGateState(that, false);
+		if (auto *svc = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(that))) {
+			svc->setProperty("NGreenConnectorKind", "External");
+			svc->setProperty("NGreenBringupPhase", "FBOnly");
+		}
+		return 0;
+	}
+	if (isBuiltInFramebufferObject(that)) setFramebufferGateState(that, true);
+	if (auto *svc = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(that))) {
+		svc->setProperty("NGreenConnectorKind", framebufferKindString(that));
+		svc->setProperty("NGreenBringupPhase", shouldGateExternalDisplayBringup() ? "InternalReady" : "ExternalReady");
+	}
 	return FunctionCast(setDisplayMode, callback->osetDisplayMode)(that,param_1,param_2 );
 
 }
 
 uint8_t Gen11::connectionChanged(void *that)
 {
+	if (shouldGateExternalDisplayBringup() && !isBuiltInFramebufferObject(that)) {
+		SYSLOG("ngreen", "FB gate: connectionChanged blocked for external framebuffer=%p index=%u", that, getMember<uint32_t>(that, 0x1dc));
+		setFramebufferGateState(that, false);
+		if (auto *svc = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(that))) {
+			svc->setProperty("NGreenConnectorKind", "External");
+			svc->setProperty("NGreenBringupPhase", "FBOnly");
+		}
+		return 0;
+	}
 	
 	auto ret= FunctionCast(connectionChanged, callback->oconnectionChanged)(that);
 	//getMember<uint8_t>(that, 0x1e0)=1;
+	if (ret && isBuiltInFramebufferObject(that)) {
+		setFramebufferGateState(that, true);
+	}
+	if (auto *svc = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(that))) {
+		svc->setProperty("NGreenConnectorKind", framebufferKindString(that));
+		svc->setProperty("NGreenBringupPhase", shouldGateExternalDisplayBringup() ? "InternalReady" : "ExternalReady");
+	}
 	return ret;
 }
 
@@ -6031,6 +6202,88 @@ unsigned long  Gen11::allocateDisplayResources(void *that)
 
 bool Gen11::isRcsEngineType(IGHwCsType type) {
 	return type == kIGHwCsTypeRCS;
+}
+
+static bool shouldBlockTrackedEngine(NGTglTrackedEngine engine) {
+	auto *state = trackedEngineState(engine);
+	return state && state->quarantined;
+}
+
+static void markTrackedEngineContextSeen(NGTglTrackedEngine engine) {
+	auto *state = trackedEngineState(engine);
+	if (state) {
+		state->contextSeen = true;
+	}
+}
+
+static void markTrackedEngineRingReady(NGTglTrackedEngine engine) {
+	auto *state = trackedEngineState(engine);
+	if (state) {
+		state->ringReady = true;
+	}
+}
+
+static void markTrackedEngineControlReady(NGTglTrackedEngine engine, bool ready) {
+	auto *state = trackedEngineState(engine);
+	if (state) {
+		state->controlReady = ready;
+	}
+}
+
+static void markTrackedEngineSubmitted(NGTglTrackedEngine engine) {
+	auto *state = trackedEngineState(engine);
+	if (state) {
+		state->submitted = true;
+	}
+}
+
+static uint32_t trackedEngineRingBase(NGTglTrackedEngine engine) {
+	switch (engine) {
+		case NGTglTrackedEngine::BCS:
+			return BLT_RING_BASE;
+		case NGTglTrackedEngine::RCS:
+			return RENDER_RING_BASE;
+		default:
+			return 0;
+	}
+}
+
+static bool evaluateTrackedEngineBootstrap(NGTglTrackedEngine engine, const char *stage) {
+	auto *state = trackedEngineState(engine);
+	const uint32_t ringBase = trackedEngineRingBase(engine);
+	if (!state || ringBase == 0 || !NGreen::callback || !NGreen::callback->mmioReady()) {
+		return false;
+	}
+
+	const uint32_t ringStart = NGreen::callback->readMMIO32(RING_START(ringBase));
+	const uint32_t ringCtl = NGreen::callback->readMMIO32(RING_CTL(ringBase));
+	const uint32_t ringHead = NGreen::callback->readMMIO32(RING_HEAD(ringBase));
+	const uint32_t ringTail = NGreen::callback->readMMIO32(RING_TAIL(ringBase));
+	const uint32_t execListStatus = NGreen::callback->readMMIO32(RING_EXECLIST_STATUS(ringBase));
+	const uint32_t contextStatusPtr = NGreen::callback->readMMIO32(RING_CONTEXT_STATUS_PTR(ringBase));
+
+	const bool pass =
+		state->contextSeen &&
+		state->ringReady &&
+		state->controlReady &&
+		ringStart != 0 &&
+		ringCtl != 0 &&
+		(ringTail != 0 || ringHead != 0 || execListStatus != 0 || contextStatusPtr != 0);
+
+	if (pass) {
+		if (!state->smokePassed) {
+			SYSLOG("ngreen", "[NGSEQ] eng=%s event=smoke-pass stage=%s start=0x%x ctl=0x%x head=0x%x tail=0x%x exec=0x%x ctxptr=0x%x",
+			       trackedEngineName(engine), stage ? stage : "<null>", ringStart, ringCtl, ringHead, ringTail, execListStatus, contextStatusPtr);
+		}
+		state->smokePassed = true;
+		return true;
+	}
+
+	state->quarantined = true;
+	SYSLOG("ngreen", "[NGSEQ] eng=%s event=smoke-fail stage=%s contextSeen=%d ringReady=%d controlReady=%d start=0x%x ctl=0x%x head=0x%x tail=0x%x lastTail=0x%x exec=0x%x ctxptr=0x%x",
+	       trackedEngineName(engine), stage ? stage : "<null>", state->contextSeen, state->ringReady, state->controlReady,
+	       ringStart, ringCtl, ringHead, ringTail, state->lastTail, execListStatus, contextStatusPtr);
+	return false;
 }
 
 void Gen11::dumpRCSSubmissionState(const char *stage) {
@@ -6280,6 +6533,11 @@ bool Gen11::IGScheduler5checkForProgress(void *that, IGHwCsType type) {
 }
 
 void Gen11::IGHardwareContextinitRingGPUVirtualAddress(void *that) {
+	const auto engine = getTrackedEngineFromContext(that);
+	if (shouldBlockTrackedEngine(engine)) {
+		SYSLOG("ngreen", "TGL policy: blocked %s initRingGPUVirtualAddress (engine quarantined)", trackedEngineName(engine));
+		return;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		validateRcsDescriptorOrEngineObject("IGHardwareContext::initRingGPUVirtualAddress pre", that);
 		dumpRcsEngineActivationState("IGHardwareContext::initRingGPUVirtualAddress pre");
@@ -6290,6 +6548,7 @@ void Gen11::IGHardwareContextinitRingGPUVirtualAddress(void *that) {
 	if (callback->oIGHardwareContextinitRingGPUVirtualAddress) {
 		FunctionCast(IGHardwareContextinitRingGPUVirtualAddress, callback->oIGHardwareContextinitRingGPUVirtualAddress)(that);
 	}
+	markTrackedEngineContextSeen(engine);
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::initRingGPUVirtualAddress post");
 		dumpContextImageKnownFields("IGHardwareContext::initRingGPUVirtualAddress post", that);
@@ -6300,6 +6559,11 @@ void Gen11::IGHardwareContextinitRingGPUVirtualAddress(void *that) {
 }
 
 void Gen11::IGHardwareContextinitRingRegisters(void *that) {
+	const auto engine = getTrackedEngineFromContext(that);
+	if (shouldBlockTrackedEngine(engine)) {
+		SYSLOG("ngreen", "TGL policy: blocked %s initRingRegisters (engine quarantined)", trackedEngineName(engine));
+		return;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		validateRcsDescriptorOrEngineObject("IGHardwareContext::initRingRegisters pre", that);
 		dumpRcsEngineActivationState("IGHardwareContext::initRingRegisters pre");
@@ -6310,6 +6574,7 @@ void Gen11::IGHardwareContextinitRingRegisters(void *that) {
 	if (callback->oIGHardwareContextinitRingRegisters) {
 		FunctionCast(IGHardwareContextinitRingRegisters, callback->oIGHardwareContextinitRingRegisters)(that);
 	}
+	markTrackedEngineRingReady(engine);
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::initRingRegisters post");
 		dumpContextImageKnownFields("IGHardwareContext::initRingRegisters post", that);
@@ -6320,6 +6585,17 @@ void Gen11::IGHardwareContextinitRingRegisters(void *that) {
 }
 
 void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
+	const auto engine = getTrackedEngineFromContext(that);
+	auto *state = trackedEngineState(engine);
+	if (shouldBlockTrackedEngine(engine)) {
+		SYSLOG("ngreen", "TGL policy: blocked %s initRingControl enable=%d (engine quarantined)", trackedEngineName(engine), enable);
+		return;
+	}
+	if (state && enable && !state->ringReady) {
+		SYSLOG("ngreen", "TGL policy: blocked %s initRingControl enable=%d (ring not ready)", trackedEngineName(engine), enable);
+		state->quarantined = true;
+		return;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareContext::initRingControl this=%p enable=%d", that, enable);
 		dumpRcsEngineActivationState("IGHardwareContext::initRingControl pre");
@@ -6330,6 +6606,7 @@ void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
 	if (callback->oIGHardwareContextinitRingControl) {
 		FunctionCast(IGHardwareContextinitRingControl, callback->oIGHardwareContextinitRingControl)(that, enable);
 	}
+	markTrackedEngineControlReady(engine, enable);
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::initRingControl post");
 		dumpContextImageKnownFields("IGHardwareContext::initRingControl post", that);
@@ -6340,6 +6617,11 @@ void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
 }
 
 void Gen11::IGHardwareContextresetRingHead(void *that) {
+	const auto engine = getTrackedEngineFromContext(that);
+	if (shouldBlockTrackedEngine(engine)) {
+		SYSLOG("ngreen", "TGL policy: blocked %s resetRingHead (engine quarantined)", trackedEngineName(engine));
+		return;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::resetRingHead pre");
 		dumpIGHardwareContextObject("resetRingHead", that);
@@ -6347,6 +6629,9 @@ void Gen11::IGHardwareContextresetRingHead(void *that) {
 	}
 	if (callback->oIGHardwareContextresetRingHead) {
 		FunctionCast(IGHardwareContextresetRingHead, callback->oIGHardwareContextresetRingHead)(that);
+	}
+	if (auto *state = trackedEngineState(engine)) {
+		state->submitted = false;
 	}
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::resetRingHead post");
@@ -6357,6 +6642,20 @@ void Gen11::IGHardwareContextresetRingHead(void *that) {
 }
 
 void Gen11::IGHardwareContextupdateRingTail(void *that, uint32_t tail) {
+	const auto engine = getTrackedEngineFromContext(that);
+	auto *state = trackedEngineState(engine);
+	if (shouldBlockTrackedEngine(engine)) {
+		SYSLOG("ngreen", "TGL policy: blocked %s updateRingTail tail=0x%x (engine quarantined)", trackedEngineName(engine), tail);
+		return;
+	}
+	if (state && !state->ringReady) {
+		SYSLOG("ngreen", "TGL policy: blocked %s updateRingTail tail=0x%x (ring not ready)", trackedEngineName(engine), tail);
+		state->quarantined = true;
+		return;
+	}
+	if (state) {
+		state->lastTail = tail;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareContext::updateRingTail this=%p tail=0x%x", that, tail);
 		dumpRcsEngineActivationState("IGHardwareContext::updateRingTail pre");
@@ -6367,6 +6666,7 @@ void Gen11::IGHardwareContextupdateRingTail(void *that, uint32_t tail) {
 	if (callback->oIGHardwareContextupdateRingTail) {
 		FunctionCast(IGHardwareContextupdateRingTail, callback->oIGHardwareContextupdateRingTail)(that, tail);
 	}
+	markTrackedEngineSubmitted(engine);
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::updateRingTail post");
 		dumpContextImageKnownFields("IGHardwareContext::updateRingTail post", that);
@@ -6377,6 +6677,11 @@ void Gen11::IGHardwareContextupdateRingTail(void *that, uint32_t tail) {
 }
 
 bool Gen11::IGHardwareRingBufferinit(void *that, void *context) {
+	const auto engine = getTrackedEngineFromContext(context);
+	if (shouldBlockTrackedEngine(engine)) {
+		SYSLOG("ngreen", "TGL policy: blocked %s IGHardwareRingBuffer::init (engine quarantined)", trackedEngineName(engine));
+		return false;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareRingBuffer::init this=%p context=%p", that, context);
 		validateRcsDescriptorOrEngineObject("IGHardwareRingBuffer::init ringBuffer", that);
@@ -6413,6 +6718,17 @@ bool Gen11::IGHardwareRingBufferinit(void *that, void *context) {
 }
 
 void Gen11::IGHardwareRingBuffersubmitToRing(void *that) {
+	const auto engine = getTrackedEngineFromRingBuffer(that);
+	auto *state = trackedEngineState(engine);
+	if (shouldBlockTrackedEngine(engine)) {
+		SYSLOG("ngreen", "TGL policy: blocked %s submitToRing (engine quarantined)", trackedEngineName(engine));
+		return;
+	}
+	if (state && !state->controlReady) {
+		SYSLOG("ngreen", "TGL policy: blocked %s submitToRing (control not ready)", trackedEngineName(engine));
+		state->quarantined = true;
+		return;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareRingBuffer::submitToRing this=%p", that);
 		traceVirtualCallInSubmitToRing(that);
@@ -6440,6 +6756,10 @@ void Gen11::IGHardwareRingBuffersubmitToRing(void *that) {
 
 	if (callback->oIGHardwareRingBuffersubmitToRing) {
 		FunctionCast(IGHardwareRingBuffersubmitToRing, callback->oIGHardwareRingBuffersubmitToRing)(that);
+	}
+	markTrackedEngineSubmitted(engine);
+	if (auto *state = trackedEngineState(engine); state && !state->smokePassed) {
+		evaluateTrackedEngineBootstrap(engine, "submitToRing");
 	}
 
 	if (isRcsEngineTraceEnabled()) {
@@ -6493,6 +6813,10 @@ bool Gen11::IGHardwareRenderCommandStreamerinit(void *that, void *accelerator, v
 }
 
 void Gen11::IGHardwareCommandStreamerresumeScheduling(void *that) {
+	if (shouldUseSpoofedSafeSchedulerPolicy() && gTglBringupState.bcs.quarantined) {
+		SYSLOG("ngreen", "TGL policy: blocked IGHardwareCommandStreamer::resumeScheduling because BCS is quarantined");
+		return;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareCommandStreamer::resumeScheduling this=%p", that);
 		dumpRcsEngineActivationState("IGHardwareCommandStreamer::resumeScheduling pre");
@@ -6509,6 +6833,10 @@ void Gen11::IGHardwareCommandStreamerresumeScheduling(void *that) {
 }
 
 void Gen11::IGHardwareCommandStreamersubmitExecList(void *that, uint32_t stamp) {
+	if (shouldUseSpoofedSafeSchedulerPolicy() && gTglBringupState.bcs.quarantined) {
+		SYSLOG("ngreen", "TGL policy: blocked submitExecList stamp=0x%x because BCS is quarantined", stamp);
+		return;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareCommandStreamer::submitExecList this=%p stamp=0x%x", that, stamp);
 		dumpRcsEngineActivationState("IGHardwareCommandStreamer::submitExecList pre");
@@ -6517,6 +6845,9 @@ void Gen11::IGHardwareCommandStreamersubmitExecList(void *that, uint32_t stamp) 
 
 	if (callback->oIGHardwareCommandStreamersubmitExecList) {
 		FunctionCast(IGHardwareCommandStreamersubmitExecList, callback->oIGHardwareCommandStreamersubmitExecList)(that, stamp);
+	}
+	if (auto *state = trackedEngineState(NGTglTrackedEngine::RCS); state && !state->smokePassed) {
+		evaluateTrackedEngineBootstrap(NGTglTrackedEngine::RCS, "submitExecList");
 	}
 
 	if (isRcsEngineTraceEnabled()) {
@@ -6527,6 +6858,10 @@ void Gen11::IGHardwareCommandStreamersubmitExecList(void *that, uint32_t stamp) 
 }
 
 void Gen11::IGHardwareCommandStreamerprepareExecListAndSubmit(void *that, uint32_t arg1, uint32_t arg2, const uint32_t *arg3) {
+	if (shouldUseSpoofedSafeSchedulerPolicy() && gTglBringupState.bcs.quarantined) {
+		SYSLOG("ngreen", "TGL policy: blocked prepareExecListAndSubmit arg1=0x%x arg2=0x%x because BCS is quarantined", arg1, arg2);
+		return;
+	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareCommandStreamer::prepareExecListAndSubmit this=%p arg1=0x%x arg2=0x%x arg3=%p", that, arg1, arg2, arg3);
 		if (arg3) {
@@ -6539,6 +6874,9 @@ void Gen11::IGHardwareCommandStreamerprepareExecListAndSubmit(void *that, uint32
 
 	if (callback->oIGHardwareCommandStreamerprepareExecListAndSubmit) {
 		FunctionCast(IGHardwareCommandStreamerprepareExecListAndSubmit, callback->oIGHardwareCommandStreamerprepareExecListAndSubmit)(that, arg1, arg2, arg3);
+	}
+	if (auto *state = trackedEngineState(NGTglTrackedEngine::RCS); state && !state->smokePassed) {
+		evaluateTrackedEngineBootstrap(NGTglTrackedEngine::RCS, "prepareExecListAndSubmit");
 	}
 
 	if (isRcsEngineTraceEnabled()) {
