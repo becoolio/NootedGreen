@@ -4,7 +4,6 @@
 #include "RcsEngineTrace.hpp"
 #include "TglGpuBringup.hpp"
 #include <Headers/kern_api.hpp>
-#include "kern_genx.hpp"
 #include "kern_green.hpp"
 #include <IOKit/IOCatalogue.h>
 #include <kern/thread_call.h>
@@ -171,23 +170,9 @@ static void setFramebufferGateState(void *framebuffer, bool connected) {
 	getMember<uint8_t>(framebuffer, 0x1e0) = connected ? 1 : 0;
 }
 
-// ==== 4 kextInfos: TGL from /Library/Extensions, ICL fallback from /System/Library/Extensions ====
+// ==== 2 kextInfos: TGL from /System/Library/Extensions ====
 
-// ICL FB — com.apple (fallback path)
-static const char *pathsICLFB[] = {
-    "/System/Library/Extensions/AppleIntelICLLPGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelICLLPGraphicsFramebuffer",
-};
-static KernelPatcher::KextInfo kextG11FB {"com.apple.driver.AppleIntelICLLPGraphicsFramebuffer", pathsICLFB, 1, {}, {},
-    KernelPatcher::KextInfo::Unloaded};
-
-// ICL HW — com.apple (fallback path)
-static const char *pathsICLHW[] = {
-    "/System/Library/Extensions/AppleIntelICLGraphics.kext/Contents/MacOS/AppleIntelICLGraphics",
-};
-static KernelPatcher::KextInfo kextG11HW {"com.apple.driver.AppleIntelICLGraphics", pathsICLHW, 1, {}, {},
-    KernelPatcher::KextInfo::Unloaded};
-
-// TGL FB — com.xxxxx (loaded from /Library/Extensions/)
+// TGL FB — HookCase le/ variant (loaded from /Library/Extensions/)
 static const char *pathsTGLFB[] = {
     "/Library/Extensions/AppleIntelTGLGraphicsFramebuffer.kext/Contents/MacOS/AppleIntelTGLGraphicsFramebuffer",
 };
@@ -195,11 +180,11 @@ static KernelPatcher::KextInfo kextG11FBT {"com.xxxxx.driver.AppleIntelTGLGraphi
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
-// TGL HW — com.xxxxx (loaded from /Library/Extensions/)
+// TGL HW — Apple-signed (loaded from /System/Library/Extensions/)
 static const char *pathsTGLHW[] = {
-    "/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
+    "/System/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
 };
-static KernelPatcher::KextInfo kextG11HWT {"com.xxxxx.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
+static KernelPatcher::KextInfo kextG11HWT {"com.apple.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
@@ -207,9 +192,7 @@ Gen11 *Gen11::callback = nullptr;
 
 void Gen11::init() {
 	callback = this;
-	// 4 kextInfos: ICL FB, ICL HW, TGL FB, TGL HW
-	lilu.onKextLoadForce(&kextG11FB);
-	lilu.onKextLoadForce(&kextG11HW);
+	// 2 kextInfos: TGL FB, TGL HW
 	lilu.onKextLoadForce(&kextG11FBT);
 	lilu.onKextLoadForce(&kextG11HWT);
 	SYSLOG("ngreen", "Registered Gen11 kext watchers");
@@ -265,6 +248,23 @@ unsigned int Gen11::tReadRegister32(unsigned long a) {
 
 unsigned long long Gen11::tReadRegister64(void volatile *, unsigned long b) {
 	return NGreen::callback ? NGreen::callback->readReg64(b) : 0;
+}
+
+uint64_t Gen11::tgetPMTNow() {
+	// Current timestamp for PM residency counters.
+	// Original DTK import returned mach_absolute_time; clock_get_uptime is equivalent.
+	uint64_t now;
+	clock_get_uptime(&now);
+	return now;
+}
+
+bool Gen11::thwSetupDSBMemory() {
+	// DSB (Display State Buffer) memory setup stub.
+	// The caller performs the actual IODeviceMemory::withSubRange allocation
+	// after this returns success. Return false (0) because the caller checks
+	//   if ((unsigned int)hwSetupDSBMemory(this)) { error... }
+	// so 0 means "no error, setup succeeded."
+	return false;
 }
 
 static bool isWEGCoexistMode() {
@@ -639,151 +639,7 @@ static void logServicePublishSnapshot(IOService *svc, const char *stage, bool in
 
 bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size) {
 	
-	if (kextG11FB.loadIndex == index) {
-		if (this->tglFBLoaded) {
-			DBGLOG("ngreen", "Skipping ICL FB — TGL FB already loaded");
-			return true;
-		}
-		auto *activeKext = &kextG11FB;
-		DBGLOG("ngreen", "init AppleIntelICLLPGraphicsFramebuffer!");
-		//NGreen::callback->igfxGen = iGFXGen::Gen11;
-		NGreen::callback->setRMMIOIfNecessary();
-		
-		const bool wegCoexist = isWEGCoexistMode();
-		if (wegCoexist) {
-			SYSLOG("nblue", "WEG coexist mode enabled: skipping NootedBlue CDCLK route overlap");
-		}
-
-		if (wegCoexist) {
-			SolveRequestPlus solveRequests[] = {
-			//		{"__ZN31AppleIntelFramebufferController14disableCDClockEv", this->orgDisableCDClock},
-			//		{"__ZN31AppleIntelFramebufferController19setCDClockFrequencyEy", this->orgSetCDClockFrequency},
-			//		{"__ZN20IntelFBClientControl11doAttributeEjPmmS0_S0_P25IOExternalMethodArguments", this->orgFBClientDoAttribute},
-			//		{"__ZN31AppleIntelFramebufferController5startEP9IOService",	this->ostart},
-			//		{"__ZN31AppleIntelFramebufferController14ReadRegister32Em",	this->oreadRegister32},
-		 		{"__ZN31AppleIntelFramebufferController20hwConfigureCustomAUXEb", this->ohwConfigureCustomAUX},
-			};
-			PANIC_COND(!SolveRequestPlus::solveAll(patcher, index, solveRequests, address, size), "nblue",	"Failed to resolve symbols");
-		} else {
-			SolveRequestPlus solveRequests[] = {
-			//		{"__ZN31AppleIntelFramebufferController14disableCDClockEv", this->orgDisableCDClock},
-			//		{"__ZN31AppleIntelFramebufferController19setCDClockFrequencyEy", this->orgSetCDClockFrequency},
-			//		{"__ZN20IntelFBClientControl11doAttributeEjPmmS0_S0_P25IOExternalMethodArguments", this->orgFBClientDoAttribute},
-			//		{"__ZN31AppleIntelFramebufferController5startEP9IOService",	this->ostart},
-			//		{"__ZN31AppleIntelFramebufferController14ReadRegister32Em",	this->oreadRegister32},
-		 		{"__ZN31AppleIntelFramebufferController20hwConfigureCustomAUXEb", this->ohwConfigureCustomAUX},
-				{"__ZN31AppleIntelFramebufferController21probeCDClockFrequencyEv", this->orgProbeCDClockFrequency},
-			};
-			PANIC_COND(!SolveRequestPlus::solveAll(patcher, index, solveRequests, address, size), "nblue",	"Failed to resolve symbols");
-		}
-		
-		if (wegCoexist) {
-			RouteRequestPlus requests[] = {
-				// Keep stock ReadRegister32 while stabilizing display pipeline behavior.
-			//		{"__ZN31AppleIntelFramebufferController14ReadRegister32Em",wrapReadRegister32,	this->owrapReadRegister32},
-			//		{"__ZN21AppleIntelFramebuffer13SaveNVRAMModeEv",handleLinkIntegrityCheck},
-				// Keep stock wake/sleep lifecycle handlers to avoid broken restore paths.
-				//{"__ZN21AppleIntelFramebuffer18prepareToEnterWakeEv",dovoid},
-				//{"__ZN21AppleIntelFramebuffer17prepareToExitWakeEv",dovoid},
-				//{"__ZN21AppleIntelFramebuffer18prepareToExitSleepEv",dovoid},
-				//{"__ZN21AppleIntelFramebuffer19prepareToEnterSleepEv",dovoid},
-				// Keep stock doAttribute while chasing UI stalls / high WindowServer CPU.
-			//		{"__ZN20IntelFBClientControl11doAttributeEjPmmS0_S0_P25IOExternalMethodArguments",wrapFBClientDoAttribute,	this->orgFBClientDoAttribute},
-				//ADDED
-			//{"__ZN21AppleIntelFramebuffer4initEP31AppleIntelFramebufferControllerj",AppleIntelFramebufferinit, this->oAppleIntelFramebufferinit},
-			//		{"__ZN31AppleIntelFramebufferController10hwShutdownEP21AppleIntelFramebuffer",handleLinkIntegrityCheck},
-					{"__ZN31AppleIntelFramebufferController18hwInitializeCStateEv",hwInitializeCState, this->ohwInitializeCState},
-			//		{"__ZN31AppleIntelFramebufferController20hwConfigureCustomAUXEb",hwConfigureCustomAUX, this->ohwConfigureCustomAUX},
-			//	{"__ZN31AppleIntelFramebufferController21probeCDClockFrequencyEv",wrapProbeCDClockFrequency,	this->orgProbeCDClockFrequency},
-			};
-			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "nblue","Failed to route symbols");
-		} else {
-			RouteRequestPlus requests[] = {
-				// Keep stock ReadRegister32 while stabilizing display pipeline behavior.
-			//		{"__ZN31AppleIntelFramebufferController14ReadRegister32Em",wrapReadRegister32,	this->owrapReadRegister32},
-			//		{"__ZN21AppleIntelFramebuffer13SaveNVRAMModeEv",handleLinkIntegrityCheck},
-				// Keep stock wake/sleep lifecycle handlers to avoid broken restore paths.
-				//{"__ZN21AppleIntelFramebuffer18prepareToEnterWakeEv",dovoid},
-				//{"__ZN21AppleIntelFramebuffer17prepareToExitWakeEv",dovoid},
-				//{"__ZN21AppleIntelFramebuffer18prepareToExitSleepEv",dovoid},
-				//{"__ZN21AppleIntelFramebuffer19prepareToEnterSleepEv",dovoid},
-				// Keep stock doAttribute while chasing UI stalls / high WindowServer CPU.
-			//		{"__ZN20IntelFBClientControl11doAttributeEjPmmS0_S0_P25IOExternalMethodArguments",wrapFBClientDoAttribute,	this->orgFBClientDoAttribute},
-				//ADDED
-			//{"__ZN21AppleIntelFramebuffer4initEP31AppleIntelFramebufferControllerj",AppleIntelFramebufferinit, this->oAppleIntelFramebufferinit},
-			//		{"__ZN31AppleIntelFramebufferController10hwShutdownEP21AppleIntelFramebuffer",handleLinkIntegrityCheck},
-					{"__ZN31AppleIntelFramebufferController18hwInitializeCStateEv",hwInitializeCState, this->ohwInitializeCState},
-			//		{"__ZN31AppleIntelFramebufferController20hwConfigureCustomAUXEb",hwConfigureCustomAUX, this->ohwConfigureCustomAUX},
-			//	{"__ZN31AppleIntelFramebufferController21probeCDClockFrequencyEv",wrapProbeCDClockFrequency,	this->orgProbeCDClockFrequency},
-				{"__ZN31AppleIntelFramebufferController11initCDClockEv",initCDClock,this->oinitCDClock}
-			};
-			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "nblue","Failed to route symbols");
-		}
-		//static const uint8_t f15[]= {0x00,0x02, 0x00, 0x5c, 0x8a};
-		//static const uint8_t r15[]= {0x00,0x00, 0x00, 0x49, 0x9a};
-		
-		
-		// AppleIntelFramebufferController::hwSetMode skip hwRegsNeedUpdate
-		static const uint8_t f2[] = {0xE8, 0x31, 0xE5, 0xFF, 0xFF, 0x84, 0xC0, 0x74, 0x3D};
-		static const uint8_t r2[] = {0xE8, 0x31, 0xE5, 0xFF, 0xFF, 0x84, 0xC0, 0xEB, 0x3D};
-		
-		//sonoma
-		static const uint8_t f2b[] = {0xE8, 0x54, 0xEA, 0xFF, 0xFF, 0x84, 0xC0, 0x74, 0x5C};
-		static const uint8_t r2b[] = {0xE8, 0x54, 0xEA, 0xFF, 0xFF, 0x84, 0xC0, 0xeb, 0x5C};
-		
-		//sequoia
-		static const uint8_t f2c[] = {0xE8, 0x74, 0xEA, 0xFF, 0xFF, 0x84, 0xC0, 0x74, 0x5C};
-		static const uint8_t r2c[] = {0xE8, 0x74, 0xEA, 0xFF, 0xFF, 0x84, 0xC0, 0xeb, 0x5C};
-		
-		/*if (getKernelVersion() <= KernelVersion::Ventura) {
-			KernelPatcher::LookupPatch patch { &kextG11FB, f2, r2, sizeof(f2), 1 };
-			patcher.applyLookupPatch(&patch);
-		}
-		
-		if (getKernelVersion() == KernelVersion::Sonoma) {
-			KernelPatcher::LookupPatch patchb { &kextG11FB, f2b, r2b, sizeof(f2b), 1 };
-			patcher.applyLookupPatch(&patchb);
-		}
-		
-		if (getKernelVersion() >= KernelVersion::Sequoia) {
-			KernelPatcher::LookupPatch patchc { &kextG11FB, f2c, r2c, sizeof(f2c), 1 };
-			patcher.applyLookupPatch(&patchc);
-		}*/
-		
-		
-
-		// Variant-consistent remap for constructor entries:
-			// B8 xx 00 5C 8A -> B8 xx 00 49 9A and exact C7 05 ... 02 00 5C 8A site.
-			static const uint8_t kPatchPlatformRemapMovEaxFind0[] = {0xB8, 0x00, 0x00, 0x5C, 0x8A};
-			static const uint8_t kPatchPlatformRemapMovEaxReplace0[] = {0xB8, 0x00, 0x00, 0x49, 0x9A};
-			static const uint8_t kPatchPlatformRemapMovEaxFind1[] = {0xB8, 0x01, 0x00, 0x5C, 0x8A};
-			static const uint8_t kPatchPlatformRemapMovEaxReplace1[] = {0xB8, 0x01, 0x00, 0x49, 0x9A};
-			static const uint8_t kPatchPlatformRemapMovEaxFind2[] = {0xB8, 0x02, 0x00, 0x5C, 0x8A};
-			static const uint8_t kPatchPlatformRemapMovEaxReplace2[] = {0xB8, 0x02, 0x00, 0x49, 0x9A};
-			static const uint8_t kPatchPlatformRemapC705Find2[] = {0xC7, 0x05, 0xE9, 0x9B, 0x05, 0x00, 0x02, 0x00, 0x5C, 0x8A};
-			static const uint8_t kPatchPlatformRemapC705Replace2[] = {0xC7, 0x05, 0xE9, 0x9B, 0x05, 0x00, 0x02, 0x00, 0x49, 0x9A};
-
-			// hwSetMode: bypass hwRegsNeedUpdate result (CALL hwRegsNeedUpdate; TEST AL,AL: JE+0x62 → JMP+0x62)
-			// Verified unique (1 match at 0x94055) in ICL LP le binary. Forces register reprogram unconditionally. [ICL-LP]
-			static const uint8_t kPatchHwRegsNeedUpdateBypassFind[] = {0xe8, 0xe2, 0xcc, 0xff, 0xff, 0x84, 0xc0, 0x74, 0x62};
-			static const uint8_t kPatchHwRegsNeedUpdateBypassReplace[] = {0xe8, 0xe2, 0xcc, 0xff, 0xff, 0x84, 0xc0, 0xeb, 0x62};
-
-			LookupPatchPlus const minPatches[] = {
-				{&kextG11FB, kPatchPlatformRemapMovEaxFind0, kPatchPlatformRemapMovEaxReplace0, arrsize(kPatchPlatformRemapMovEaxFind0), 1},
-				{&kextG11FB, kPatchPlatformRemapMovEaxFind1, kPatchPlatformRemapMovEaxReplace1, arrsize(kPatchPlatformRemapMovEaxFind1), 1},
-				{&kextG11FB, kPatchPlatformRemapMovEaxFind2, kPatchPlatformRemapMovEaxReplace2, arrsize(kPatchPlatformRemapMovEaxFind2), 1},
-				{&kextG11FB, kPatchPlatformRemapC705Find2, kPatchPlatformRemapC705Replace2, arrsize(kPatchPlatformRemapC705Find2), 1},
-				{&kextG11FB, kPatchHwRegsNeedUpdateBypassFind, kPatchHwRegsNeedUpdateBypassReplace, arrsize(kPatchHwRegsNeedUpdateBypassFind), 1},  // hwSetMode always reprogram [ICL-LP]
-			};
-		
-		PANIC_COND(!LookupPatchPlus::applyAll(patcher, minPatches , address, size), "ngreen", "kextG11FB Failed to apply patches!");
-		//PANIC_COND
-		
-		DBGLOG("ngreen", "Loaded AppleIntelICLLPGraphicsFramebuffer!");
-		return true;
-		
-		
-	}	else if (kextG11FBT.loadIndex == index) {
+	if (kextG11FBT.loadIndex == index) {
 		SYSLOG("ngreen", "[FB Tracer] AppleIntelTGLGraphicsFramebuffer LOADED");
 		this->tglFBLoaded = true;
 		auto *activeKext = &kextG11FBT;
@@ -839,7 +695,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			// V35: Removed ComboPhyEv hook — causes MCE on RPL/ADL. Firmware calibration sufficient.
 			{"__ZN14AppleIntelPort16computeLaneCountEPK29IODetailedTimingInformationV2jjPj",computeLaneCount, this->ocomputeLaneCount},
 			// V97: Log AUX transactions to diagnose eDP link training failures on RPL
-			{"__ZN14AppleIntelPort7readAUXEjPvj", Genx::wrapICLReadAUX, Genx::callback->orgICLReadAUX},
+			{"__ZN14AppleIntelPort7readAUXEjPvj", Gen11::wrapICLReadAUX, Gen11::callback->orgICLReadAUX},
 			// V96: Force display online — WEG's getDisplayStatus hook (FOD) fails with
 			// "err 2" on TGL kext because that symbol doesn't exist. TGL uses getOnlineInfo.
 			{"__ZN21AppleIntelFramebuffer13getOnlineInfoEP21AppleIntelDisplayPathPhS2_", getOnlineInfo, this->ogetOnlineInfo},
@@ -850,32 +706,13 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			{"__ZN19AppleIntelPowerWell22hwSetPowerWellStateAuxEbj",hwSetPowerWellStateAux, this->ohwSetPowerWellStateAux},
 			{"__ZN19AppleIntelPowerWell22hwSetPowerWellStateDDIEbj",hwSetPowerWellStateDDI, this->ohwSetPowerWellStateDDI},
 			{"__ZN31AppleIntelRegisterAccessManager19FastWriteRegister32Emj",FastWriteRegister32, this->oFastWriteRegister32},
-			// V60: ReadRegister32 hooks DISABLED — V59 proved they cause 0-children regression
-			// (display driver loops in forceWake power-well cycling, never completes init)
-			/*{"__ZN31AppleIntelRegisterAccessManager14ReadRegister32Em",raReadRegister32, this->oraReadRegister32},
-			{"__ZN31AppleIntelRegisterAccessManager14ReadRegister32EPVvm",raReadRegister32b},*/
 			{"__ZN31AppleIntelRegisterAccessManager15WriteRegister32Emj",raWriteRegister32, this->oraWriteRegister32},
 			{"__ZN31AppleIntelRegisterAccessManager15WriteRegister32EPVvmj",raWriteRegister32b},
 			{"__ZN21AppleIntelFramebuffer17prepareToExitWakeEv",releaseDoorbell},
 			{"__ZN21AppleIntelFramebuffer18prepareToEnterWakeEv",releaseDoorbell},
 			{"__ZN21AppleIntelFramebuffer18prepareToExitSleepEv",releaseDoorbell},
 			{"__ZN21AppleIntelFramebuffer19prepareToEnterSleepEv",releaseDoorbell},
-			//******
 			{"__ZN24AppleIntelBaseController15enableVDDForAuxEP14AppleIntelPort", releaseDoorbell},
-			// Keep native SST timing setup; forcing custom clocks can break CoreDisplay validation.
-			//{"__ZN24AppleIntelBaseController17SetupDPSSTTimingsEP21AppleIntelFramebufferP21AppleIntelDisplayPathP10CRTCParams", SetupDPSSTTimings, this->oSetupDPSSTTimings},
-			//{"__ZN24AppleIntelBaseController12SetupTimingsEP21AppleIntelFramebufferP21AppleIntelDisplayPathPK29IODetailedTimingInformationV2P10CRTCParams", SetupTimings, this->oSetupTimings},
-			// Keep native detailed timing validation; avoid overriding pixel clock fields.
-			//{"__ZN21AppleIntelFramebuffer22validateDetailedTimingEPvy", validateDetailedTiming, this->ovalidateDetailedTiming},
-			//{"__ZN21AppleIntelFramebuffer19validateDisplayModeEiPPKNS_15ModeDescriptionEPPK29IODetailedTimingInformationV2", validateDisplayMode, this->ovalidateDisplayMode},
-	   //     {"__ZN21AppleIntelFramebuffer18setupDisplayTimingEPK29IODetailedTimingInformationV2PS0_", setupDisplayTiming, this->osetupDisplayTiming},
-			//{"__ZN21AppleIntelFramebuffer18maxSupportedDepthsEPK29IODetailedTimingInformationV2", maxSupportedDepths, this->omaxSupportedDepths},
-			//{"__ZN21AppleIntelFramebuffer17validateModeDepthEPK29IODetailedTimingInformationV2j", validateModeDepth, this->ovalidateModeDepth},
-			//*****
-			//{"__ZN21AppleIntelFramebuffer19getPixelInformationEiiiP18IOPixelInformation", getPixelInformation, this->ogetPixelInformation},
-			//{"__ZN20IntelFBClientControl11doAttributeEjPmmS0_S0_P25IOExternalMethodArguments",wrapFBClientDoAttribute, this->orgFBClientDoAttribute},
-			//{"__ZN20IntelFBClientControl24vendor_doDeviceAttributeEjPmmS0_S0_P25IOExternalMethodArguments", releaseDoorbell},
-			//{"__ZN21AppleIntelFramebuffer16enableControllerEv", isPanelPowerOn},
 		};
 		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route dp symbols");
 		
@@ -1138,123 +975,6 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		}
 		
 		return true;
-		
-		
-	}     else if (kextG11HW.loadIndex == index) {
-		SYSLOG("ngreen", "Matched processKext -> ICL accelerator callback");
-		if (this->tglHWLoaded) {
-			DBGLOG("ngreen", "Skipping ICL HW — TGL HW already loaded");
-			return true;
-		}
-		auto *activeKext = &kextG11HW;
-		DBGLOG("ngreen", "init AppleIntelICLGraphics!");
-		NGreen::callback->setRMMIOIfNecessary();
-		const bool wegCoexist = isWEGCoexistMode();
-
-		{
-			SolveRequestPlus solveRequests[] = {
-				{"__ZN16IntelAccelerator17newDisplayMachineEv", this->oNewDisplayMachine},
-				{"__ZN21IGAccelDisplayMachine4initEP22IOGraphicsAccelerator2", this->oDisplayMachineInit},
-				{"__ZN21IGAccelDisplayMachine5startEP11IOPCIDevice", this->oDisplayMachineStart},
-				{"__ZN21IGAccelDisplayMachine17probeDisplayPipesEv", this->oDisplayMachineProbeDisplayPipes},
-			};
-			PANIC_COND(!SolveRequestPlus::solveAll(patcher, index, solveRequests, address, size), "ngreen", "Failed to resolve display machine symbols (ICL)");
-		}
-
-		{
-			// loadGuCBinary: always route — WEG's firmware path is Mojave-gated and dead on Sonoma.
-			// Without this hook, no GuC binary loads at all in coexist mode → ring dead.
-			RouteRequestPlus firmwareRoute[] = {
-				{"__ZN13IGHardwareGuC13loadGuCBinaryEv", loadGuCBinary, this->oloadGuCBinary},
-			};
-			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route loadGuCBinary (ICL)");
-		}
-
-		if (!wegCoexist) {
-			RouteRequestPlus requests[] = {
-				 // PAVP/DRM: intercept session command callback (ICL hardware path, shared hook with TGL)
-				 {"__ZN16IntelAccelerator19PAVPCommandCallbackE22PAVPSessionCommandID_tjPjb", wrapPavpSessionCallback, this->orgPavpSessionCallback},
-				 // initHardwareCaps NOT routed: NBlue's wrapper reads TGL offset 0x1120 for SKU,
-				 // but ICL stores SKU at 0x1150. Let the original ICL code run — SKU gates are patched.
-				 // IGScheduler5resume NOT routed: kIGHwCsDesc is only resolved for kextG11HWT.
-				 // With -disablegfxfirmware, Host Preemptive scheduler is selected (not IGScheduler5).
-			//last	 {"__ZN12IGScheduler56resumeEv", IGScheduler5resume, this->oIGScheduler5resume},
-				 // resetGraphicsEngine NOT routed: NBlue wrapper applies TGL GT workarounds which
-				 // target TGL MMIO offsets. Hardware is RPL-P (adlp/raptorlake) — using TGL workarounds
-				 // on RPL MMIO could corrupt the command streamer. Let the ICL original run unmodified.
-			//last	 {"__ZN20IGHardwareRingBuffer19resetGraphicsEngineEP17IGHardwareContext", resetGraphicsEngine, this->oresetGraphicsEngine},
-			//last	 {"__ZN13IGHardwareGuC18checkWOPCMSettingsEmR14IOVirtualRange", checkWOPCMSettings, this->ocheckWOPCMSettings},
-			//last	 {"__ZN11IGScheduler15canLoadFirmwareEP16IntelAccelerator", canLoadFirmware, this->ocanLoadFirmware},
-				 // V36: Hook readAndClearInterrupts to initialize Gen11 multi-engine GT interrupts.
-				 // Same implementation as TGL path — Gen11 IRQ registers are identical for ICL/TGL.
-				 // V37: DISABLED — caused boot hang on TGL path; disabling ICL too for safety.
-				 // {"__ZN16IntelAccelerator23readAndClearInterruptsEPv", readAndClearInterrupts, this->oreadAndClearInterrupts},
-			};
-
-			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route dp symbols");
-
-			RouteRequestPlus gpuInfoRoute[] = {
-				// getGPUInfo: override topology at ICL object offsets (different from TGL offsets)
-				{"__ZN16IntelAccelerator10getGPUInfoEv", getGPUInfoICL, this->ogetGPUInfoICL},
-			};
-			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, gpuInfoRoute, address, size), "ngreen", "Failed to route getGPUInfoICL");
-		}
-		
-		// SKU gate 1+2: NOP JNZ/JA + XOR eax,eax (Sonoma AppleIntelICLGraphics, verified in KC)
-		static const uint8_t fSKUGates12[] = {
-			0x83, 0xF9, 0x01,
-			0x0F, 0x85, 0x0B, 0x01, 0x00, 0x00,
-			0xFF, 0xC8,
-			0x83, 0xF8, 0x07,
-			0x0F, 0x87, 0x00, 0x01, 0x00, 0x00,
-			0x48, 0x8D, 0x0D, 0x77, 0x02, 0x00, 0x00, 0x48
-		};
-		static const uint8_t rSKUGates12[] = {
-			0x83, 0xF9, 0x01,
-			0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-			0x31, 0xC0,
-			0x83, 0xF8, 0x07,
-			0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-			0x48, 0x8D, 0x0D, 0x77, 0x02, 0x00, 0x00, 0x48
-		};
-
-		// SKU gate 3: NOP JNZ (Sonoma AppleIntelICLGraphics, verified in KC)
-		static const uint8_t fSKUGate3[] = {
-			0x83, 0xF8, 0x08, 0x0F, 0x85, 0xC2, 0x00, 0x00, 0x00, 0xC7
-		};
-		static const uint8_t rSKUGate3[] = {
-			0x83, 0xF8, 0x08, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0xC7
-		};
-
-		// SKU bypass: TEST rax,rax; JZ->JMP (Sonoma, f2Long verified in KC at 0x14152bcd)
-		static const uint8_t fSkuBypassLong[] = {
-			0x48, 0x85, 0xC0, 0x74, 0x72, 0x48, 0x0F, 0xBC, 0xC0, 0x48, 0xFF, 0xC0, 0x48,
-			0x8D, 0x15, 0x00, 0xCD, 0x0F, 0x00, 0x48, 0x8D, 0x48, 0xFF, 0x48, 0xF7, 0xC1,
-			0xFD, 0xFF, 0xFF, 0xFF, 0x74, 0x27, 0x48, 0x6B, 0xC9, 0x79
-		};
-		static const uint8_t rSkuBypassLong[] = {
-			0x48, 0x85, 0xC0, 0xEB, 0x72, 0x48, 0x0F, 0xBC, 0xC0, 0x48, 0xFF, 0xC0, 0x48,
-			0x8D, 0x15, 0x00, 0xCD, 0x0F, 0x00, 0x48, 0x8D, 0x48, 0xFF, 0x48, 0xF7, 0xC1,
-			0xFD, 0xFF, 0xFF, 0xFF, 0x74, 0x27, 0x48, 0x6B, 0xC9, 0x79
-		};
-
-		LookupPatchPlus const patches[] = {
-			{&kextG11HW, fSKUGates12,    rSKUGates12,    arrsize(fSKUGates12),    1},
-			{&kextG11HW, fSKUGate3,      rSKUGate3,      arrsize(fSKUGate3),      1},
-			{&kextG11HW, fSkuBypassLong, rSkuBypassLong, arrsize(fSkuBypassLong), 1},
-		};
-		
-		/*auto catalina = getKernelVersion() == KernelVersion::Catalina;
-		if (catalina)
-			PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesc , address, size), "ngreen", "cata Failed to apply patches!");
-		else*/
-		for (size_t i = 0; i < sizeof(patches)/sizeof(patches[0]); ++i) {
-			//IOSleep(delay);
-			PANIC_COND(!patches[i].apply(patcher, address, size), "ngreen", "kextG11HW Failed to apply patch %zu", i);
-		}
-		DBGLOG("ngreen", "Loaded AppleIntelICLGraphics!");
-
-		return true;
 
     } else if (kextG11HWT.loadIndex == index) {
 		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics LOADED");
@@ -1268,14 +988,6 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		auto *activeKext = &kextG11HWT;
 		SYSLOG("ngreen", "[HW Tracer] AppleIntelTGLGraphics (HW accelerator) initializing");
 		NGreen::callback->setRMMIOIfNecessary();
-/*
-		SolveRequestPlus solveRequests[] = {
-			
-			{"__ZN11IGAccelTask16getBlit2DContextEb", this->ogetBlit3DContext},
-		};
-		SYSLOG_COND(!SolveRequestPlus::solveAll(patcher, index, solveRequests, address, size), "ngreen",	"Failed to resolve symbols");
-		 */
-		
 		const bool wegCoexist = isWEGCoexistMode();
 		const bool forceFullMTL = shouldForceFullMetalPath();
 
@@ -4502,42 +4214,7 @@ void * Gen11::serviceInterrupts(void *param_1)
 	
 }
 
-void * Gen11::wprobe(void *that,void *param_1,int *param_2)
-{
-	//FunctionCast(wprobe, callback->owprobe)(that, param_1,param_2);
-	//logStateInRegistry(that,0x56);
-	initializeLogging(that);
-	return that;
-	
-}
 
-void *contr;
-bool  Gen11::tgstart(void *that,void *param_1)
-{
-	contr=that;
-	FunctionCast(tgstart, callback->otgstart)(that, param_1);
-	return true;
-	
-}
-
-void Gen11::FBMemMgr_Init(void *that)
-{
-	ccont = getMember<void *>(that, 0xc40);
-	
-	FunctionCast(FBMemMgr_Init, callback->oFBMemMgr_Init)(that);
-	
-	
-
-	/*IODeviceMemory * m= NGreen::callback->iGPU->getDeviceMemoryWithIndex(0);
-	IODeviceMemory *dm;
-	m->withSubRange(dm,0x4180000,0x12000);//fDSBBufferBytes = 73728, fDSBBufferBaseOffset = 68681728
-	IOMemoryMap *dsb=dm->map();
-	
-	IODeviceMemory *dm2;
-	m->withSubRange(dm2,0x4192000,0x3000);//fConnectionStatusBytes = 12288, fConnectionStatusOffset = 68755456
-	IOMemoryMap *dsb2=dm2->map();*/
-	
-}
 
 uint32_t Gen11::probePortMode()
 {
@@ -4583,15 +4260,7 @@ uint64_t Gen11::raReadRegister64b(void *that,void *param_1,unsigned long param_2
 	return  raReadRegister64(that,reinterpret_cast<uint64_t>(param_1) + param_2);
 };
 
-void Gen11::radWriteRegister32(void *that,unsigned long param_1, UInt32 param_2)
-{
-	radWriteRegister32f( that,param_1,param_2);
-};
 
-void Gen11::radWriteRegister32f(void *that,unsigned long param_1, UInt32 param_2)
-{
-	//FunctionCast(radWriteRegister32f, callback->oradWriteRegister32f)( that,param_1,param_2);
-};
 
 void Gen11::raWriteRegister32(void *that,unsigned long param_1, UInt32 param_2)
 {
@@ -4807,40 +4476,7 @@ void Gen11::initializeLogging(void *that)
 	FunctionCast(initializeLogging, callback->oinitializeLogging)(that );
 }
 
-int Gen11::getPlatformID()
-{
- return FunctionCast(getPlatformID, callback->ogetPlatformID)( );
-}
 
-uint32_t Gen11::tprobePortMode(void * that)
-{
- return Genx::callback->tprobePortMode(that );
-}
-
-void  Gen11::AppleIntelPlanec1(void *that)
-{
-	Genx::callback->AppleIntelPlanec1(that );
-}
-
-void  Gen11::AppleIntelScalerc1(void *that)
-{
-	Genx::callback->AppleIntelScalerc1(that );
-}
-
-
-void * Gen11::AppleIntelScalernew(unsigned long param_1)
-{
-	return Genx::callback->AppleIntelScalernew(param_1 );
-}
-void * Gen11::AppleIntelPlanenew(unsigned long param_1)
-{
-	return Genx::callback->AppleIntelPlanenew(param_1 );
-}
-
-void Gen11::uupdateDBUF(void *that,uint param_1,uint param_2,bool param_3)
-{
-	Genx::callback->uupdateDBUF(that,param_1,param_2 );
-}
 
 
 
@@ -4869,27 +4505,105 @@ uint8_t  Gen11::setPortMode(void *that,uint32_t param_1)
 
 IOReturn Gen11::wrapICLReadAUX(void *that, uint32_t address, void *buffer, uint32_t length) {
 
-	IOReturn retVal =	FunctionCast(wrapICLReadAUX, callback->orgICLReadAUX)(that,address, buffer, length );
+	IOReturn retVal = FunctionCast(wrapICLReadAUX, callback->orgICLReadAUX)(that, address, buffer, length);
+	if (retVal != kIOReturnSuccess) {
+		return retVal;
+	}
 
-	if (address != 0x0000 && address != 0x2200)	return retVal;
-	
+	static int auxLogCount = 0;
+	if (auxLogCount < 40) {
+		auxLogCount++;
+		uint8_t *b = reinterpret_cast<uint8_t *>(buffer);
+		if (length >= 2)
+			SYSLOG("ngreen", "V97AUX[%d]: addr=0x%04x len=%u ret=0x%x [0]=0x%02x [1]=0x%02x",
+			       auxLogCount, address, length, retVal, b ? b[0] : 0xFF, (b && length >= 2) ? b[1] : 0xFF);
+		else
+			SYSLOG("ngreen", "V97AUX[%d]: addr=0x%04x len=%u ret=0x%x",
+			       auxLogCount, address, length, retVal);
+	}
+
+	if (!NGreen::callback->isRealTGL && address == 0x0100 && buffer && length >= 1) {
+		auto *raw = reinterpret_cast<uint8_t *>(buffer);
+		if (raw[0] > 0x14) raw[0] = 0x14;
+		if (length >= 2 && NGreen::callback->dpcdCapsValid) {
+			uint8_t cachedLaneCount = static_cast<uint8_t>(NGreen::callback->dpcdMaxLaneCountRaw & 0x1F);
+			if (cachedLaneCount == 1 || cachedLaneCount == 2 || cachedLaneCount == 4) {
+				raw[1] = (raw[1] & 0xE0) | cachedLaneCount;
+			}
+		}
+		static int v98tLogs = 0;
+		if (v98tLogs < 10) {
+			v98tLogs++;
+			if (length >= 2)
+				SYSLOG("ngreen", "V98T[%d]: clamped 0x0100 read to bw=0x%02x lanes=0x%02x",
+				       v98tLogs, raw[0], raw[1]);
+			else
+				SYSLOG("ngreen", "V98T[%d]: clamped 0x0100 read to bw=0x%02x (len=1)",
+				       v98tLogs, raw[0]);
+		}
+	}
+
+	if (address == 0x0700 && buffer && length >= 1) {
+		auto *raw = reinterpret_cast<uint8_t *>(buffer);
+		NGreen::callback->dpcdBacklightCaps = raw[0];
+		NGreen::callback->dpcdBacklightCapsValid = true;
+
+		static int backlightLogs = 0;
+		if (backlightLogs < 8) {
+			backlightLogs++;
+			SYSLOG("ngreen", "DPCD backlight caps[%d]: caps=0x%02x auxBacklight=%d",
+			       backlightLogs, raw[0], !!(raw[0] & 0x1));
+		}
+		return retVal;
+	}
+
+	if (address != 0x0000 && address != 0x2200) return retVal;
+
+	if (length < sizeof(DPCDCap16) || buffer == nullptr)
+		return retVal;
+
 	auto caps = reinterpret_cast<DPCDCap16*>(buffer);
-	
+	const uint8_t sinkRevision = caps->revision;
+	const uint8_t sinkMaxLinkRate = caps->maxLinkRate;
+	const uint8_t sinkMaxLaneCount = caps->maxLaneCount;
+
+	NGreen::callback->dpcdRevision = sinkRevision;
+	NGreen::callback->dpcdMaxLinkRate = sinkMaxLinkRate;
+	NGreen::callback->dpcdMaxLaneCountRaw = sinkMaxLaneCount;
+	NGreen::callback->dpcdCapsValid = true;
+
+	static int dpcdCapLogs = 0;
+	if (dpcdCapLogs < 12) {
+		dpcdCapLogs++;
+		SYSLOG("ngreen", "DPCD caps[%d]: addr=0x%04x rev=0x%02x maxLink=0x%02x maxLaneRaw=0x%02x",
+		       dpcdCapLogs, address, sinkRevision, sinkMaxLinkRate, sinkMaxLaneCount);
+	}
+
+	if (!NGreen::callback->isRealTGL) {
+		if (caps->maxLinkRate > 0x14) {
+			caps->maxLinkRate = 0x14;
+		}
+		uint8_t laneCount = static_cast<uint8_t>(sinkMaxLaneCount & 0x1F);
+		if (laneCount != 1 && laneCount != 2 && laneCount != 4) {
+			laneCount = 2;
+		}
+		caps->maxLaneCount = static_cast<uint8_t>((caps->maxLaneCount & 0xE0) | laneCount);
+		static int v98Logs = 0;
+		if (v98Logs < 10) {
+			v98Logs++;
+			SYSLOG("ngreen", "V98[%d]: capped DPCD caps @0x%04x to maxLinkRate=0x%02x maxLane=0x%02x",
+			       v98Logs, address, caps->maxLinkRate, caps->maxLaneCount);
+		}
+	}
+
 	if (caps->revision < 0x03) {
 		caps->maxLinkRate=0;
 	}
-	
+
 	return retVal;
 }
 
-int smo=0;
 
-int Gen11::isConflictRegister()
-{
-	
-	return -1;
-
-}
 
 void Gen11::AppleIntelPowerWellinit(void *that,void *param_1)
 {
@@ -4946,7 +4660,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 			auto *dict = OSDictionary::withCapacity(25);
 			if (dict) {
 				const bool useTglNames = callback && callback->tglHWLoaded;
-				const char *bundleId = useTglNames ? "com.xxxxx.driver.AppleIntelTGLGraphics" : "com.apple.driver.AppleIntelICLGraphics";
+				const char *bundleId = useTglNames ? "com.apple.driver.AppleIntelTGLGraphics" : "com.apple.driver.AppleIntelICLGraphics";
 				const char *mtlName = useTglNames ? "AppleIntelTGLGraphicsMTLDriver" : "AppleIntelICLGraphicsMTLDriver";
 				const char *glName = useTglNames ? "AppleIntelTGLGraphicsGLDriver" : "AppleIntelICLGraphicsGLDriver";
 				const char *vaName = useTglNames ? "AppleIntelTGLGraphicsVADriver" : "AppleIntelICLGraphicsVADriver";
@@ -5054,8 +4768,14 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 			       NGreen::callback->readReg32(ERROR_GEN6),
 			       NGreen::callback->readReg32(FORCEWAKE_RENDER_GEN9),
 			       NGreen::callback->readReg32(FORCEWAKE_ACK_RENDER_GEN9),
-			       NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9),
-			       NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9));
+		       NGreen::callback->readReg32(FORCEWAKE_BLITTER_GEN9),
+		       NGreen::callback->readReg32(FORCEWAKE_ACK_BLITTER_GEN9));
+			// Clear ERROR_GEN6 before registerService to prevent stale errors from interfering
+			uint32_t errGen6 = NGreen::callback->readReg32(ERROR_GEN6);
+			if (errGen6) {
+				NGreen::callback->writeReg32(ERROR_GEN6, 0x0);
+				SYSLOG("ngreen", "FBController: cleared ERROR_GEN6=0x%x before registerService", errGen6);
+			}
 			service->registerService();
 			logServicePublishSnapshot(service, "fbcontroller post-registerService", true, false);
 			SYSLOG("ngreen", "DisplayPipe MMIO[fbcontroller post-registerService]: RCS_HEAD=0x%x RCS_TAIL=0x%x RCS_CTL=0x%x ERROR_GEN6=0x%x FW_RENDER=0x%x ACK=0x%x FW_BLT=0x%x ACK=0x%x",
@@ -7165,3 +6885,66 @@ void Gen11::endReset(void *that)
 	
 	NGreen::callback->writeReg32( DG1_MSTR_TILE_INTR, DG1_MSTR_IRQ);
 }
+
+
+
+
+
+
+
+
+// === Export stubs for AppleIntelFramebufferController imports ===
+// These resolve the 6 symbols that Sonoma's AppleIntelTGLGraphics.kext
+// no longer exports. The kernel linker finds these in NootedGreen and
+// patches the FB kext's imports on load.
+// Each stub shuffles (this)->args to match the Gen11::t* static methods.
+// NOTE: Mach-O prepends an extra underscore to C++ mangled names,
+// so _ZN31... becomes __ZN31... in the object file.
+
+__asm__(
+    ".globl __ZN31AppleIntelFramebufferController14ReadRegister32Em\n"
+    "__ZN31AppleIntelFramebufferController14ReadRegister32Em:\n"
+    "    movq    %rsi, %rdi    // discard this, offset becomes arg1\n"
+    "    jmp     __ZN5Gen1115tReadRegister32Em\n"
+);
+
+__asm__(
+    ".globl __ZN31AppleIntelFramebufferController15WriteRegister32Emj\n"
+    "__ZN31AppleIntelFramebufferController15WriteRegister32Emj:\n"
+    "    movq    %rsi, %rdi    // discard this, offset -> arg1\n"
+    "    movq    %rdx, %rsi    // value -> arg2\n"
+    "    jmp     __ZN5Gen1116tWriteRegister32Emj\n"
+);
+
+__asm__(
+    ".globl __ZN31AppleIntelFramebufferController14ReadRegister64EPVvm\n"
+    "__ZN31AppleIntelFramebufferController14ReadRegister64EPVvm:\n"
+    "    movq    %rsi, %rdi    // discard this, ptr -> arg1\n"
+    "    movq    %rdx, %rsi    // offset -> arg2\n"
+    "    jmp     __ZN5Gen1115tReadRegister64EPVvm\n"
+);
+
+__asm__(
+    ".globl __ZN31AppleIntelFramebufferController15WriteRegister64EPVvmy\n"
+    "__ZN31AppleIntelFramebufferController15WriteRegister64EPVvmy:\n"
+    "    movq    %rsi, %rdi    // discard this, ptr -> arg1\n"
+    "    movq    %rdx, %rsi    // offset -> arg2\n"
+    "    movq    %rcx, %rdx    // value -> arg3\n"
+    "    jmp     __ZN5Gen1116tWriteRegister64EPVvmy\n"
+);
+
+__asm__(
+    ".globl __ZN31AppleIntelFramebufferController9getPMTNowEv\n"
+    "__ZN31AppleIntelFramebufferController9getPMTNowEv:\n"
+    "    // this in rdi is ignored\n"
+    "    jmp     __ZN5Gen1110tgetPMTNowEv\n"
+);
+
+__asm__(
+    ".globl __ZN31AppleIntelFramebufferController16hwSetupDSBMemoryEv\n"
+    "__ZN31AppleIntelFramebufferController16hwSetupDSBMemoryEv:\n"
+    "    // this in rdi is ignored\n"
+    "    jmp     __ZN5Gen1117thwSetupDSBMemoryEv\n"
+);
+
+// === End of export stubs ===

@@ -142,52 +142,6 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
 		SYSLOG("DYLD", "V50: Patched gpu_bundle_find_trusted: /Library/GPUBundles -> /Library/Extensions");
 	}
 	
-	// V50: ICL Metal driver device-ID bypass (mask-based, build-portable).
-	// The ICL driver (in shared cache) checks device_id:vendor_id against
-	// 0x8A5C8086/0x8A5D8086, then calls a hw-cap fallback check.
-	// Patch: change jne to jmp so the hw-cap check always succeeds.
-	// This is a fallback — if the TGL driver loads, this won't be needed.
-	static const uint8_t f2find[] = {
-		0x81, 0xFF, 0x86, 0x80, 0x5C, 0x8A,  // cmp edi, 0x8A5C8086
-		0x74, 0x00,                            // je +XX (wildcard offset)
-		0x81, 0xFF, 0x86, 0x80, 0x5D, 0x8A,  // cmp edi, 0x8A5D8086
-		0x74, 0x00,                            // je +XX (wildcard offset)
-		0xE8, 0x00, 0x00, 0x00, 0x00,         // call +XXXX (wildcard offset)
-		0x84, 0xC0,                            // test al, al
-		0x75, 0x00,                            // jne +XX → change to EB (jmp)
-	};
-	static const uint8_t f2mask[] = {
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,   // cmp exact
-		0xFF, 0x00,                            // je opcode exact, offset wildcard
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,   // cmp exact
-		0xFF, 0x00,                            // je opcode exact, offset wildcard
-		0xFF, 0x00, 0x00, 0x00, 0x00,         // call opcode exact, offset wildcard
-		0xFF, 0xFF,                            // test exact
-		0xFF, 0x00,                            // jne opcode exact, offset wildcard
-	};
-	static const uint8_t f2repl[] = {
-		0x81, 0xFF, 0x86, 0x80, 0x5C, 0x8A,  // unchanged
-		0x74, 0x00,                            // unchanged
-		0x81, 0xFF, 0x86, 0x80, 0x5D, 0x8A,  // unchanged
-		0x74, 0x00,                            // unchanged
-		0xE8, 0x00, 0x00, 0x00, 0x00,         // unchanged
-		0x84, 0xC0,                            // unchanged
-		0xEB, 0x00,                            // jne→jmp (0x75→0xEB)
-	};
-	static const uint8_t f2rmask[] = {
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,   // don't touch
-		0x00, 0x00,                            // don't touch
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,   // don't touch
-		0x00, 0x00,                            // don't touch
-		0x00, 0x00, 0x00, 0x00, 0x00,         // don't touch
-		0x00, 0x00,                            // don't touch
-		0xFF, 0x00,                            // CHANGE byte 23 only (0x75→0xEB)
-	};
-	if (UNLIKELY(KernelPatcher::findAndReplaceWithMask(const_cast<void *>(data), PAGE_SIZE,
-			f2find, f2mask, f2repl, f2rmask, 1, 0))) {
-		SYSLOG("DYLD", "V50: Applied ICL Metal device-ID bypass (f2, mask-based)");
-	}
-	
 	// Stage-3 Metal (hardcoded): assertion bypass + RunFullDisplayPipe NULL-guard
 	// + GetMTLTexture/CQ stubs. AccessComplete is live (not skipped).
 
@@ -219,15 +173,13 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
 	static const uint8_t r_runfdp_guard_sonoma[] = {0x49, 0x8b, 0xbe, 0x88, 0x08, 0x00, 0x00, 0x48, 0x85, 0xff, 0x74, 0x06, 0x90};
 
 	if (getKernelVersion() >= KernelVersion::Ventura) {
-		const bool isRealTGL = NGreen::callback && NGreen::callback->isRealTGL;
 		const bool forceFullMTL = shouldForceFullMetalPath();
 		const bool noMetal = shouldDisableMetalPath();
 		const int fullMTLStage = getLegacyFullMTLStage();
 		const bool skylBypass = shouldEnableSkyLightBypass();
 		static bool loggedMetalMode = false;
 		if (!loggedMetalMode) {
-			const bool fullMTLActive = isRealTGL || forceFullMTL;
-			SYSLOG("DYLD", "FULL_MTL_ACTIVE=%d (isRealTGL=%d forceFullMTL=%d noMetal=%d fullMTLStage=%d skylBypass=%d)", fullMTLActive, isRealTGL, forceFullMTL, noMetal, fullMTLStage, skylBypass);
+			SYSLOG("DYLD", "FULL_MTL_ACTIVE=1 (forceFullMTL=%d noMetal=%d fullMTLStage=%d skylBypass=%d)", forceFullMTL, noMetal, fullMTLStage, skylBypass);
 			loggedMetalMode = true;
 		}
 
@@ -274,15 +226,6 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
 				{f3b_sonoma, r3b_sonoma, "CoreDisplay assertion bypass (Sonoma)"},
 			};
 			DYLDPatch::applyAll(assertionPatch, const_cast<void *>(data), PAGE_SIZE);
-
-			if (!isRealTGL && !forceFullMTL) {
-				const DYLDPatch safetyPatches[] = {
-					{f_runfdp_guard_sonoma, r_runfdp_guard_sonoma, "RunFullDisplayPipe NULL vcall guard (Sonoma)"},
-					{f_getmtltex_sonoma, r_getmtltex_sonoma, "GetMTLTexture return NULL (Sonoma)"},
-					{f_getmtlcq_sonoma, r_getmtlcq_sonoma, "GetMTLCommandQueue return NULL (Sonoma)"},
-				};
-				DYLDPatch::applyAll(safetyPatches, const_cast<void *>(data), PAGE_SIZE);
-			}
 		}
 	}
 }

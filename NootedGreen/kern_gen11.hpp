@@ -1239,7 +1239,6 @@ enum intel_pch {
 //   static method = our wrapper, mach_vm_address_t = saved original pointer.
 // ═══════════════════════════════════════════════════════════════════════════
 class Gen11 {
-	friend class Genx;
 
 private:
 
@@ -1312,7 +1311,7 @@ private:
 	static void * serviceInterrupts(void *param_1);  // GT interrupt handler
 	mach_vm_address_t oserviceInterrupts {};
 	
-	static int isConflictRegister();   // stub: returns 0 (no conflict)
+
 	
 	static void releaseDoorbell();     // stub: GuC doorbell release
 	
@@ -1428,9 +1427,7 @@ private:
 	mach_vm_address_t orgICLReadAUX {};
 	
 	static int blit3d_supported();
-	
-	static int getPlatformID();
-	mach_vm_address_t ogetPlatformID {};
+
 	
 	static void logStateInRegistry(void *that,uint param_1);
 	mach_vm_address_t ologStateInRegistry {};
@@ -1507,11 +1504,7 @@ private:
 	void (*orgDisableCDClock)(void *) {nullptr};
 	void (*orgSetCDClockFrequency)(void *, unsigned long long) {nullptr};
 	
-	static void * wprobe(void *that,void *param_1,int *param_2);  // IOService::probe wrapper
-	mach_vm_address_t owprobe {};
-	
-	static bool  tgstart(void *that,void *param_1);  // TGL-specific start
-	mach_vm_address_t otgstart {};
+
 	
 	static int hwSetMode
 			  (void *that,void *param_1,
@@ -1548,10 +1541,7 @@ private:
 	
 	static uint64_t raReadRegister64b(void *that,void *param_1,unsigned long param_2);
 	
-	static void radWriteRegister32(void *that,unsigned long param_1, UInt32 param_2);
-	mach_vm_address_t oradWriteRegister32 {};
-	static void radWriteRegister32f(void *that,unsigned long param_1, UInt32 param_2);
-	mach_vm_address_t oradWriteRegister32f {};
+
 	
 	static void raWriteRegister32(void *that,unsigned long param_1, UInt32 param_2);
 	mach_vm_address_t oraWriteRegister32 {};
@@ -1572,9 +1562,7 @@ private:
 	mach_vm_address_t osetupPlanarSurfaceDBUF {};
 	
 	static void updateDBUF(void *that,uint param_1,uint param_2,bool param_3);
-	
-	static void FBMemMgr_Init(void *that);
-	mach_vm_address_t oFBMemMgr_Init {};
+
 	
 	static int blit3d_supported(void *param_1,void *param_2);
 	mach_vm_address_t oblit3d_supported {};
@@ -1648,12 +1636,6 @@ private:
 	static void * getBlit3DContext(void *that,bool param_1);
 	mach_vm_address_t ogetBlit3DContext {};
 	
-	static void  AppleIntelPlanec1(void *that);
-	static void  AppleIntelScalerc1(void *that);
-	
-	static void * AppleIntelScalernew(unsigned long param_1);
-	mach_vm_address_t oAppleIntelScalernew {};
-	
 	// FB controller start — wraps original, adds registerService() for accelerator matching
 	static bool AppleIntelBaseControllerstart(void *that,void *param_1);
 	mach_vm_address_t oAppleIntelBaseControllerstart {};
@@ -1666,11 +1648,6 @@ private:
 	
 	static void AppleIntelPlaneupdateRegisterCache(void *that);
 	mach_vm_address_t oAppleIntelPlaneupdateRegisterCache {};
-	
-	static void * AppleIntelPlanenew(unsigned long param_1);
-	mach_vm_address_t oAppleIntelPlanenew {};
-	
-	static void uupdateDBUF(void *that,uint param_1,uint param_2,bool param_3);
 		
 	static long getPortByDDI(uint param_1);
 	mach_vm_address_t ogetPortByDDI {};
@@ -1798,7 +1775,6 @@ public:
 	static unsigned long long tReadRegister64(void volatile* a, unsigned long b);
 	static uint64_t tgetPMTNow();              // read GT timestamp
 	static bool thwSetupDSBMemory();           // DSB = Display State Buffer
-	static uint32_t tprobePortMode(void * that);
 	
 };
 

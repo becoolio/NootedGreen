@@ -3,7 +3,7 @@
 
 #include "kern_green.hpp"
 #include "kern_gen11.hpp"
-#include "kern_genx.hpp"
+
 #include "kern_model.hpp"
 #include "DYLDPatches.hpp"
 #include "HDMI.hpp"
@@ -34,7 +34,6 @@ static KernelPatcher::KextInfo kextIOAcceleratorFamily2 { "com.apple.iokit.IOAcc
 
 NGreen *NGreen::callback = nullptr;
 
-static Genx genx;
 static Gen11 gen11;
 static DYLDPatches dyldpatches;
 static HDMI agfxhda;
@@ -88,15 +87,6 @@ static bool shouldEnableLegacyPllBringup() {
 
 static bool hasAllow3DBootArg() {
 	return checkKernelArgument("-allow3d");
-}
-
-static bool shouldTryGuCOnSpoofedTGL() {
-	int enabled = 0;
-	if (PE_parse_boot_argn("NGreenTryGuC", &enabled, sizeof(enabled))) {
-		return enabled != 0;
-	}
-
-	return checkKernelArgument("-NGreenTryGuC");
 }
 
 static bool shouldDisableExternalOutputs() {
@@ -277,12 +267,11 @@ void NGreen::init() {
 	logBuildMarker();
 
     lilu.onKextLoadForce(&kextAGDP);
-	/*lilu.onKextLoadForce(&kextBacklight);
+	lilu.onKextLoadForce(&kextBacklight);
 	lilu.onKextLoadForce(&kextMCCSControl);
-	lilu.onKextLoadForce(&kextIOGraphics);*/
+	//lilu.onKextLoadForce(&kextIOGraphics);
 	lilu.onKextLoadForce(&kextIOAcceleratorFamily2);
 	
-	genx.init();
 	gen11.init();
 	//agfxhda.init();
 	dyldpatches.init();
@@ -345,9 +334,8 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
 		WIOKit::renameDevice(this->iGPU, "IGPU");
 		WIOKit::awaitPublishing(this->iGPU);
 
-		if (seedIGPUProps) {
-			seedIGPUPropertiesOnEntry(this->iGPU);
-		}
+		// Always inject AAPL,ig-platform-id when missing (needed for getPlatformID in FB driver)
+		seedIGPUPropertiesOnEntry(this->iGPU);
 		
 		static uint8_t sconf[] = {};
 		
@@ -405,16 +393,16 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
             uint32_t stepping = eax & 0xF;
             if (family == 0x6) model |= (extModel << 4);
             this->cpuModel = model;
-            this->isRealTGL = (model == 0x8C || model == 0x8D);
-            SYSLOG("ngreen", "V52: CPU family=0x%x model=0x%x stepping=%u isRealTGL=%d",
-                   family, model, stepping, this->isRealTGL);
+            SYSLOG("ngreen", "V52: CPU family=0x%x model=0x%x stepping=%u",
+                   family, model, stepping);
         }
 
 		this->request3D = hasAllow3DBootArg();
-		this->tryGuC = this->isRealTGL || shouldTryGuCOnSpoofedTGL();
-		this->gateExternalDisplays = shouldDisableExternalOutputs() || !this->isRealTGL;
-		SYSLOG("ngreen", "Bring-up policy: request3D=%d tryGuC=%d gateExternal=%d realTGL=%d",
-		       this->request3D, this->tryGuC, this->gateExternalDisplays, this->isRealTGL);
+		this->isRealTGL = true;
+		this->tryGuC = true;
+		this->gateExternalDisplays = shouldDisableExternalOutputs();
+		SYSLOG("ngreen", "Bring-up policy: request3D=%d tryGuC=%d gateExternal=%d",
+		       this->request3D, this->tryGuC, this->gateExternalDisplays);
 		this->iGPU->setProperty("NGreenAllow3DRequested", this->request3D);
 		this->iGPU->setProperty("NGreenTryGuC", this->tryGuC);
 		this->iGPU->setProperty("NGreenGateExternal", this->gateExternalDisplays);
@@ -585,32 +573,27 @@ bool NGreen::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
 		const LookupPatchPlus patch {&kextAGDP, kAGDPBoardIDKeyOriginal, kAGDPBoardIDKeyPatched, 1};
 		SYSLOG_COND(!patch.apply(patcher, address, size), "NGreen", "Failed to apply AGDP board-id patch");
 
-		/*if (getKernelVersion() == KernelVersion::Ventura) {
-			const LookupPatchPlus patch {&kextAGDP, kAGDPFBCountCheckVenturaOriginal, kAGDPFBCountCheckVenturaPatched,
-				1};
-			SYSLOG_COND(!patch.apply(patcher, address, size), "NGreen", "Failed to apply AGDP fb count check patch");
-		} else {
-			const LookupPatchPlus patch {&kextAGDP, kAGDPFBCountCheckOriginal, kAGDPFBCountCheckPatched, 1};
-			SYSLOG_COND(!patch.apply(patcher, address, size), "NGreen", "Failed to apply AGDP fb count check patch");
-		}*/
+
 	}  else if (kextBacklight.loadIndex == index) {
-		/*KernelPatcher::RouteRequest request {"__ZN15AppleIntelPanel10setDisplayEP9IODisplay", wrapApplePanelSetDisplay,
+		SYSLOG("ngreen", "[Backlight] AppleBacklight loaded — injecting panel LUT data");
+		KernelPatcher::RouteRequest request {"__ZN15AppleIntelPanel10setDisplayEP9IODisplay", wrapApplePanelSetDisplay,
 	  orgApplePanelSetDisplay};
 			if (patcher.routeMultiple(kextBacklight.loadIndex, &request, 1, address, size)) {
 				const UInt8 find[] = {"F%uT%04x"};
 				const UInt8 replace[] = {"F%uTxxxx"};
 				const LookupPatchPlus patch {&kextBacklight, find, replace, 1};
 				SYSLOG_COND(!patch.apply(patcher, address, size), "NGreen", "Failed to apply backlight patch");
-			}*/
+			} else {
+				SYSLOG("ngreen", "[Backlight] Failed to route AppleIntelPanel::setDisplay");
+			}
 } else if (kextMCCSControl.loadIndex == index) {
-		/*KernelPatcher::RouteRequest requests[] = {
+		SYSLOG("ngreen", "[Backlight] AppleMCCSControl loaded — disabling HW probe");
+		KernelPatcher::RouteRequest requests[] = {
 				{"__ZN25AppleMCCSControlGibraltar5probeEP9IOServicePi", wrapFunctionReturnZero},
 				{"__ZN21AppleMCCSControlCello5probeEP9IOServicePi", wrapFunctionReturnZero},
 			};
 			patcher.routeMultiple(index, requests, address, size);
-			patcher.clearError();*/
-} else if (genx.processKext(patcher, index, address, size)) {
-	DBGLOG("ngreen", "Processed Generation x configuration");
+			patcher.clearError();
 } else if (gen11.processKext(patcher, index, address, size)) {
         DBGLOG("ngreen", "Processed Generation 11 configuration");
     } /*else if (agfxhda.processKext(patcher, index, address, size)) {
@@ -687,7 +670,22 @@ static ApplePanelData appleBacklightData[] = {
 	{"F19Txxxx", {0x00, 0x11, 0x00, 0x00, 0x02, 0x8F, 0x03, 0x53, 0x04, 0x5A, 0x05, 0xA1, 0x07, 0xAE, 0x0A, 0x3D, 0x0E,
 					 0x14, 0x13, 0x74, 0x1A, 0x5E, 0x24, 0x18, 0x31, 0xA9, 0x44, 0x59, 0x5E, 0x76, 0x83, 0x11, 0xB6,
 					 0xC7, 0xFF, 0x7B}},
+	{"F20Txxxx", {0x00, 0x11, 0x00, 0x00, 0x00, 0x34, 0x00, 0x52, 0x00, 0x73, 0x00, 0x94, 0x00, 0xBE, 0x00, 0xFA, 0x01,
+					 0x36, 0x01, 0x72, 0x01, 0xC5, 0x02, 0x2F, 0x02, 0xB9, 0x03, 0x60, 0x04, 0x1A, 0x05, 0x0A, 0x06,
+					 0x0E, 0x07, 0x10}},
+	{"F21Txxxx", {0x00, 0x11, 0x00, 0x00, 0x00, 0x34, 0x00, 0x52, 0x00, 0x73, 0x00, 0x94, 0x00, 0xBE, 0x00, 0xFA, 0x01,
+					 0x36, 0x01, 0x72, 0x01, 0xC5, 0x02, 0x2F, 0x02, 0xB9, 0x03, 0x60, 0x04, 0x1A, 0x05, 0x0A, 0x06,
+					 0x0E, 0x07, 0x10}},
+	{"F22Txxxx", {0x00, 0x11, 0x00, 0x00, 0x00, 0x34, 0x00, 0x52, 0x00, 0x73, 0x00, 0x94, 0x00, 0xBE, 0x00, 0xFA, 0x01,
+					 0x36, 0x01, 0x72, 0x01, 0xC5, 0x02, 0x2F, 0x02, 0xB9, 0x03, 0x60, 0x04, 0x1A, 0x05, 0x0A, 0x06,
+					 0x0E, 0x07, 0x10}},
+	{"F23Txxxx", {0x00, 0x11, 0x00, 0x00, 0x00, 0x34, 0x00, 0x52, 0x00, 0x73, 0x00, 0x94, 0x00, 0xBE, 0x00, 0xFA, 0x01,
+					 0x36, 0x01, 0x72, 0x01, 0xC5, 0x02, 0x2F, 0x02, 0xB9, 0x03, 0x60, 0x04, 0x1A, 0x05, 0x0A, 0x06,
+					 0x0E, 0x07, 0x10}},
 	{"F24Txxxx", {0x00, 0x11, 0x00, 0x01, 0x00, 0x34, 0x00, 0x52, 0x00, 0x73, 0x00, 0x94, 0x00, 0xBE, 0x00, 0xFA, 0x01,
+					 0x36, 0x01, 0x72, 0x01, 0xC5, 0x02, 0x2F, 0x02, 0xB9, 0x03, 0x60, 0x04, 0x1A, 0x05, 0x0A, 0x06,
+					 0x0E, 0x07, 0x10}},
+	{"Default",   {0x00, 0x11, 0x00, 0x00, 0x00, 0x34, 0x00, 0x52, 0x00, 0x73, 0x00, 0x94, 0x00, 0xBE, 0x00, 0xFA, 0x01,
 					 0x36, 0x01, 0x72, 0x01, 0xC5, 0x02, 0x2F, 0x02, 0xB9, 0x03, 0x60, 0x04, 0x1A, 0x05, 0x0A, 0x06,
 					 0x0E, 0x07, 0x10}},
 };

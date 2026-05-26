@@ -1,227 +1,236 @@
 # NootedGreen Implementation Plan — Real TGL (0x9A498086) on macOS Sonoma
 
-## Current Status: Stage 8/10 — Already Boots to Desktop with Metal
+## Current Status: Phase 1 Code Complete, Pre-Boot Verification Done
 
-**Verified from V1.0.4_2026-05-12_2254 and V1.0.4_2026-05-15_1135 boot logs:**
+**Last updated: 2026-05-25**
 
 | Capability | Status |
 |---|---|
 | macOS Sonoma 14.8.3 boot to login screen | ✅ Working |
 | Internal display 1920x1080 @ 60Hz | ✅ Working |
-| Metal: Supported (system_profiler) | ✅ Working |
 | DMC firmware v2.12 loaded | ✅ Working |
 | Power wells, forcewake, MMIO access | ✅ Working |
 | eDP link training (linkRate=24, bpp=10, laneCount=2) | ✅ Working |
 | AUX/DPCD communication | ✅ Working |
-| WindowServer + IOAccelerationUserClient | ✅ Working |
-| GuC scheduler (sched=3) | ✅ Working |
 | Host scheduler (sched=5, -disablegfxfirmware) | ✅ Working |
-| 15 display planes, 3 display paths | ✅ Working |
+| ERROR_GEN6=0x37 cleared before registerService | ✅ Fixed (kern_gen11.cpp:4836) |
+| Platform-ID 0x9A490000 injected | ✅ Fixed (kern_green.cpp:337) |
+| Backlight (AppleBacklight + MCCS disable + 11 panel LUT entries) | ✅ Implemented (kern_green.cpp) |
+| DTK HW kext (AppleIntelTGLGraphics.kext) verified & ready | ✅ Verified (Apple-signed, 1.8MB, 2922 symbols) |
+| 6 AppleIntelFramebufferController export stubs in NootedGreen | ✅ Built & confirmed (nm -Ug) |
+| Route audit (37 routes, kPANIC on failure) | ✅ Complete |
+| vtable hierarchy audit (4 kexts, all correct) | ✅ Complete |
+| DTK source verification (backlight, platform-ID, registers) | ✅ Complete |
+| Hybrid kext setup (DTK HW + le/ FB via HookCase) | ✅ Configured |
 | -allow3d (full 3D acceleration) | ❌ Not yet tested |
-| Platform-ID injection | ❌ Shows 0x00000000 |
-
-**The Big Sur TGL kexts load and function on Sonoma without IOGPUFamily ABI shims.** No vtable bridging is needed for basic display + Metal. The "IOGPUFamily ABI breakage" fear was unfounded — the real TGL `isRealTGL=true` path in NootedGreen handles the hardware-specific differences (GuC, forcewake, topology) natively, and the kexts themselves are binary-compatible with Sonoma's IOGPUFamily.
-
-**Scope: TGL only, Sonoma only.** Strip all ICL/RPL/ADL/legacy code.
+| CoreDisplay hash table crash | ⏳ Not yet verified |
+| **WindowServer high CPU (126%) on internal EFI boot** | 🔴 **Diagnosed — HW kext missing** |
 
 ---
 
-## Phase 0: Codebase Simplification
+## Real-Time Diagnostic: Internal EFI Fallback Boot (2026-05-25)
 
-Strip everything not needed for real TGL on Sonoma. The codebase has ~60% dead weight from ICL fallback and RPL/ADL spoofing paths.
+**Observed symptom:** WindowServer using 126.8% CPU at idle, UI sluggish
 
-### Step 0.1 — Remove ICL kext monitoring
-- Remove `callbackICLFB` and `callbackICLHW` watchers from `kern_start.cpp`
-- Remove ICL-specific route installations from `kern_gen11.cpp`
-- Remove `kern_genx.hpp/cpp` entirely (ICL-only display path)
-- Remove ICL personality publishing
-
-### Step 0.2 — Remove RPL/ADL spoof path
-- Remove `isRealTGL` flag and all branching — everything is real TGL now
-- Remove topology hardcodes (L3BankCount, MaxEUPerSubSlice, NumSubSlices)
-- Remove BCS bypass, DPCD clamping, IRQ watchdog, EMR enforcer, GPU health monitor
-- Remove BCS stop+clear, TLB invalidation, ERROR_GEN6 R/W clear
-- Remove MultiForceWakeSelect=1 injection, Master IRQ pre-enable
-- Simplify `IntelAccelerator::start()` — keep only the real TGL execution path
-
-### Step 0.3 — Remove unnecessary DYLD patches
-- `GetMTLTexture` NULL stub — real TGL creates textures
-- `GetMTLCommandQueue` NULL stub — real TGL creates command queues  
-- `RunFullDisplayPipe` NULL vcall guard — DisplayPipe is valid on real TGL
-- `AccessComplete` skip — works natively
-- `Display::Present` skip — works natively
-- ICL Metal device-ID bypass — TGL MTL driver is primary
-- CoreLSKD CPUID patch — legacy Haswell spoof
-- SkyLight bypass — legacy opt-in
-
-### Step 0.4 — Remove Ventura build artifacts
-- All `#if` kernel version checks for Ventura
-- Ventura-only binary patch variants
-- Ventura-only DYLD patch variants
-
-### Step 0.5 — Clean up support files
-- Remove `FirmwareADLP.cpp` (ADL-P firmware, not TGL)
-- Remove ICL-related boot-args (`-ngreenRefProbeF2`, etc.)
-- Flatten `sle_Internal/` — keep only the deployment le/ variant
-
-**Deliverable:** Clean TGL-only codebase. Verify existing boot still works after stripping.
-
----
-
-## Phase 1: Fix Non-Fatal Errors
-
-The system boots and displays, but has known non-fatal errors from the May 12 boot log.
-
-### Error 1: `ERROR_GEN6=0x37` during DisplayPipe init
-- **Observed:** MMIO read returns 0x37 at ERROR_GEN6 register during DisplayPipe creation
-- **Likely cause:** Stale GPU error state from early init. Gen6 registers hold pre-existing errors that Apple's driver doesn't expect on clean hardware
-- **Fix:** Add MMIO write to clear ERROR_GEN6 (write 0xFFFFFFFF to clear) before DisplayPipe init, or mask in the existing EMR enforcer logic
-- **Test:** Boot with verbose logging, verify ERROR_GEN6 reads as 0 after clear
-
-### Error 2: CoreDisplay DisplayPipe hash table insert error
-- **Observed:** WindowServer log shows C++ `std::__1::unique_ptr...hash_table...` exception during DisplayPipe creation
-- **Likely cause:** Duplicate pipe entry or stale state in CoreDisplay's display pipe tracking
-- **Fix:** Add DYLD patch or framebuffer property to suppress/skip duplicate pipe registration. Alternatively, ensure only one DisplayPipe is published initially (`-ngreenSinglePipe`)
-- **Test:** Boot, check WindowServer logs for hash table errors
-
-### Error 3: Platform-ID showing 0x00000000
-- **Observed:** dmesg shows "platform-id=0x00000000"
-- **Likely cause:** AAPL,ig-platform-id not injected by bootloader or NootedGreen
-- **Fix:** Add platform-ID injection in NootedGreen's IGPU property seeding. Use known TGL platform IDs (e.g., 0x8A987600 for TGL-U with 2 ports, or 0x8A987601 for TGL-H)
-- **Test:** Boot, verify platform-id shows expected value
-
-### Error 4: `IOPresentment` interface creation error 0x815
-- **Observed:** WindowServer log shows error 0x815 during IOPresentment setup
-- **Likely cause:** VSync/display link setup issue. Presentment is tied to display timing
-- **Fix:** Likely harmless — verify display timing is correct. If persistent, trace via HookCase
-
-### Error 5: `IOFBSetDisplayModeAndDepth` failures
-- **Observed:** Gracefully handled failures during mode setting
-- **Likely cause:** Mode timing negotiation between framebuffer and display
-- **Fix:** Likely harmless (handled gracefully). Monitor for regressions
-
-**Deliverable:** Clean boot log — no ERROR_GEN6, no CoreDisplay exceptions, valid platform-ID.
-
----
-
-## Phase 2: Debug Infrastructure
-
-### Step 2.1 — Build version logging
-- Print NootedGreen version, git commit, build date at plugin start
-- Boot arg `-ngreenVerbose` for increased verbosity
-
-### Step 2.2 — Boot-stage markers
-- Add `[NGreen Stage X/Y]` markers at each init stage
-- Confirm all 5 stages complete in kernel log
-
-### Step 2.3 — IGPU property dump
-- Log device-id, vendor-id, platform-id, model at match time
-- Confirm spoofed device-id 0x9A49
-
-### Step 2.4 — Firmware decision logging
-- Log GuC (SKIP/LOAD/ERROR), HuC (SKIP/LOAD/ERROR), DMC (LOADED/ERROR)
-- Currently: DMC loaded, GuC depends on boot args
-
-### Step 2.5 — Kext component tracer
-- Log when AppleIntelTGLGraphicsFramebuffer and AppleIntelTGLGraphics are processed
-- Confirm all expected routes applied
-
-**Deliverable:** Every boot produces a clear log trail from kext load through desktop.
-
----
-
-## Phase 3: Test `-allow3d` (Full 3D Acceleration)
-
-This is the single biggest untested item. The May 12 report explicitly recommended testing it.
-
-### Step 3.1 — Test with host scheduler
-```bash
-Boot args: -allow3d -disablegfxfirmware ngreenSched=5 -v -liludbgall
+### IORegistry / Kext State on Current Boot
 ```
-- Expected: GPU 3D acceleration functional
-- Monitor for: GPU hangs, KPs, display corruption, CoreDisplay crashes
+# Loaded graphics kexts:
+    as.vit9696.Lilu (1.7.3)                              ✓ (OpenCore injection)
+    com.StezzaPilot.NootedGreen (1.0.4)                  ✓ (OpenCore injection)
+    com.xxxxx.driver.AppleIntelTGLGraphicsFramebuffer     ✓ (/Library/Extensions/, le/ FB)
+    com.apple.iokit.IOAcceleratorFamily2                  ✓ (framework only)
+  ⚠ com.apple.driver.AppleIntelTGLGraphics            ❌ NOT LOADED — not installed on /S/L/E
 
-### Step 3.2 — Test with GuC scheduler
-```bash
-Boot args: -allow3d ngreenSched=3 -v -liludbgall
+# IGPU IORegistry key properties:
+    "device-id" = <499a0000>        ✓ 0x9A49
+    "model" = "Intel HD Graphics TGL CRB"   ✓ (from ACPI)
+    "IOPCIAccelerationGpu" = <01>   ✓
+    "IOAccelCaps" = <00001000>      ⚠ Minimal caps — no real acceleration
+    "MetalPluginName" = "AppleIntelTGLGraphics"  ✓ (name via NootedGreen)
+  ⚠ "AAPL,ig-platform-id" = ABSENT — NootedGreen v1.0.4 predates platform-ID fix
+
+# No IOGPUDevice service:         ⚠ No HW kext provider
+# No IOAccelerator service:       ⚠ No GPU acceleration
+# No GL/MTL driver kexts:         ⚠ Not loaded (depend on IOGPUDevice matching)
+
+# Boot-args:
+    itlwm_cc=US -v keepsyms=1 debug=0x100 -NGreenDebug ngreen-dmc=tgl
+    -disablegfxfirmware ngreenSched=5
+  ⚠ Missing -ngreenforceprops (needed for property injection)
 ```
-- Expected: GuC handles scheduling, 3D acceleration works
-- Monitor for: GuC initialization errors, H2G/G2H failures, CSB mismatch
 
-### Step 3.3 — Test OpenGL fallback
-- Verify AppleIntelTGLGraphicsGLDriver.bundle loads
-- Test OpenGL apps (Quartz GL, OpenGL Profiler)
+### Root Cause of WindowServer 126% CPU
+1. **HW kext (AppleIntelTGLGraphics.kext) is NOT installed** on the system volume
+2. Without it, no IOGPUDevice provider exists → no IOAccelerator created
+3. FB kext loads in isolation — display works at 1920x1080 via CPU fallback
+4. WindowServer detects no GPU → falls back to **software compositing**
+5. All UI rendering done on CPU → 126.8% CPU at idle for 1080p
+6. `system_profiler` reports "Metal: Supported" from IORegistry property but no real GPU device backs it — Metal calls would be NULL-path or fail silently
 
-### Step 3.4 — Test hardware video encode/decode
-- Verify AppleIntelTGLGraphicsVADriver.bundle + VAME load
-- Test with VideoToolbox-based app (QuickTime Player, Final Cut)
+### Why Our Test USB EFI Won't Have This Problem
+- HW kext injected via OpenCore (or installed to /S/L/E on test volume)
+- NootedGreen with platform-ID fix injects `AAPL,ig-platform-id` = 0x9A490000
+- Boot-args include `-ngreenforceprops` to enable property injection
+- With HW kext + platform-ID → IOGPUDevice → IOAccelerator → GL/MTL kexts → real acceleration
 
-**Deliverable:** 3D acceleration, OpenGL, and video encode/decode functional. No GPU hangs.
-
----
-
-## Phase 4: Stabilization
-
-### Step 4.1 — Crash-driven patching
-- Collect crash logs from Phase 3 testing
-- Add binary patches or DYLD patches as needed
-- Iterate: test → crash → patch → retest
-
-### Step 4.2 — Display quality
-- Verify smooth cursor (no stutter)
-- Verify correct color depth (30-bit if supported)
-- Verify display mode switching (resolution/refresh rate)
-
-### Step 4.3 — Backlight
-- Re-enable AppleBacklight kext watcher routes (currently commented out)
-- Inject 7 backlight LUT tables (already in codebase)
-- Test brightness keys
-
-### Step 4.4 — Boot-arg cleanup
-- Document all relevant boot-args
-- Remove stale debug boot-args that no longer apply
-- Add `-ngreenHelp` to print available boot-args
-
-### Step 4.5 — Remove unnecessary DYLD patches
-- After validating that real TGL paths work, remove NULL stubs and guards
-- Only keep: cs_validate_page hook, bundle path redirect, IGC path rewrite, CoreDisplay assertion bypass, VideoToolbox/AppleGVA spoofs
-
-**Deliverable:** Stable daily-driver. Clean boot, no crashes, backlight works.
+### What We Verified Is Correct for Our Setup
+- **DTK HW kext** Apple-signed (com.apple.driver.AppleIntelTGLGraphics, 1.8MB, 2922 exported symbols) — confirmed valid in `sle_Internal/sle/`
+- **Platform-ID** value 0x9A490000 (bytes `{0x00,0x00,0x49,0x9A}`) — matches DTK `getPlatformID()` fallback return value 2588475392
+- **ERROR_GEN6** register 0x40A0 register procedure — R/W type verified via MMIO sweep
+- **Backlight registers** 0xC8250 (enable), 0xC8254 (frequency), 0xC8258 (duty cycle) — confirmed in DTK `hwSetBacklight` and `CamelliaBase::SetDPCDBacklight`
+- **DPCD address** 0x722 — confirmed in DTK `SetDPCDBacklight` AUX write
+- **Export stubs** — all 6 symbols match DTK declarations exactly (nm -Ug confirmed)
+- **37 route symbols** — all confirmed present in DTK source with matching mangled names
+- **AppleMCCSControl::probe** return-zero — correct approach verified; MCCS is a separate kext competing for backlight ownership via AppleMCCSParameterHandler protocol
 
 ---
 
-## Current Resource Situation (from log analysis)
+## Phase 0: Codebase Simplification (DONE)
 
-**The TGL kexts (v16.0.32, Big Sur) work on Sonoma 14.8.3.** They load via modified `com.xxxxx.driver.*` bundle IDs with `IOPCIPrimaryMatch` set appropriately. The real TGL `isRealTGL=true` path is active and handles:
-- GuC firmware loading (when not disabled)
-- DMC firmware loading (ngreen-dmc=tgl)
-- Native forcewake
-- Native eDP link training (linkRate=24, laneCount=2)
-- Native topology detection
+All Phase 0 steps completed:
 
-**What we know works** (from ioreg and system_profiler evidence):
-- AppleIntelTGLGraphicsFramebuffer v16.0.0 loaded
-- AppleIntelFramebufferController active  
-- AppleIntelPowerWell active
-- AppleIntelPortHAL active
-- 15 AppleIntelPlane instances
-- 3 AppleIntelDisplayPath instances
-- IOAcceleratorFamily2 loaded, IOAccelerationUserClient created by WindowServer
-
-**The ICL/RPL/ADL code paths are dead code** — this is real TGL hardware, none of those paths are ever taken. Stripping them reduces code size by ~60% and eliminates potential confusion.
+- **0.1** — ICL kext monitoring: `kern_genx.cpp`, `kern_genx.hpp` removed. ICL callbacks stripped from `kern_start.cpp`.
+- **0.2** — RPL/ADL spoof path: `isRealTGL` and all branching, topology hardcodes, BCS bypass, DPCD clamping, IRQ watchdog, EMR enforcer, GPU health monitor, BCS stop+clear, TLB invalidation, ERROR_GEN6 R/W clear (moved to Phase 1 fix), MultiForceWakeSelect=1, Master IRQ pre-enable all removed. `IntelAccelerator::start()` simplified.
+- **0.3** — Unnecessary DYLD patches: `GetMTLTexture` NULL stub, `GetMTLCommandQueue` NULL stub, `AccessComplete` skip, `Display::Present` skip, ICL Metal device-ID bypass, CoreLSKD CPUID patch, SkyLight bypass all removed. `RunFullDisplayPipe` NULL vcall guard kept but stage-gated.
+- **0.4** — Ventura build artifacts: All `#if` kernel version checks, Ventura binary patch variants, Ventura DYLD patch variants removed.
+- **0.5** — Support files: `FirmwareADLP.cpp` removed. ICL boot-args removed.
 
 ---
 
-## Summary of What to Build
+## Phase 1: Fix Boot Errors (DONE — Code Complete, Awaits Boot Test)
 
-| Item | Type | Effort |
-|---|---|---|
-| Codebase cleanup (strip ICL/RPL/ADL) | Code removal | 1 day |
-| ERROR_GEN6=0x37 clear | MMIO patch | 2 hours |
-| CoreDisplay hash table error | DYLD patch | 2-4 hours |
-| Platform-ID injection | Property injection | 2 hours |
-| -allow3d testing | Test + iterate | 1-2 days |
-| Build version + stage logging | Logging | 2 hours |
-| Backlight re-enable | Kext route | 4 hours |
-| Boot-arg documentation | Docs | 1 hour |
-| **Total remaining work** | | **~3-4 days** |
+### Fix 1: ERROR_GEN6=0x37
+- **Root cause:** Register 0x40A0 (ERROR_GEN6 per Intel i915 docs) holds stale GT-level error state from early init. Apple's DTK driver never touches this register — Apple only clears display error registers 0x44030/0x44038/0x44050/0x44054 in `hwEnableInterrupts`. (DTK source confirmation: no reference to register 0x40A0 exists anywhere in AppleIntelTGLGraphicsFramebuffer.c or AppleIntelTGLGraphics_kasan.c.)
+- **Fix:** Added read-and-clear of ERROR_GEN6 (write 0x0, proven R/W by register sweep) before `service->registerService()` in the fbcontroller path (`kern_gen11.cpp:4836-4841`).
+- **Verification:** Boot log will show ERROR_GEN6=0x0 at registerService time.
+
+### Fix 2: Platform-ID=0x00000000
+- **Root cause:** `seedIGPUPropertiesOnEntry()` was conditionally skipped (gated by `isRealTGL` flag which was only set from `getPlatformID()` — a chicken-and-egg problem). `ogetPlatformID` function exists in header but is dead code (never referenced in any RouteRequest array).
+- **Fix:** Made `seedIGPUPropertiesOnEntry()` unconditional. Injects `AAPL,ig-platform-id` = `{0x00, 0x00, 0x49, 0x9A}` = 0x9A490000 little-endian (verified from DTK source `getPlatformID()` fallback returns 2588475392 = 0x9A490000) into IORegistry (`kern_green.cpp:337-338`).
+- **Verification:** `ioreg -p IODeviceTree -n IGPU -r | grep platform-id` will show 0x9a490000.
+
+### Fix 3: Hybrid Kext Setup (DTK HW + le/ FB)
+- **Root cause:** The `le/` FB kext in `/Library/Extensions/` has `org.smichaud.HookCase` dependency (HookCase-instrumented, 966KB larger at 3.9MB vs DTK's 2.9MB). The DTK FB kext cannot load on Sonoma due to 6 unresolved AppleIntelFramebufferController symbols that no loaded kext provides.
+- **Fix:** **Dual-kext approach:**
+  - **HW:** Apple-signed DTK AppleIntelTGLGraphics.kext (com.apple.driver.*) — installed to /S/L/E/
+  - **FB:** HookCase-dependent le/ FB kext (com.xxxxx.driver.*) — stays at /Library/Extensions/
+  - **Export stubs:** NootedGreen exports the 6 AppleIntelFramebufferController symbols the DTK FB needs (for future DTK FB enablement)
+- **Verification:** `kextstat | grep AppleIntelTGLGraphics` shows HW loaded from /S/L/E, FB from /Library/Extensions/
+
+### Fix 4: Backlight Re-enabled
+- **Root cause:** All backlight code was commented out during Phase 0 refactoring (watcher registrations, RouteRequests, processKext handler, panel data injection).
+- **Fix:** Re-enabled:
+  - `kextBacklight` and `kextMCCSControl` watcher registrations in `init()`
+  - `AppleIntelPanel::setDisplay` RouteRequest + `F%uT%04x` → `F%uTxxxx` format-string patch
+  - `AppleMCCSControl::probe` route (returns zero to prevent DDC/CI backlight conflict)
+  - 11 panel data entries (F14-F24Txxxx + Default) for AppleBacklight matching
+  - See `kern_green.cpp:270-272, 577-592, 650+`
+- **Note:** The DTK FB source `hwSetBacklight` confirms PWM path: DPCD AUX write to 0x722 + MMIO write to 0xC8258 (duty cycle). Register 0xC8254 is the frequency register (not duty cycle — comment in kern_gen11.cpp:2520 is slightly misleading but values are correct).
+
+### Errors NOT Fixed (Harmless, Deferred):
+- **IOPresentment interface creation error 0x815** — VSync/display link setup, known harmless on TGL.
+- **IOFBSetDisplayModeAndDepth failures** — Gracefully handled by WindowServer, no functional impact.
+
+---
+
+## Route & vtable Audit Findings (Complete)
+
+### Route Audit (kern_gen11.cpp)
+- **37 routes** across FB + HW kexts. All use PANIC_COND on failure — any symbol mismatch causes instant kernel panic, making silent failures impossible.
+- **3 dead/stale routes found, harmless:**
+  - `wrapCDClockFrequency` — never looked up by Lilu
+  - `wrapInitCDClock` — never looked up by Lilu
+  - `wrapForceWakeMultiThreaded` — never looked up by Lilu
+  - These become nops. Safe to remove but not causing issues.
+- **`ogetPlatformID`** — Declared in `kern_gen11.hpp:1432` but NEVER referenced in any RouteRequest array. Dead code. Safe to strip.
+
+### vtable Hierarchy Audit
+All 4 kexts have correct OSObject specialization inheritance:
+- **AppleIntelTGLGraphics** (HW) → IOGPUDevice (4 virtual functions)
+- **AppleIntelTGLGraphicsFramebuffer** (FB) → IOFramebuffer (30 virtual functions)
+- **AppleIntelTGLGraphicsGLDriver** (GL) → IOGLDrv (10 virtual functions)
+- **AppleIntelTGLGraphicsMTLDriver** (MTL) → IOGPUDrv (8 virtual functions)
+
+All have correct OSObject meta class initialization, superclass linkage, and vtable copy chains. No issues found.
+
+### DYLD Patch Audit
+- **`-allow3d` is purely advisory** — code NEVER checks `request3D` to abort acceleration. Metal path runs regardless. `-allow3d` only sets `NGreenAllow3DRequested` IORegistry property for diagnostic purposes.
+- **`RunFullDisplayPipe` NULL guard** — only active at `fullMTLStage >= 3` (boot-arg `ngreenFullMTLStage=3`). Default stage 0 has only assertion bypass. No functional impact at default settings.
+- **Backlight patches** — NOW ACTIVE: `orgApplePanelSetDisplay`, ApplePanel LUT injection, `AppleMCCSControl::probe` disable. Stock Sonoma AppleBacklight.kext controls PWM via FB kext's MMIO registers (0xC8250 range on TGL).
+
+---
+
+## Phase 2: USB EFI Deployment & Testing (NEXT)
+
+### Prerequisites on USB EFI
+**CRITICAL: The HW kext (AppleIntelTGLGraphics.kext) MUST be injected.** Without it, acceleration won't work and WindowServer will fall back to software rendering (126% CPU as observed on current boot).
+
+**Method A — OpenCore Kext Injection (Recommended for USB EFI):**
+```
+EFI/OC/Kexts/
+  Lilu.kext
+  NootedGreen.kext          ← build/Release/NootedGreen.kext
+  AppleIntelTGLGraphics.kext  ← from sle_Internal/sle/ (DTK HW kext)
+```
+- Add all 3 kexts to config.plist Kernel > Add (with correct bundle IDs, plist paths)
+- FB kext stays at /Library/Extensions/ (le/, loaded by Lilu/NootedGreen watcher)
+- No need to bless snapshots on the USB volume
+
+**Method B — /S/L/E Install (for internal EFI test):**
+```bash
+sudo mount -uw /
+sudo cp -R sle_Internal/sle/AppleIntelTGLGraphics.kext /System/Library/Extensions/
+sudo chown -R root:wheel /System/Library/Extensions/AppleIntelTGLGraphics.kext
+sudo kmutil install --update-all --volume-root /
+sudo bless --mount / --bootefi --create-snapshot --setBoot
+```
+
+### Step 1: Boot Configuration
+**Boot-args (first boot, no -allow3d):**
+```
+-v keepsyms=1 debug=0x100 -NGreenDebug ngreen-dmc=tgl -disablegfxfirmware ngreenSched=5 -ngreenforceprops
+```
+Note: This is current boot-args + `-ngreenforceprops`. The existing args (`itlwm_cc=US`, debug flags) should be preserved.
+
+### Step 2: Verification Checks (dmesg / IORegistry / ps)
+```
+# Expected:
+✓ "AAPL,ig-platform-id" = <00000000 49009a00> (0x9A490000)
+✓ ERROR_GEN6=0x0 at registerService time
+✓ AppleIntelTGLGraphics (HW) loaded           ← kextstat | grep AppleIntelTGL
+✓ AppleIntelTGLGraphicsFramebuffer (FB) loaded ← kextstat | grep Framebuffer
+✓ IOGPUDevice service exists                  ← ioreg -rc IOGPUDevice
+✓ IOAccelerator service exists                ← ioreg -rc IOAccelerator
+✓ WindowServer CPU < 15% at idle              ← ps aux | grep WindowServer
+
+# If clean, proceed to Step 3.
+```
+
+### Step 3: Full Acceleration Test
+**Boot-args:**
+```
+-v keepsyms=1 debug=0x100 -NGreenDebug ngreen-dmc=tgl -disablegfxfirmware ngreenSched=5 -ngreenforceprops -allow3d ngreenFullMTLStage=3
+```
+- **Verify:** Metal acceleration working (`system_profiler SPDisplaysDataType` shows Metal with feature set)
+- **Test:** Run a Metal app, check for GPU hangs, KPs, display corruption
+- **Monitor:** WindowServer CPU should be < 10% at idle
+
+---
+
+## Phase 3: If CoreDisplay Hash Table Crash Persists (CONTINGENCY)
+
+If platform-ID injection doesn't resolve the CoreDisplay hash table crash:
+- **Root cause:** C++ exception in `std::__1::__hash_table::__construct_node` during `Framebuffer::Framebuffer` → `GPU::GPU` → `GPUWranglerRegisterEventBlock`. Caught and logged by CoreDisplay; system continues.
+- **Fix:** Implement DYLD patch to intercept the Framebuffer::Framebuffer constructor. Need target machine's CoreDisplay binary to extract the exact signature.
+- **Test:** Check WindowServer log for "hash_table" errors after boot.
+
+---
+
+## Phase 4: Stabilization (FUTURE)
+
+- **DTK FB kext adoption** — requires new byte-pattern LookupPatches (~15 patches) for the DTK FB binary (different from le/ FB)
+- **Display quality:** Verify smooth cursor, correct color depth, mode switching
+- **Video encode/decode:** Test AppleIntelTGLGraphicsVADriver.bundle + VAME
+- **Boot-arg cleanup:** Document all relevant boot-args, add `-ngreenHelp`
+- **Remove unnecessary DYLD patches:** After validation, strip NULL stubs and guards
+- **NootedGreen v1.0.5 release** — after all Phase 1 fixes validated on real TGL hardware
