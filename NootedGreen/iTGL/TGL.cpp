@@ -180,11 +180,11 @@ static KernelPatcher::KextInfo kextG11FBT {"com.xxxxx.driver.AppleIntelTGLGraphi
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
-// TGL HW — Apple-signed (loaded from /System/Library/Extensions/)
+// TGL HW — HookCase le/variant (loaded from /Library/Extensions/)
 static const char *pathsTGLHW[] = {
-    "/System/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
+    "/Library/Extensions/AppleIntelTGLGraphics.kext/Contents/MacOS/AppleIntelTGLGraphics",
 };
-static KernelPatcher::KextInfo kextG11HWT {"com.apple.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
+static KernelPatcher::KextInfo kextG11HWT {"com.xxxxx.driver.AppleIntelTGLGraphics", pathsTGLHW, 1,
     {false, false, false, true}, {},
     KernelPatcher::KextInfo::Unloaded};
 
@@ -4660,7 +4660,7 @@ bool Gen11::AppleIntelBaseControllerstart(void *that,void *param_1)
 			auto *dict = OSDictionary::withCapacity(25);
 			if (dict) {
 				const bool useTglNames = callback && callback->tglHWLoaded;
-				const char *bundleId = useTglNames ? "com.apple.driver.AppleIntelTGLGraphics" : "com.apple.driver.AppleIntelICLGraphics";
+				const char *bundleId = useTglNames ? "com.xxxxx.driver.AppleIntelTGLGraphics" : "com.apple.driver.AppleIntelICLGraphics";
 				const char *mtlName = useTglNames ? "AppleIntelTGLGraphicsMTLDriver" : "AppleIntelICLGraphicsMTLDriver";
 				const char *glName = useTglNames ? "AppleIntelTGLGraphicsGLDriver" : "AppleIntelICLGraphicsGLDriver";
 				const char *vaName = useTglNames ? "AppleIntelTGLGraphicsVADriver" : "AppleIntelICLGraphicsVADriver";
