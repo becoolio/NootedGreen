@@ -2,7 +2,7 @@
 //  details.
 
 #pragma once
-//#include "kern_netdbg.hpp"
+//#include "NetDbg.hpp"
 #include <Headers/kern_patcher.hpp>
 #include <Headers/kern_iokit.hpp>
 #include <IOKit/pci/IOPCIDevice.h>
@@ -57,9 +57,6 @@ class NGreen {
 	WIOKit::t_PCIConfigRead16 orgConfigRead16 {nullptr};
 	WIOKit::t_PCIConfigRead32 orgConfigRead32 {nullptr};
 	
-	OSMetaClass *metaClassMap[4][2] = {{nullptr}};
-	mach_vm_address_t orgSafeMetaCast {0};
-	static OSMetaClassBase *wrapSafeMetaCast(const OSMetaClassBase *anObject, const OSMetaClass *toMeta);
 	
 	static size_t wrapFunctionReturnZero();
 	

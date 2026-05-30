@@ -23,16 +23,13 @@
 		2EE18C1A2CE558A300E96D38 /* Firmware.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EE18C182CE558A300E96D38 /* Firmware.cpp */; };
 		2EE18C1B2CE558A300E96D38 /* Firmware.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 2EE18C192CE558A300E96D38 /* Firmware.hpp */; };
 		CE405ED91E4A080700AA0B3D /* plugin_start.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CE405ED81E4A080700AA0B3D /* plugin_start.cpp */; };
-		F009B7A129E4EE3C00786AFF /* kern_start.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F009B7A029E4EE3C00786AFF /* kern_start.cpp */; };
-		F009B7A329E4EEBA00786AFF /* kern_green.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F009B7A229E4EEBA00786AFF /* kern_green.cpp */; };
-		F067C22629D84710004BB52E /* (null) in Sources */ = {isa = PBXBuildFile; };
-		F0A4BE592A1996E40031D569 /* kern_model.hpp in Headers */ = {isa = PBXBuildFile; fileRef = F0A4BE572A1996E40031D569 /* kern_model.hpp */; };
-		F0AF08BB2A0F373F00B63C2B /* kern_gen11.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F0AF08B92A0F373F00B63C2B /* kern_gen11.cpp */; };
-		F0AF08BC2A0F373F00B63C2B /* kern_gen11.hpp in Headers */ = {isa = PBXBuildFile; fileRef = F0AF08BA2A0F373F00B63C2B /* kern_gen11.hpp */; };
-		F0B49E9529D93A600067BE5B /* (null) in Headers */ = {isa = PBXBuildFile; };
-		F0B49E9629D93A600067BE5B /* (null) in Sources */ = {isa = PBXBuildFile; };
-		F0BB9E552A57A0340081F5FA /* kern_patcherplus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F0BB9E532A57A0340081F5FA /* kern_patcherplus.cpp */; };
-		F0BB9E562A57A0340081F5FA /* kern_patcherplus.hpp in Headers */ = {isa = PBXBuildFile; fileRef = F0BB9E542A57A0340081F5FA /* kern_patcherplus.hpp */; };
+		2E0000112CE558A400E96D4B /* TGL.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E0000012CE558A400E96D3B /* TGL.cpp */; };
+		2E0000122CE558A400E96D4C /* TGL.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 2E0000022CE558A400E96D3C /* TGL.hpp */; };
+		2E0000132CE558A400E96D4D /* NGreen.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E0000032CE558A400E96D3D /* NGreen.cpp */; };
+		2E0000152CE558A400E96D4F /* PluginStart.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E0000052CE558A400E96D3F /* PluginStart.cpp */; };
+		2E0000162CE558A400E96D50 /* Model.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 2E0000062CE558A400E96D40 /* Model.hpp */; };
+		2E0000172CE558A400E96D51 /* PatcherPlus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E0000072CE558A400E96D41 /* PatcherPlus.cpp */; };
+		2E0000182CE558A400E96D52 /* PatcherPlus.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 2E0000082CE558A400E96D42 /* PatcherPlus.hpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -64,6 +61,16 @@
 		2E5BF5822BCC212F0095BDCF /* HDMI.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = HDMI.hpp; sourceTree = "<group>"; };
 		2E7C04D52C8A51F000B07113 /* IGGucBinary.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IGGucBinary.h; sourceTree = "<group>"; };
 		2E7C04D62C8A51F000B07113 /* IGHucBinary.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IGHucBinary.h; sourceTree = "<group>"; };
+		2E0000012CE558A400E96D3B /* TGL.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = TGL.cpp; sourceTree = "<group>"; };
+		2E0000022CE558A400E96D3C /* TGL.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = TGL.hpp; sourceTree = "<group>"; };
+		2E0000032CE558A400E96D3D /* NGreen.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = NGreen.cpp; sourceTree = "<group>"; };
+		2E0000042CE558A400E96D3E /* NGreen.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = NGreen.hpp; sourceTree = "<group>"; };
+		2E0000052CE558A400E96D3F /* PluginStart.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = PluginStart.cpp; sourceTree = "<group>"; };
+		2E0000062CE558A400E96D40 /* Model.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = Model.hpp; sourceTree = "<group>"; };
+		2E0000072CE558A400E96D41 /* PatcherPlus.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = PatcherPlus.cpp; sourceTree = "<group>"; };
+		2E0000082CE558A400E96D42 /* PatcherPlus.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = PatcherPlus.hpp; sourceTree = "<group>"; };
+		2E0000092CE558A400E96D43 /* NetDbg.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = NetDbg.cpp; sourceTree = "<group>"; };
+		2E00000A2CE558A400E96D44 /* NetDbg.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = NetDbg.hpp; sourceTree = "<group>"; };
 		2EE18C182CE558A300E96D38 /* Firmware.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Firmware.cpp; sourceTree = "<group>"; };
 		2EE18C192CE558A300E96D38 /* Firmware.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = Firmware.hpp; sourceTree = "<group>"; };
 		CE405EBA1E49DD7100AA0B3D /* kern_compression.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = kern_compression.hpp; sourceTree = "<group>"; };
@@ -79,14 +86,7 @@
 		CE405ED21E49F9FC00AA0B3D /* kern_api.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = kern_api.hpp; sourceTree = "<group>"; };
 		CE405ED81E4A080700AA0B3D /* plugin_start.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = plugin_start.cpp; sourceTree = "<group>"; };
 		CE405EDA1E4A080F00AA0B3D /* plugin_start.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = plugin_start.hpp; sourceTree = "<group>"; };
-		F009B7A029E4EE3C00786AFF /* kern_start.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = kern_start.cpp; sourceTree = "<group>"; };
-		F009B7A229E4EEBA00786AFF /* kern_green.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = kern_green.cpp; sourceTree = "<group>"; };
-		F067C20329D82E57004BB52E /* kern_green.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = kern_green.hpp; sourceTree = "<group>"; };
-		F0A4BE572A1996E40031D569 /* kern_model.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = kern_model.hpp; sourceTree = "<group>"; };
-		F0AF08B92A0F373F00B63C2B /* kern_gen11.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = kern_gen11.cpp; sourceTree = "<group>"; };
-		F0AF08BA2A0F373F00B63C2B /* kern_gen11.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = kern_gen11.hpp; sourceTree = "<group>"; };
-		F0BB9E532A57A0340081F5FA /* kern_patcherplus.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = kern_patcherplus.cpp; sourceTree = "<group>"; };
-		F0BB9E542A57A0340081F5FA /* kern_patcherplus.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = kern_patcherplus.hpp; sourceTree = "<group>"; };
+
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -120,32 +120,66 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		2E00000B2CE558A400E96D4B /* iTGL */ = {
+			isa = PBXGroup;
+			children = (
+				2E0000012CE558A400E96D3B /* TGL.cpp */,
+				2E0000022CE558A400E96D3C /* TGL.hpp */,
+				5AA100023D9A000100000001 /* TglGpuBringup.cpp */,
+				5AA100043D9A000100000001 /* TglGpuBringup.hpp */,
+				5AA100063D9A000100000001 /* RcsEngineTrace.cpp */,
+				5AA100083D9A000100000001 /* RcsEngineTrace.hpp */,
+				2E5BF5812BCC212F0095BDCF /* HDMI.cpp */,
+				2E5BF5822BCC212F0095BDCF /* HDMI.hpp */,
+			);
+			path = iTGL;
+			sourceTree = "<group>";
+		};
+		2E00000C2CE558A400E96D4C /* Hotfixes */ = {
+			isa = PBXGroup;
+			children = (
+				2E315A602BC6EA4D008411AA /* DYLDPatches.cpp */,
+				2E315A5F2BC6EA4D008411AA /* DYLDPatches.hpp */,
+			);
+			path = Hotfixes;
+			sourceTree = "<group>";
+		};
+		2E00000D2CE558A400E96D4D /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				2E0000072CE558A400E96D41 /* PatcherPlus.cpp */,
+				2E0000082CE558A400E96D42 /* PatcherPlus.hpp */,
+				2E0000062CE558A400E96D40 /* Model.hpp */,
+				2E0000092CE558A400E96D43 /* NetDbg.cpp */,
+				2E00000A2CE558A400E96D44 /* NetDbg.hpp */,
+				2E1CC3E12BA5DBD9004EC8F6 /* DisplayMergeNub.cpp */,
+				2E1CC3E02BA5DBD9004EC8F6 /* DisplayMergeNub.h */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		2E00000E2CE558A400E96D4E /* Firmware */ = {
+			isa = PBXGroup;
+			children = (
+				2E7C04D52C8A51F000B07113 /* IGGucBinary.h */,
+				2E7C04D62C8A51F000B07113 /* IGHucBinary.h */,
+			);
+			path = Firmware;
+			sourceTree = "<group>";
+		};
 		1C748C291C21952C0024EED2 /* NootedGreen */ = {
 			isa = PBXGroup;
 			children = (
 				1C748C2E1C21952C0024EED2 /* Info.plist */,
 				2EE18C182CE558A300E96D38 /* Firmware.cpp */,
 				2EE18C192CE558A300E96D38 /* Firmware.hpp */,
-				5AA100063D9A000100000001 /* RcsEngineTrace.cpp */,
-				5AA100083D9A000100000001 /* RcsEngineTrace.hpp */,
-				5AA100023D9A000100000001 /* TglGpuBringup.cpp */,
-				5AA100043D9A000100000001 /* TglGpuBringup.hpp */,
-				2E7C04D52C8A51F000B07113 /* IGGucBinary.h */,
-				2E7C04D62C8A51F000B07113 /* IGHucBinary.h */,
-				2E5BF5812BCC212F0095BDCF /* HDMI.cpp */,
-				2E5BF5822BCC212F0095BDCF /* HDMI.hpp */,
-				2E315A602BC6EA4D008411AA /* DYLDPatches.cpp */,
-				2E315A5F2BC6EA4D008411AA /* DYLDPatches.hpp */,
-				2E1CC3E12BA5DBD9004EC8F6 /* DisplayMergeNub.cpp */,
-				2E1CC3E02BA5DBD9004EC8F6 /* DisplayMergeNub.h */,
-				F0AF08B92A0F373F00B63C2B /* kern_gen11.cpp */,
-				F0AF08BA2A0F373F00B63C2B /* kern_gen11.hpp */,
-				F0A4BE572A1996E40031D569 /* kern_model.hpp */,
-				F009B7A229E4EEBA00786AFF /* kern_green.cpp */,
-				F067C20329D82E57004BB52E /* kern_green.hpp */,
-				F0BB9E532A57A0340081F5FA /* kern_patcherplus.cpp */,
-				F0BB9E542A57A0340081F5FA /* kern_patcherplus.hpp */,
-				F009B7A029E4EE3C00786AFF /* kern_start.cpp */,
+				2E0000032CE558A400E96D3D /* NGreen.cpp */,
+				2E0000042CE558A400E96D3E /* NGreen.hpp */,
+				2E0000052CE558A400E96D3F /* PluginStart.cpp */,
+				2E00000B2CE558A400E96D4B /* iTGL */,
+				2E00000C2CE558A400E96D4C /* Hotfixes */,
+				2E00000D2CE558A400E96D4D /* Utilities */,
+				2E00000E2CE558A400E96D4E /* Firmware */,
 			);
 			path = NootedGreen;
 			sourceTree = "<group>";
@@ -203,18 +237,17 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F0AF08BC2A0F373F00B63C2B /* kern_gen11.hpp in Headers */,
-				5AA100073D9A000100000001 /* RcsEngineTrace.hpp in Headers */,
+						5AA100073D9A000100000001 /* RcsEngineTrace.hpp in Headers */,
 				5AA100033D9A000100000001 /* TglGpuBringup.hpp in Headers */,
 				2E315A612BC6EA4D008411AA /* DYLDPatches.hpp in Headers */,
 				2E1CC3E22BA5DBD9004EC8F6 /* DisplayMergeNub.h in Headers */,
 				2E7C04D82C8A51F000B07113 /* IGHucBinary.h in Headers */,
 				2E7C04D72C8A51F000B07113 /* IGGucBinary.h in Headers */,
 				2E5BF5842BCC212F0095BDCF /* HDMI.hpp in Headers */,
-				F0A4BE592A1996E40031D569 /* kern_model.hpp in Headers */,
-				F0B49E9529D93A600067BE5B /* (null) in Headers */,
-				F0BB9E562A57A0340081F5FA /* kern_patcherplus.hpp in Headers */,
 				2EE18C1B2CE558A300E96D38 /* Firmware.hpp in Headers */,
+				2E0000122CE558A400E96D4C /* TGL.hpp in Headers */,
+				2E0000162CE558A400E96D50 /* Model.hpp in Headers */,
+				2E0000182CE558A400E96D52 /* PatcherPlus.hpp in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -315,19 +348,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F009B7A129E4EE3C00786AFF /* kern_start.cpp in Sources */,
-				F067C22629D84710004BB52E /* (null) in Sources */,
-				5AA100053D9A000100000001 /* RcsEngineTrace.cpp in Sources */,
+						5AA100053D9A000100000001 /* RcsEngineTrace.cpp in Sources */,
 				5AA100013D9A000100000001 /* TglGpuBringup.cpp in Sources */,
-				F009B7A329E4EEBA00786AFF /* kern_green.cpp in Sources */,
-				F0BB9E552A57A0340081F5FA /* kern_patcherplus.cpp in Sources */,
 				2E5BF5832BCC212F0095BDCF /* HDMI.cpp in Sources */,
-				F0B49E9629D93A600067BE5B /* (null) in Sources */,
-				F0AF08BB2A0F373F00B63C2B /* kern_gen11.cpp in Sources */,
 				CE405ED91E4A080700AA0B3D /* plugin_start.cpp in Sources */,
 				2E1CC3E32BA5DBD9004EC8F6 /* DisplayMergeNub.cpp in Sources */,
 				2EE18C1A2CE558A300E96D38 /* Firmware.cpp in Sources */,
 				2E315A622BC6EA4D008411AA /* DYLDPatches.cpp in Sources */,
+				2E0000112CE558A400E96D4B /* TGL.cpp in Sources */,
+				2E0000132CE558A400E96D4D /* NGreen.cpp in Sources */,
+				2E0000152CE558A400E96D4F /* PluginStart.cpp in Sources */,
+				2E0000172CE558A400E96D51 /* PatcherPlus.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

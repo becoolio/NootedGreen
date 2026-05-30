@@ -2,7 +2,7 @@
 //! See LICENSE for details.
 
 #include "DYLDPatches.hpp"
-#include "kern_green.hpp"
+#include "NGreen.hpp"
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_devinfo.hpp>
 #include <IOKit/IODeviceTreeSupport.h>

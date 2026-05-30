@@ -2,11 +2,11 @@
 //  Copyright © 2023 ChefKiss Inc. Licensed under the Thou Shalt Not Profit License version 1.0. See LICENSE for
 //  details.
 
-#ifndef kern_gen11_hpp
-#define kern_gen11_hpp
-#include "kern_green.hpp"
+#ifndef TGL_hpp
+#define TGL_hpp
+#include "NGreen.hpp"
 #include "Firmware.hpp"
-#include "kern_patcherplus.hpp"
+#include "../Utilities/PatcherPlus.hpp"
 #include <Headers/kern_util.hpp>
 
 // ─── DMC (Display Microcontroller) firmware structures ──────────────────────

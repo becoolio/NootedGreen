@@ -1,7 +1,7 @@
 //  Copyright © 2022 ChefKiss Inc. Licensed under the Thou Shalt Not Profit License version 1.0. See LICENSE for
 //  details.
 
-#include "kern_netdbg.hpp"
+#include "NetDbg.hpp"
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_util.hpp>
 #include <IOKit/IOLocks.h>
@@ -106,4 +106,3 @@ size_t NETDBG::vprintf(const char *fmt, va_list args) {
     IOLockUnlock(lock);
     return ret;
 }
-

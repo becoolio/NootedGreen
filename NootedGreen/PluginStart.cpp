@@ -1,7 +1,7 @@
 //  Copyright © 2023 ChefKiss Inc. Licensed under the Thou Shalt Not Profit License version 1.0. See LICENSE for
 //  details.
 
-#include "kern_green.hpp"
+#include "NGreen.hpp"
 #include <Headers/kern_api.hpp>
 #include <Headers/plugin_start.hpp>
 

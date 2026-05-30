@@ -1,10 +1,10 @@
 //  Copyright © 2023 ChefKiss Inc. Licensed under the Thou Shalt Not Profit License version 1.0. See LICENSE for
 //  details.
-#include "kern_gen11.hpp"
+#include "TGL.hpp"
 #include "RcsEngineTrace.hpp"
 #include "TglGpuBringup.hpp"
 #include <Headers/kern_api.hpp>
-#include "kern_green.hpp"
+#include "NGreen.hpp"
 #include <IOKit/IOCatalogue.h>
 #include <kern/thread_call.h>
 

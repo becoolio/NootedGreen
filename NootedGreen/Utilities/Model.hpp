@@ -3,9 +3,9 @@
 
 // Not final, will be re-done eventually.
 
-#ifndef kern_model_hpp
-#define kern_model_hpp
-#include "kern_green.hpp"
+#ifndef Model_hpp
+#define Model_hpp
+#include "NGreen.hpp"
 #include <Headers/kern_util.hpp>
 
 struct DeviceList {
@@ -155,4 +155,4 @@ inline const char *getBranding(uint16_t dev) {
     return "Intel HD/UHD Graphics";
 }
 
-#endif /* kern_model_hpp */
+#endif /* Model_hpp */

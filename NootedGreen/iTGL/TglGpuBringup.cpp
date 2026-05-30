@@ -1,7 +1,7 @@
 #include "TglGpuBringup.hpp"
 
-#include "kern_gen11.hpp"
-#include "kern_green.hpp"
+#include "TGL.hpp"
+#include "NGreen.hpp"
 
 #include <Headers/kern_api.hpp>
 

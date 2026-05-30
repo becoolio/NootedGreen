@@ -2,8 +2,8 @@
 //  details.
 
 #include "HDMI.hpp"
-#include "kern_green.hpp"
-#include "kern_patcherplus.hpp"
+#include "NGreen.hpp"
+#include "../Utilities/PatcherPlus.hpp"
 #include <Headers/kern_api.hpp>
 
 static const char *pathAppleGFXHDA = "/System/Library/Extensions/AppleGFXHDA.kext/Contents/MacOS/AppleGFXHDA";
