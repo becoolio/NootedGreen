@@ -1093,6 +1093,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			RouteRequestPlus firmwareRoute[] = {
 				{"__ZN13IGHardwareGuC13loadGuCBinaryEv", loadGuCBinary, this->oloadGuCBinary},
 				{"__ZN13IGHardwareGuC16initSchedControlEv", wrapInitSchedControl, this->orgInitSchedControl},
+				{"__ZN5IGGuC15canLoadFirmwareEP22IOGraphicsAccelerator2", canLoadFirmware, this->ocanLoadFirmware},
 			};
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, firmwareRoute, address, size), "ngreen", "Failed to route GuC firmware/scheduler symbols");
 		}
@@ -1681,6 +1682,29 @@ unsigned long Gen11::loadGuCBinary(void *that) {
 	}
 	dumpTglGpuBringupState("loadGuCBinary POST stub");
 	return 1;
+}
+
+bool Gen11::canLoadFirmware(void *that, void *accelerator) {
+	SYSLOG("ngreen", "canLoadFirmware: called — will bypass CSME CSME checks if original fails");
+	dumpTglGpuBringupState("canLoadFirmware PRE");
+	
+	if (callback->ocanLoadFirmware) {
+		bool result = FunctionCast(canLoadFirmware, callback->ocanLoadFirmware)(that, accelerator);
+		
+		if (!result) {
+			SYSLOG("ngreen", "canLoadFirmware: original returned false (CSME checks failed on non-Apple ME) — forcing true to allow GuC load");
+			dumpTglGpuBringupState("canLoadFirmware FORCED OK");
+			return true;
+		}
+		
+		SYSLOG("ngreen", "canLoadFirmware: original returned true (Apple ME present)");
+		dumpTglGpuBringupState("canLoadFirmware OK");
+		return result;
+	}
+	
+	SYSLOG("ngreen", "canLoadFirmware: no original to call — returning true");
+	dumpTglGpuBringupState("canLoadFirmware NO-ORIG OK");
+	return true;
 }
 
 UInt8 Gen11::wrapLoadGuCBinary(void *that) {
@@ -6369,8 +6393,8 @@ void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
 		return;
 	}
 	if (state && enable && !state->ringReady) {
-		if (NGreen::callback && NGreen::callback->isRealTGL) {
-			SYSLOG("ngreen", "TGL policy: deferred %s initRingControl enable=%d (real TGL, ring not ready yet)", trackedEngineName(engine), enable);
+		if (NGreen::callback->isRealTGL) {
+			SYSLOG("ngreen", "TGL policy: realTGL — allowing %s initRingControl enable=%d despite ring not ready (Apple driver calls initRingControl before initRingRegisters on TGL)", trackedEngineName(engine), enable);
 		} else {
 			SYSLOG("ngreen", "TGL policy: blocked %s initRingControl enable=%d (ring not ready)", trackedEngineName(engine), enable);
 			state->quarantined = true;

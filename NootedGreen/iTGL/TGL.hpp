@@ -1274,6 +1274,9 @@ private:
 	static unsigned long loadGuCBinary(void *that);  // route: intercept GuC FW load
 	mach_vm_address_t oloadGuCBinary {};
 
+	static bool canLoadFirmware(void *that, void *accelerator);  // hook: bypass CSME checks for non-Apple ME
+	mach_vm_address_t ocanLoadFirmware {};
+
 	static int alwaysReturnSuccess(void *that);  // stub: always returns 0 (success)
 	mach_vm_address_t oalwaysReturnSuccess {};
 
