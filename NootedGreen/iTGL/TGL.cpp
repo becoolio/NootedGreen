@@ -1060,6 +1060,13 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			 // the framebuffer's SafeForceWake (which fails on RPL-P with ForceWake ACK=0).
 			 {"__ZN16IntelAccelerator5startEP9IOService", start, this->ostart},
 
+			 // probe: bypass DTK SKU table check. The DTK kext binary only supports device IDs
+			 // {0x9A40, 0x9A48, 0xFF20} — not 0x9A49 (TGL GT2). For unknown devices we
+			 // populate the PCI/SKU fields and return success without calling the original
+			 // (which would panic). Gated behind -ngreenProbeBypass boot arg (not -allow3d,
+			 // which WhateverGreen intercepts and causes FB routing collisions).
+			 {"__ZN16IntelAccelerator5probeEP9IOServicePi", probe, this->oprobe},
+
 			 // V36: Hook readAndClearInterrupts to initialize Gen11 multi-engine GT interrupts.
 			 // Without this, RCS/BCS user interrupts and context-switch notifications may not
 			 // be properly enabled, preventing IOAccelF2 from seeing stamp completions.
@@ -3780,6 +3787,41 @@ bool Gen11::start(void *that,void  *param_1)
 	
 	return ret;
 }
+
+IOService *Gen11::probe(void *that, void *provider, void *score) {
+	// Check our custom boot arg -ngreenProbeBypass (NOT -allow3d, which
+	// WhateverGreen intercepts and causes FB routing collisions).
+	if (checkKernelArgument("-ngreenProbeBypass")) {
+		// Original probe would PANIC for devices not in its SKU table
+		// ({0x9A40, 0x9A48, 0xFF20}) when the bypass path is taken.
+		auto *pci = OSDynamicCast(IOPCIDevice, reinterpret_cast<OSObject *>(provider));
+		if (pci) {
+			uint32_t devid = pci->extendedConfigRead32(2);
+			bool inSkuTable = (devid == -558907665 || devid == -14647162 ||
+							   devid == -1707048826 || devid == -1706524538);
+			if (!inSkuTable) {
+				auto *base = reinterpret_cast<uint8_t *>(that);
+				*reinterpret_cast<uint32_t *>(base + 4368) = pci->extendedConfigRead8(8);
+				*reinterpret_cast<uint32_t *>(base + 4372) = pci->extendedConfigRead8(0x1F);
+				*reinterpret_cast<uint32_t *>(base + 4376) = devid;
+				*reinterpret_cast<uint32_t *>(base + 4384) = 2;
+
+				SYSLOG("ngreen", "IntelAccelerator::probe: forced success for 0x%04x",
+					   devid >> 16);
+				if (score) *reinterpret_cast<SInt32 *>(score) = 1000;
+				return reinterpret_cast<IOService *>(that);
+			}
+		}
+	}
+
+	// Known device or no bypass arg: call original probe
+	auto ret = FunctionCast(probe, callback->oprobe)(that, provider, score);
+	if (ret) return ret;
+
+	SYSLOG("ngreen", "IntelAccelerator::probe: original returned null");
+	return nullptr;
+}
+
 int Gen11::wrapPmNotifyWrapper(unsigned int a0, unsigned int a1, unsigned long long *a2, unsigned int *freq) {
 	
 	/*struct intel_rps_freq_caps *caps;
@@ -6327,9 +6369,13 @@ void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
 		return;
 	}
 	if (state && enable && !state->ringReady) {
-		SYSLOG("ngreen", "TGL policy: blocked %s initRingControl enable=%d (ring not ready)", trackedEngineName(engine), enable);
-		state->quarantined = true;
-		return;
+		if (NGreen::callback && NGreen::callback->isRealTGL) {
+			SYSLOG("ngreen", "TGL policy: deferred %s initRingControl enable=%d (real TGL, ring not ready yet)", trackedEngineName(engine), enable);
+		} else {
+			SYSLOG("ngreen", "TGL policy: blocked %s initRingControl enable=%d (ring not ready)", trackedEngineName(engine), enable);
+			state->quarantined = true;
+			return;
+		}
 	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareContext::initRingControl this=%p enable=%d", that, enable);

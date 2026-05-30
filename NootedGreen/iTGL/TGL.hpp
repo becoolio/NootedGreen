@@ -1319,6 +1319,7 @@ private:
 	
 	// ── Accelerator start & forcewake ──
 	static bool start(void *that,void  *param_1);   // IntelAccelerator::start wrapper
+	static IOService *probe(void *that, void *provider, void *score);  // IntelAccelerator::probe wrapper — bypass SKU table
 	static void ensureDisplayPipeBacking(void *that);
 	static void v54IrqWatchdog(thread_call_param_t, thread_call_param_t);  // V54: IRQ watchdog
 	static void v60GpuHealthMonitor(thread_call_param_t, thread_call_param_t);  // V60: active ERROR_GEN6 suppression + monitor
@@ -1326,6 +1327,7 @@ private:
 	static IOMemoryMap *v85PersistMap;   // V85: persistent FB page 0 mapping for 50ms fill
 	static uint32_t v85SurfAddr;         // V85: cached PLANE_SURF address
 	mach_vm_address_t ostart {};
+	mach_vm_address_t oprobe {};
 	mach_vm_address_t oNewDisplayMachine {};
 	mach_vm_address_t oDisplayMachineInit {};
 	mach_vm_address_t oDisplayMachineStart {};
