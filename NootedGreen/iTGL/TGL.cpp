@@ -3813,36 +3813,33 @@ bool Gen11::start(void *that,void  *param_1)
 }
 
 IOService *Gen11::probe(void *that, void *provider, void *score) {
-	// Check our custom boot arg -ngreenProbeBypass (NOT -allow3d, which
-	// WhateverGreen intercepts and causes FB routing collisions).
-	if (checkKernelArgument("-ngreenProbeBypass")) {
-		// Original probe would PANIC for devices not in its SKU table
-		// ({0x9A40, 0x9A48, 0xFF20}) when the bypass path is taken.
-		auto *pci = OSDynamicCast(IOPCIDevice, reinterpret_cast<OSObject *>(provider));
-		if (pci) {
-			uint32_t devid = pci->extendedConfigRead32(2);
-			bool inSkuTable = (devid == -558907665 || devid == -14647162 ||
-							   devid == -1707048826 || devid == -1706524538);
-			if (!inSkuTable) {
-				auto *base = reinterpret_cast<uint8_t *>(that);
-				*reinterpret_cast<uint32_t *>(base + 4368) = pci->extendedConfigRead8(8);
-				*reinterpret_cast<uint32_t *>(base + 4372) = pci->extendedConfigRead8(0x1F);
-				*reinterpret_cast<uint32_t *>(base + 4376) = devid;
-				*reinterpret_cast<uint32_t *>(base + 4384) = 2;
+	auto *pci = OSDynamicCast(IOPCIDevice, reinterpret_cast<OSObject *>(provider));
+	if (pci) {
+		uint32_t devid = pci->extendedConfigRead32(2);
+		uint16_t deviceId = devid & 0xFFFF;
+		uint16_t vendorId = pci->extendedConfigRead16(0);
 
-				SYSLOG("ngreen", "IntelAccelerator::probe: forced success for 0x%04x",
-					   devid >> 16);
-				if (score) *reinterpret_cast<SInt32 *>(score) = 1000;
-				return reinterpret_cast<IOService *>(that);
-			}
+		// TGL GT1 (0x9A49) is not in the probe SKU table ({0x9A40, 0x9A48, 0xFF20}).
+		// Inject PCI/SKU fields directly so the accelerator can start.
+		if (vendorId == 0x8086 && deviceId == 0x9A49) {
+			uint8_t *base = reinterpret_cast<uint8_t *>(that);
+			*reinterpret_cast<uint32_t *>(base + 4368) = pci->extendedConfigRead8(8);   // rev
+			*reinterpret_cast<uint32_t *>(base + 4372) = pci->extendedConfigRead8(0x1F); // some field
+			*reinterpret_cast<uint32_t *>(base + 4376) = devid;
+			*reinterpret_cast<uint32_t *>(base + 4384) = 2; // GT type
+
+			SYSLOG("ngreen", "IntelAccelerator::probe: forced success for 0x%04x (TGL GT1)", deviceId);
+			if (score) *reinterpret_cast<SInt32 *>(score) = 1000;
+			return reinterpret_cast<IOService *>(that);
 		}
 	}
 
-	// Known device or no bypass arg: call original probe
+	// Known device: call original probe
 	auto ret = FunctionCast(probe, callback->oprobe)(that, provider, score);
 	if (ret) return ret;
 
-	SYSLOG("ngreen", "IntelAccelerator::probe: original returned null");
+	SYSLOG("ngreen", "IntelAccelerator::probe: original returned null for device 0x%04x",
+		   pci ? (pci->extendedConfigRead32(2) & 0xFFFF) : 0);
 	return nullptr;
 }
 
@@ -6393,13 +6390,9 @@ void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
 		return;
 	}
 	if (state && enable && !state->ringReady) {
-		if (NGreen::callback->isRealTGL) {
-			SYSLOG("ngreen", "TGL policy: realTGL — allowing %s initRingControl enable=%d despite ring not ready (Apple driver calls initRingControl before initRingRegisters on TGL)", trackedEngineName(engine), enable);
-		} else {
-			SYSLOG("ngreen", "TGL policy: blocked %s initRingControl enable=%d (ring not ready)", trackedEngineName(engine), enable);
-			state->quarantined = true;
-			return;
-		}
+		SYSLOG("ngreen", "TGL policy: blocked %s initRingControl enable=%d (ring not ready — RING_START likely 0, enable would GPU hang)", trackedEngineName(engine), enable);
+		state->quarantined = true;
+		return;
 	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareContext::initRingControl this=%p enable=%d", that, enable);
