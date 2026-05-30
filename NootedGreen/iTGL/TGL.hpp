@@ -509,7 +509,35 @@ enum IGHwCsType
 	kIGHwCsTypeVECS0,   //  5 — Video Enhancement CS 0
 };
 
+// Framebuffer controller flags (derived from Apple's private IGFlags enum)
+enum FB_FLAGS : uint32_t {
+	FB_FLAG_AVOID_FAST_LINK_TRAINING      = 0x1,
+	FB_FLAG_ENABLE_BACKLIGHT_REG_CONTROL  = 0x2,
+	FB_FLAG_FRAMEBUFFER_COMPRESSION       = 0x4,
+	FB_FLAG_ENABLE_SLICE_FEATURES         = 0x8,
+	FB_FLAG_DYNAMIC_FBC_ENABLE            = 0x10,
+	FB_FLAG_USE_VIDEO_TURBO               = 0x20,
+	FB_FLAG_FORCE_POWER_ALWAYS_CONNECTED  = 0x40,
+	FB_FLAG_DISABLE_HIGH_BITRATE_MODE2    = 0x80,
+	FB_FLAG_BOOST_PIXEL_FREQUENCY_LIMIT   = 0x100,
+	FB_FLAG_LIMIT_4K_SOURCE_SIZE          = 0x200,
+	FB_FLAG_ALTERNATE_PWM_INCREMENT1      = 0x400,
+	FB_FLAG_ALTERNATE_PWM_INCREMENT2      = 0x800,
+	FB_FLAG_DISABLE_FEATURE_IPS           = 0x1000,
+	FB_FLAG_ENABLE_DITHERING              = 0x2000,
+	FB_FLAG_ALLOW_CONNECTOR_RECOVER       = 0x4000,
+	FB_FLAG_DISABLE_PIPE_SCRAMBLE         = 0x8000,
+	FB_FLAG_ENABLE_HDMI_AUDIO             = 0x20000,
+	FB_FLAG_DISABLE_GFMP_PFM              = 0x40000,
+	FB_FLAG_ENABLE_PSR                    = 0x80000,
+	FB_FLAG_ENABLE_PSR2                   = 0x100000,
+	FB_FLAG_ENABLE_DYNAMIC_CDCLK          = 0x200000,
+	FB_FLAG_SUPPORT_4K_60HZ               = 0x400000,
+	FB_FLAG_SUPPORT_5K_SOURCE_SIZE        = 0x800000,
+};
+
 // Apple's per-engine descriptor — MMIO offsets for ExecList, context, status, forcewake
+// size is 0x79 — do not pack this struct, or its size will become 0x80 and break Apple code
 struct IGHwCsDesc {
 	IGHwCsType   type;
 	uint32_t     csMask;
@@ -1249,6 +1277,9 @@ private:
 	static int alwaysReturnSuccess(void *that);  // stub: always returns 0 (success)
 	mach_vm_address_t oalwaysReturnSuccess {};
 
+	static int dozero();   // stub: returns 0
+	static void dovoid();  // stub: does nothing
+
 	static UInt8 wrapLoadGuCBinary(void *that);  // hooks GuC binary loading into accel
 	mach_vm_address_t orgLoadGuCBinary {};
 
@@ -1639,6 +1670,12 @@ private:
 	// FB controller start — wraps original, adds registerService() for accelerator matching
 	static bool AppleIntelBaseControllerstart(void *that,void *param_1);
 	mach_vm_address_t oAppleIntelBaseControllerstart {};
+
+	static void initPlatformWorkarounds(void *that);
+	mach_vm_address_t oinitPlatformWorkarounds {};
+
+	static uint64_t getOSInformation(void *that);
+	mach_vm_address_t ogetOSInformation {};
 	
 	static void programPipeScaler(void *that,void *param_1);
 	mach_vm_address_t oprogramPipeScaler {};

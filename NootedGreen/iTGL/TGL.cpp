@@ -728,6 +728,8 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{"__ZN31AppleIntelFramebufferController11initCDClockEv",initCDClock, this->oinitCDClock},
 				{"__ZN31AppleIntelFramebufferController28setCDClockFrequencyOnHotplugEv",setCDClockFrequencyOnHotplug, this->osetCDClockFrequencyOnHotplug},
 				{"__ZN31AppleIntelFramebufferController14disableCDClockEv",disableCDClock,this->odisableCDClock},
+				{"__ZN31AppleIntelFramebufferController23initPlatformWorkaroundsEv",initPlatformWorkarounds, this->oinitPlatformWorkarounds},
+				{"__ZN31AppleIntelFramebufferController16getOSInformationEv",getOSInformation, this->ogetOSInformation},
 				{"__ZN31AppleIntelFramebufferController16hwRegsNeedUpdateEP21AppleIntelFramebufferP21AppleIntelDisplayPathP10CRTCParamsPK29IODetailedTimingInformationV2PN16AppleIntelScaler12SCALERPARAMSE",hwRegsNeedUpdate, this->ohwRegsNeedUpdate},
 			};
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route p symbols");
@@ -745,6 +747,9 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				{"__ZN24AppleIntelBaseController11initCDClockEv",initCDClock, this->oinitCDClock},
 				{"__ZN24AppleIntelBaseController28setCDClockFrequencyOnHotplugEv",setCDClockFrequencyOnHotplug, this->osetCDClockFrequencyOnHotplug},
 				{"__ZN24AppleIntelBaseController14disableCDClockEv",disableCDClock,this->odisableCDClock},
+				{"__ZN24AppleIntelBaseController23initPlatformWorkaroundsEv",initPlatformWorkarounds, this->oinitPlatformWorkarounds},
+				{"__ZN24AppleIntelBaseController16getOSInformationEv",getOSInformation, this->ogetOSInformation},
+				{"__ZN24AppleIntelBaseController13probeBootPipeEPbPN17AppleIntelPortHAL3DDIE", dozero},
 				{"__ZN24AppleIntelBaseController16hwRegsNeedUpdateEP21AppleIntelFramebufferP21AppleIntelDisplayPathP10CRTCParamsPK29IODetailedTimingInformationV2PN16AppleIntelScaler12SCALERPARAMSE",hwRegsNeedUpdate, this->ohwRegsNeedUpdate},
 				
 			};
@@ -896,6 +901,9 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
         
         static const uint8_t r22[]= {0x48, 0xc7, 0xc0, 0xc0, 0x40, 0xd0, 0x2e, 0x49, 0x89, 0x47, 0x28, 0xbf, 0x08, 0x00, 0x00, 0x00, 0xbe, 0x06, 0x00, 0x00, 0x00, 0xe8, 0x9e, 0x81, 0x01, 0x00, 0x84, 0xc0, 0x90, 0x90};
 		
+		//link training — replace 2-line value (0x77 0x77 → 0x77 0x00) to avoid bad AUX pattern
+		static const uint8_t f25[]= {0x77, 0x77, 0x00, 0x00};
+		static const uint8_t r25[]= {0x77, 0x00, 0x00, 0x00};
 
 		if (isprod){
 			LookupPatchPlus const patchesp[] = {// tgl production kext
@@ -915,7 +923,8 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				//{activeKext, f13pb, r13pb, arrsize(f13pb),	1},
 				//{activeKext, f16p, r16p, arrsize(f16p),	1},
 				{activeKext, f19, r19, arrsize(f19),	1},
-							{activeKext, f20p, r20p, arrsize(f20p),	1},
+				{activeKext, f20p, r20p, arrsize(f20p),	1},
+				{activeKext, f25, r25, arrsize(f25),	6},
 				
 			};
 			
@@ -955,6 +964,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				//{activeKext, f21, r21, arrsize(f21),	1},
 				// Avoid forcing pixel/timing constants in hw CRTC path.
 				//{activeKext, f22, r22, arrsize(f22),    1},
+				{activeKext, f25, r25, arrsize(f25),	6},
 				
 			};
 			
@@ -5330,6 +5340,46 @@ uint8_t Gen11::isPanelPowerOn()
 
 // Stub that does nothing (void)
 int Gen11::alwaysReturnSuccess(void *) { return 0;}
+
+int Gen11::dozero() { return 0; }
+void Gen11::dovoid() {}
+
+void Gen11::initPlatformWorkarounds(void *that) {
+	// Platform workaround flags (TGL offsets)
+	getMember<volatile uint32_t>(that, 0xc5c) =
+		FB_FLAG_ALTERNATE_PWM_INCREMENT1 |
+		FB_FLAG_FORCE_POWER_ALWAYS_CONNECTED |
+		FB_FLAG_AVOID_FAST_LINK_TRAINING;
+
+	// Boot-time IG flags (commented out in drm — left for reference)
+	//getMember<volatile uint32_t>(that, 0xc58)=FB_FLAG_BOOST_PIXEL_FREQUENCY_LIMIT;
+
+	FunctionCast(initPlatformWorkarounds, callback->oinitPlatformWorkarounds)(that);
+}
+
+uint64_t Gen11::getOSInformation(void *that) {
+	// Set PCI revision ID, dither, and AVOID_FAST_LINK_TRAINING flag
+	getMember<int32_t>(that, 0xce4) = 1;
+	getMember<uint8_t>(that, 0x1b12) = 1;
+
+	// Update platform info entry flags
+	FramebufferICL *pinfo = reinterpret_cast<FramebufferICL *>(callback->gPlatformInformationList);
+	if (pinfo) {
+		int p = 1;
+		pinfo[p].flags = FB_FLAG_DISABLE_PIPE_SCRAMBLE |
+			FB_FLAG_FRAMEBUFFER_COMPRESSION |
+			FB_FLAG_ALLOW_CONNECTOR_RECOVER |
+			FB_FLAG_ENABLE_BACKLIGHT_REG_CONTROL |
+			FB_FLAG_AVOID_FAST_LINK_TRAINING;
+		pinfo[p].fMobile = 1;
+		pinfo[p].fPipeCount = 3;
+		pinfo[p].fPortCount = 3;
+		pinfo[p].fFBMemoryCount = 2;
+	}
+
+	auto ret = FunctionCast(getOSInformation, callback->ogetOSInformation)(that);
+	return ret;
+}
 
 //****
 
