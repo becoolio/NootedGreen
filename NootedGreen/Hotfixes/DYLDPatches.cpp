@@ -108,39 +108,15 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
     };
     DYLDPatch::applyAll(patches, const_cast<void *>(data), PAGE_SIZE);
 	
-	// ── V50: GPU bundle search path redirect ──
-	// Metal calls gpu_bundle_find_trusted() in libsystem_sandbox.dylib to locate
-	// GPU plugin bundles. This function searches exactly two directories:
+	// ── V50: GPU bundle search path ──
+	// libsystem_sandbox.dylib's gpu_bundle_find_trusted() searches:
 	//   1. /Library/GPUBundles      (checked first)
 	//   2. /System/Library/Extensions  (checked second)
-	// using format "%s/%s.bundle" to construct paths.
 	//
-	// Apple never made a Mac with Tiger Lake — no TGL Metal driver exists in either
-	// of those directories. The TGL driver is at /Library/Extensions/ (user-installed).
-	//
-	// Fix: patch the first search path in libsystem_sandbox's __cstring:
-	//   "/Library/GPUBundles\0"  (20 bytes) → "/Library/Extensions\0" (20 bytes)
-	// This makes gpu_bundle_find_trusted search /Library/Extensions/ first,
-	// where the TGL driver bundle actually exists.
-	// /System/Library/Extensions stays as the fallback for system GPU bundles.
-	//
-	// Alternative: manually copy the TGL bundle:
+	// No patch needed — /Library/GPUBundles/ is the native default path.
+	// User must copy bundles there:
 	//   sudo mkdir -p /Library/GPUBundles
-	//   sudo cp -R /Library/Extensions/AppleIntelTGLGraphicsMTLDriver.bundle /Library/GPUBundles/
-	static const uint8_t gpuPathFind[] = {
-		0x2F, 0x4C, 0x69, 0x62, 0x72, 0x61, 0x72, 0x79, // /Library
-		0x2F, 0x47, 0x50, 0x55, 0x42, 0x75, 0x6E, 0x64, // /GPUBund
-		0x6C, 0x65, 0x73, 0x00,                           // les\0
-	};
-	static const uint8_t gpuPathRepl[] = {
-		0x2F, 0x4C, 0x69, 0x62, 0x72, 0x61, 0x72, 0x79, // /Library
-		0x2F, 0x45, 0x78, 0x74, 0x65, 0x6E, 0x73, 0x69, // /Extensi
-		0x6F, 0x6E, 0x73, 0x00,                           // ons\0
-	};
-	if (UNLIKELY(KernelPatcher::findAndReplace(const_cast<void *>(data), PAGE_SIZE,
-			gpuPathFind, arrsize(gpuPathFind), gpuPathRepl, arrsize(gpuPathRepl)))) {
-		SYSLOG("DYLD", "V50: Patched gpu_bundle_find_trusted: /Library/GPUBundles -> /Library/Extensions");
-	}
+	//   sudo cp -R /Library/Extensions/AppleIntelTGLGraphics*.bundle /Library/GPUBundles/
 	
 	// Stage-3 Metal (hardcoded): assertion bypass + RunFullDisplayPipe NULL-guard
 	// + GetMTLTexture/CQ stubs. AccessComplete is live (not skipped).

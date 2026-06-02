@@ -1166,10 +1166,11 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		if (!wegCoexist || forceFullMTL) {
 			RouteRequestPlus gpuInfoRoute[] = {
 				{"__ZN16IntelAccelerator10getGPUInfoEv", getGPUInfo, this->ogetGPUInfo},
+				{"__ZN16IntelAccelerator16initHardwareCapsEv", initHardwareCaps, this->oinitHardwareCaps},
 			};
-			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, gpuInfoRoute, address, size), "ngreen", "Failed to route getGPUInfo");
+			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, gpuInfoRoute, address, size), "ngreen", "Failed to route GPU info/caps symbols");
 			if (forceFullMTL && wegCoexist) {
-				SYSLOG("ngreen", "FULL_MTL: forcing getGPUInfo route despite coexist mode");
+				SYSLOG("ngreen", "FULL_MTL: forcing GPU info/caps route despite coexist mode");
 			}
 		}
 
@@ -1204,7 +1205,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		
 		// MaxEUPerSubSlice override (verified @ 0x28692 in LE binary)
 		// Original: MaxEUPerSubSlice = 8 - popcount(EUDisableFuse)  → stores result at IGAccelDevice+0x116c
-		// Patch:    hardcodes MaxEUPerSubSlice=8 for RPL 96EU (8 EU per traditional sub-slice).
+		// Patch:    hardcodes MaxEUPerSubSlice=8 (16 EU/DSS ÷ 2 SS/DSS = 8 EU/SS).
 		//           TGL binary counts sub-slices (SS), not dual sub-slices (DSS).
 		//           Linux shows 16 EU/DSS = 8 EU/SS since each DSS has 2 SS.
 		static const uint8_t f3bb[] = {//MaxEUPerSubSlice
@@ -1217,13 +1218,13 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		// NumSubSlices override (verified @ 0x28654 in LE binary)
 		// Original: mov ebx,[rbp-0x30]; popcnt esi,ebx; add esi,esi; mov [r15+0x1158],esi
 		//           → NumSubSlices = popcount(subsliceMask) * 2  (hardware-detected)
-		// Patch:    hardcodes NumSubSlices=12 for RPL 96EU (6 DSS × 2 SS/DSS = 12 SS).
-		//           Linux i915: subslice total=6 mask=0x3f, so 6 DSS doubled to 12 SS.
+		// Patch:    hardcodes NumSubSlices=10 for TGL 80EU (5 DSS × 2 SS/DSS = 10 SS).
+		//           Linux i915: subslice total=5 mask=0x1f, so 5 DSS doubled to 10 SS.
 		static const uint8_t f3bbb[] = {//NumSubSlices
 			0x8b, 0x5d, 0xd0, 0xf3, 0x0f, 0xb8, 0xf3, 0x01, 0xf6, 0x41, 0x89, 0xb7, 0x58, 0x11, 0x00, 0x00
 		};
 		static const uint8_t r3bbb[] = {
-			0x8b, 0x5d, 0xd0, 0xbe, 0x0c, 0x00, 0x00, 0x00, 0x90, 0x41, 0x89, 0xb7, 0x58, 0x11, 0x00, 0x00
+			0x8b, 0x5d, 0xd0, 0xbe, 0x0a, 0x00, 0x00, 0x00, 0x90, 0x41, 0x89, 0xb7, 0x58, 0x11, 0x00, 0x00
 		};
 		
 		// GPU caps override (disabled) – would change MaxSlices 6→5, SARation 2→1, MaxEU/SS 6→5.
@@ -1306,7 +1307,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 				LookupPatchPlus const patchesRPL[] = {
 					{activeKext, f3b, r3b, arrsize(f3b),	1},      // L3BankCount=8
 					{activeKext, f3bb, r3bb, arrsize(f3bb),	1},    // MaxEU/SS=8
-					{activeKext, f3bbb, r3bbb, arrsize(f3bbb),	1},// NumSubSlices=12
+					{activeKext, f3bbb, r3bbb, arrsize(f3bbb),	1},// NumSubSlices=10
 					{activeKext, f_devstart, m_devstart, r_devstart, rm_devstart, arrsize(f_devstart), 1}, // BCS bypass
 				};
 				PANIC_COND(!LookupPatchPlus::applyAll(patcher, patchesRPL, address, size), "ngreen",
@@ -1336,7 +1337,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 
 		SYSLOG("ngreen", "Loaded AppleIntelTGLGraphics! %s",
 			   NGreen::callback->isRealTGL ? "Real TGL — native topology" :
-			   "RPL spoofed — slices=1 subslices=12(6DSS) maxEU/SS=8 totalEU=96 L3=8");
+			   "Spoofed — slices=1 subslices=10(5DSS) maxEU/SS=8 totalEU=80 L3=8");
 
 		return true;
 	}
@@ -1373,6 +1374,7 @@ void  Gen11::setAsyncSliceCount(void *that,uint32_t configRaw)
 			case 5: subsliceField = 0x50; break;
 			case 6: subsliceField = 0x60; break;
 			case 8: subsliceField = 0x80; break;
+			case 10: subsliceField = 0xA0; break;
 			default:
 						panic("IGPU: setAsyncSliceCount - Invalid subsliceCount: %u\n", subsliceCount);
 						break;
@@ -1436,10 +1438,10 @@ bool  Gen11::getGPUInfo(void *that)
 		bringup.topologyOk = ret;
 	}
 	
-	// --- GPU topology override for RPL i7-13700H (verified from Linux i915 syslog) ---
-	// Linux i915 reports: 1 slice, 6 DSS (mask=0x3f), 16 EU/DSS, 96 EU total.
+	// --- GPU topology override for TGL 80EU (i5-1135G7, 0x9A49) ---
+	// Linux i915 reports: 1 slice, 5 DSS, 16 EU/DSS, 80 EU total.
 	// TGL binary uses traditional sub-slices (SS), not dual sub-slices (DSS):
-	//   6 DSS × 2 SS/DSS = 12 SS,  16 EU/DSS / 2 = 8 EU/SS, 12 × 8 = 96 EU.
+	//   5 DSS × 2 SS/DSS = 10 SS,  16 EU/DSS / 2 = 8 EU/SS, 10 × 8 = 80 EU.
 	// Object layout (byte offsets from `this`, verified via disassembly):
 	//   0x115c = NumSlices          0x0dd8 = NumSlices mirror
 	//   0x1158 = NumSubSlices       0x0ddc = NumSubSlices mirror
@@ -1448,9 +1450,9 @@ bool  Gen11::getGPUInfo(void *that)
 	//   0x1150 = Frequency pair (low32=fMaxMHz, high32=fMinMHz)
 	//   0x1164 = L3BankCount
 	unsigned int numSlices        = 1;
-	unsigned int numSubSlices     = 12;  // 6 DSS × 2 = 12 traditional SS
+	unsigned int numSubSlices     = 10;  // 5 DSS × 2 = 10 traditional SS
 	unsigned int maxEUPerSubSlice = 8;   // 16 EU/DSS ÷ 2 SS/DSS = 8 EU/SS
-	unsigned int totalEU          = maxEUPerSubSlice * numSubSlices; // = 96
+	unsigned int totalEU          = maxEUPerSubSlice * numSubSlices; // = 80
 	
 	getMember<UInt32>(that, 0x115c) = numSlices;
 	getMember<UInt32>(that, 0x1158) = numSubSlices;
@@ -1519,6 +1521,11 @@ bool Gen11::getGPUInfoICL(void *that)
 
 bool Gen11::initHardwareCaps(void *this_ptr) {
 		uint32_t gpuSku = getMember<uint32_t>(this_ptr, 0x1120);
+		// Route 10-SS (5 DSS) config to SKU 1 (TGLHP) path regardless of probe GT type
+		uint32_t numSubslices = getMember<uint32_t>(this_ptr, 0x1158);
+		if (gpuSku == 2 && numSubslices <= 10) {
+			gpuSku = 1;
+		}
 		bool result = false;
 		
 		uint32_t uVar1;
