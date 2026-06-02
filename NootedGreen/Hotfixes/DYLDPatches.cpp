@@ -201,13 +201,18 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
 				{f3b_sonoma, r3b_sonoma, "CoreDisplay assertion bypass (Sonoma)"},
 				{f_skipac_sonoma, r_skipac_sonoma, "AccessComplete skip (Sonoma, stage2)"},
 				{f_getmtltex_sonoma, r_getmtltex_sonoma, "GetMTLTexture return NULL (Sonoma, stage2)"},
+				{f_getmtlcq_sonoma, r_getmtlcq_sonoma, "GetMTLCommandQueue return NULL (Sonoma, stage2)"},
 			};
 			const DYLDPatch stage3Patches[] = {
 				{f3b_sonoma, r3b_sonoma, "CoreDisplay assertion bypass (Sonoma)"},
+				{f_getmtltex_sonoma, r_getmtltex_sonoma, "GetMTLTexture return NULL (Sonoma, stage3)"},
+				{f_getmtlcq_sonoma, r_getmtlcq_sonoma, "GetMTLCommandQueue return NULL (Sonoma, stage3)"},
 				{f_runfdp_guard_sonoma, r_runfdp_guard_sonoma, "RunFullDisplayPipe NULL vcall guard (Sonoma, stage3)"},
 			};
 			const DYLDPatch stage3SkylPatches[] = {
 				{f3b_sonoma, r3b_sonoma, "CoreDisplay assertion bypass (Sonoma)"},
+				{f_getmtltex_sonoma, r_getmtltex_sonoma, "GetMTLTexture return NULL (Sonoma, stage3)"},
+				{f_getmtlcq_sonoma, r_getmtlcq_sonoma, "GetMTLCommandQueue return NULL (Sonoma, stage3)"},
 				{f_runfdp_guard_sonoma, r_runfdp_guard_sonoma, "RunFullDisplayPipe NULL vcall guard (Sonoma, stage3)"},
 				{f4_skyl_sonoma, r4_skyl_sonoma, "SkyLight conditional bypass (Sonoma, stage3)"},
 			};
@@ -222,10 +227,13 @@ void DYLDPatches::wrapCsValidatePage(vnode *vp, memory_object_t pager, memory_ob
 				DYLDPatch::applyAll(stage3Patches, const_cast<void *>(data), PAGE_SIZE);
 			}
 		} else {
-			const DYLDPatch assertionPatch[] = {
+			const DYLDPatch guardedDefaultPatches[] = {
 				{f3b_sonoma, r3b_sonoma, "CoreDisplay assertion bypass (Sonoma)"},
+				{f_getmtltex_sonoma, r_getmtltex_sonoma, "GetMTLTexture return NULL (Sonoma, default)"},
+				{f_getmtlcq_sonoma, r_getmtlcq_sonoma, "GetMTLCommandQueue return NULL (Sonoma, default)"},
+				{f_runfdp_guard_sonoma, r_runfdp_guard_sonoma, "RunFullDisplayPipe NULL vcall guard (Sonoma, default)"},
 			};
-			DYLDPatch::applyAll(assertionPatch, const_cast<void *>(data), PAGE_SIZE);
+			DYLDPatch::applyAll(guardedDefaultPatches, const_cast<void *>(data), PAGE_SIZE);
 		}
 	}
 }

@@ -1088,6 +1088,13 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route symbols");
 
 		{
+			mach_vm_address_t schedControlAddr = 0;
+			SolveRequestPlus schedControlSolve {"__ZN13IGHardwareGuC16initSchedControlEv", schedControlAddr};
+			const bool schedControlFound = schedControlSolve.solve(patcher, index, address, size);
+			PANIC_COND(!schedControlFound, "ngreen", "Failed to resolve IGHardwareGuC::initSchedControl symbol");
+			SYSLOG("ngreen", "TGL policy: IGHardwareGuC::initSchedControl resolved at 0x%llx",
+			       static_cast<unsigned long long>(schedControlAddr));
+
 			// loadGuCBinary: always route — WEG's firmware path is Mojave-gated and dead on Sonoma.
 			// Without this hook, no GuC binary loads at all in coexist mode → ring dead.
 			RouteRequestPlus firmwareRoute[] = {
@@ -1108,6 +1115,7 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			{"__ZN20IGHardwareRingBuffer4initEP17IGHardwareContext", IGHardwareRingBufferinit, this->oIGHardwareRingBufferinit},
 			{"__ZN20IGHardwareRingBuffer12submitToRingEv", IGHardwareRingBuffersubmitToRing, this->oIGHardwareRingBuffersubmitToRing},
 			{"__ZN26IGHardwareCommandStreamer514submitExecListEj", IGHardwareCommandStreamersubmitExecList, this->oIGHardwareCommandStreamersubmitExecList},
+			{"__ZN26IGHardwareCommandStreamer516resumeSchedulingEv", IGHardwareCommandStreamerresumeScheduling, this->oIGHardwareCommandStreamerresumeScheduling},
 			{"__ZN26IGHardwareCommandStreamer524prepareExecListAndSubmitEjjPKj", IGHardwareCommandStreamerprepareExecListAndSubmit, this->oIGHardwareCommandStreamerprepareExecListAndSubmit},
 		};
 		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, policyRoutes, address, size), "ngreen", "Failed to route TGL ring/context policy symbols");
@@ -1119,19 +1127,17 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t 
 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, bringupTraceRoutes, address, size), "ngreen", "Failed to route TGL bring-up trace symbols");
 		}
 
-		if (isScheduler5TraceEnabled() || isRcsEngineTraceEnabled()) {
-			RouteRequestPlus s5TraceRoutes[] = {
-				{"__ZN12IGScheduler519initWithAcceleratorEP22IOGraphicsAccelerator2", IGScheduler5initWithAccelerator, this->oIGScheduler5initWithAccelerator},
-				{"__ZN12IGScheduler56resumeEv", IGScheduler5resume, this->oIGScheduler5resume},
-				{"__ZN12IGScheduler54pushEP17IGHardwareContextjjbb", IGScheduler5push, this->oIGScheduler5push},
-				{"__ZN12IGScheduler56notifyE10IGHwCsType", IGScheduler5notify, this->oIGScheduler5notify},
-				{"__ZN12IGScheduler520enableStampInterruptEi", IGScheduler5enableStampInterrupt, this->oIGScheduler5enableStampInterrupt},
-				{"__ZN12IGScheduler529enableContextSwitchInterruptsEv", IGScheduler5enableContextSwitchInterrupts, this->oIGScheduler5enableContextSwitchInterrupts},
-				{"__ZN12IGScheduler516checkForProgressE10IGHwCsType", IGScheduler5checkForProgress, this->oIGScheduler5checkForProgress},
-			};
-			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, s5TraceRoutes, address, size), "ngreen", "Failed to route IGScheduler5 trace symbols");
-			SYSLOG("ngreen", "S5Trace: routed 7 IGScheduler5 symbols");
-		}
+		RouteRequestPlus schedulerPolicyRoutes[] = {
+			{"__ZN12IGScheduler519initWithAcceleratorEP22IOGraphicsAccelerator2", IGScheduler5initWithAccelerator, this->oIGScheduler5initWithAccelerator},
+			{"__ZN12IGScheduler56resumeEv", IGScheduler5resume, this->oIGScheduler5resume},
+			{"__ZN12IGScheduler54pushEP17IGHardwareContextjjbb", IGScheduler5push, this->oIGScheduler5push},
+			{"__ZN12IGScheduler56notifyE10IGHwCsType", IGScheduler5notify, this->oIGScheduler5notify},
+			{"__ZN12IGScheduler520enableStampInterruptEi", IGScheduler5enableStampInterrupt, this->oIGScheduler5enableStampInterrupt},
+			{"__ZN12IGScheduler529enableContextSwitchInterruptsEv", IGScheduler5enableContextSwitchInterrupts, this->oIGScheduler5enableContextSwitchInterrupts},
+			{"__ZN12IGScheduler516checkForProgressE10IGHwCsType", IGScheduler5checkForProgress, this->oIGScheduler5checkForProgress},
+		};
+		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, schedulerPolicyRoutes, address, size), "ngreen", "Failed to route IGScheduler5 policy symbols");
+		SYSLOG("ngreen", "TGL policy: routed 7 IGScheduler5 policy symbols (always-on)");
 
 		if (isRcsEngineTraceEnabled()) {
 			auto routeTraceSymbol = [&](const char *symbol, auto replacement, mach_vm_address_t &original) {
@@ -3815,31 +3821,28 @@ bool Gen11::start(void *that,void  *param_1)
 IOService *Gen11::probe(void *that, void *provider, void *score) {
 	auto *pci = OSDynamicCast(IOPCIDevice, reinterpret_cast<OSObject *>(provider));
 	if (pci) {
-		uint32_t devid = pci->extendedConfigRead32(2);
-		uint16_t deviceId = devid & 0xFFFF;
-		uint16_t vendorId = pci->extendedConfigRead16(0);
+		uint32_t idPair = pci->extendedConfigRead32(0);
+		uint16_t vendorId = idPair & 0xFFFF;
+		uint16_t deviceId = idPair >> 16;
 
-		// TGL GT1 (0x9A49) is not in the probe SKU table ({0x9A40, 0x9A48, 0xFF20}).
-		// Inject PCI/SKU fields directly so the accelerator can start.
 		if (vendorId == 0x8086 && deviceId == 0x9A49) {
 			uint8_t *base = reinterpret_cast<uint8_t *>(that);
-			*reinterpret_cast<uint32_t *>(base + 4368) = pci->extendedConfigRead8(8);   // rev
-			*reinterpret_cast<uint32_t *>(base + 4372) = pci->extendedConfigRead8(0x1F); // some field
-			*reinterpret_cast<uint32_t *>(base + 4376) = devid;
-			*reinterpret_cast<uint32_t *>(base + 4384) = 2; // GT type
+			*reinterpret_cast<uint32_t *>(base + 4368) = pci->extendedConfigRead8(8);
+			*reinterpret_cast<uint32_t *>(base + 4372) = pci->extendedConfigRead8(0x1F);
+			*reinterpret_cast<uint32_t *>(base + 4376) = idPair;
+			*reinterpret_cast<uint32_t *>(base + 4384) = 2;
 
-			SYSLOG("ngreen", "IntelAccelerator::probe: forced success for 0x%04x (TGL GT1)", deviceId);
+			SYSLOG("ngreen", "IntelAccelerator::probe: forced success for 0x%04x", deviceId);
 			if (score) *reinterpret_cast<SInt32 *>(score) = 1000;
 			return reinterpret_cast<IOService *>(that);
 		}
 	}
 
-	// Known device: call original probe
 	auto ret = FunctionCast(probe, callback->oprobe)(that, provider, score);
 	if (ret) return ret;
 
 	SYSLOG("ngreen", "IntelAccelerator::probe: original returned null for device 0x%04x",
-		   pci ? (pci->extendedConfigRead32(2) & 0xFFFF) : 0);
+		   pci ? (pci->extendedConfigRead32(0) >> 16) : 0);
 	return nullptr;
 }
 
@@ -6390,9 +6393,8 @@ void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
 		return;
 	}
 	if (state && enable && !state->ringReady) {
-		SYSLOG("ngreen", "TGL policy: blocked %s initRingControl enable=%d (ring not ready — RING_START likely 0, enable would GPU hang)", trackedEngineName(engine), enable);
-		state->quarantined = true;
-		return;
+		SYSLOG("ngreen", "TGL policy: allowing %s initRingControl enable=%d despite !ringReady (TGL may not call initRingRegisters before initRingControl)", trackedEngineName(engine), enable);
+		markTrackedEngineRingReady(engine);
 	}
 	if (isRcsEngineTraceEnabled()) {
 		SYSLOG("ngreen", "RCS_TRACE: IGHardwareContext::initRingControl this=%p enable=%d", that, enable);
@@ -6405,6 +6407,9 @@ void Gen11::IGHardwareContextinitRingControl(void *that, bool enable) {
 		FunctionCast(IGHardwareContextinitRingControl, callback->oIGHardwareContextinitRingControl)(that, enable);
 	}
 	markTrackedEngineControlReady(engine, enable);
+	if (enable) {
+		evaluateTrackedEngineBootstrap(engine, "initRingControl");
+	}
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::initRingControl post");
 		dumpContextImageKnownFields("IGHardwareContext::initRingControl post", that);
@@ -6465,6 +6470,7 @@ void Gen11::IGHardwareContextupdateRingTail(void *that, uint32_t tail) {
 		FunctionCast(IGHardwareContextupdateRingTail, callback->oIGHardwareContextupdateRingTail)(that, tail);
 	}
 	markTrackedEngineSubmitted(engine);
+	evaluateTrackedEngineBootstrap(engine, "updateRingTail");
 	if (isRcsEngineTraceEnabled()) {
 		dumpRcsEngineActivationState("IGHardwareContext::updateRingTail post");
 		dumpContextImageKnownFields("IGHardwareContext::updateRingTail post", that);
