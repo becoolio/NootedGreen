@@ -1521,87 +1521,18 @@ bool Gen11::getGPUInfoICL(void *that)
 
 bool Gen11::initHardwareCaps(void *this_ptr) {
 		uint32_t gpuSku = getMember<uint32_t>(this_ptr, 0x1120);
-		// Route 10-SS (5 DSS) config to SKU 1 (TGLHP) path regardless of probe GT type
 		uint32_t numSubslices = getMember<uint32_t>(this_ptr, 0x1158);
-		if (gpuSku == 2 && numSubslices <= 10) {
-			gpuSku = 1;
+		bool needSkuFix = (gpuSku == 2 && numSubslices <= 10);
+		if (needSkuFix) {
+			getMember<uint32_t>(this_ptr, 0x1120) = 1;
 		}
 		bool result = false;
-		
-		uint32_t uVar1;
-		int iVar2;
-		int iVar3;
-		int iVar4;
-
-		if (gpuSku == 2) {
-			// --- SKU 2 (TGLLP) - Original TGL values for 6 Dual SubSlices (12 SubSlices) ---
-					
-					// Buffer sizes for 12 SubSlices (6 DSS × 2 SS/DSS)
-					// 0xc0 (192) = 16 bytes × 12 SS
-					getMember<uint64_t>(this_ptr, 0x112c) = 0x222000000c0ULL;
-					
-					// 0x150 (336) = 28 bytes × 12 SS
-					getMember<uint64_t>(this_ptr, 0x1134) = 0x22200000150ULL;
-					getMember<uint32_t>(this_ptr, 0x113c) = 0x150;
-					
-					getMember<uint64_t>(this_ptr, 0x1174) = 0x200000007ULL;
-					getMember<uint64_t>(this_ptr, 0x117c) = 0x1000000080ULL;
-					
-					getMember<uint32_t>(this_ptr, 0x1160) = 0xf00;
-					
-					// Max Dual SubSlices = 6 (matches hardware: 6 DSS)
-					getMember<uint32_t>(this_ptr, 0x1148) = 0x6;
-					
-					// Calculate actual Dual SubSlices (SubSlices / 2)
-					uVar1 = getMember<uint32_t>(this_ptr, 0x1158) >> 1;
-					iVar3 = 2;
-					
-					// Reference Dual SubSlices count = 6 (must match max to avoid underflow)
-					iVar4 = 0x6;
-					iVar2 = 0x80;
+		if (callback->oinitHardwareCaps) {
+			result = FunctionCast(initHardwareCaps, callback->oinitHardwareCaps)(this_ptr);
 		}
-		else {
-			if (gpuSku != 1) {
-				result = false;
-				return result;
-			}
-			
-			// --- SKU 1 (TGLHP) - Modified for 5 DSS ---
-			
-			// Sizes for 10 SubSlices
-			getMember<uint64_t>(this_ptr, 0x112c) = 0x2d800000140ULL;
-			getMember<uint64_t>(this_ptr, 0x1134) = 0x27000000168ULL;
-			getMember<uint32_t>(this_ptr, 0x113c) = 0x168;
-			
-			getMember<uint64_t>(this_ptr, 0x1174) = 0x100000007ULL;
-			getMember<uint64_t>(this_ptr, 0x117c) = 0x1000000040ULL;
-			
-			getMember<uint32_t>(this_ptr, 0x1160) = 0x800;
-			
-			// Max SubSlices set to 10
-			getMember<uint32_t>(this_ptr, 0x1148) = 0xA;
-			
-			uVar1 = getMember<uint32_t>(this_ptr, 0x1158);
-			iVar3 = 1;
-			
-			// Reference count set to 10
-			iVar4 = 0xA;
-			iVar2 = 0x40;
+		if (needSkuFix) {
+			getMember<uint32_t>(this_ptr, 0x1120) = gpuSku;
 		}
-
-		// Final calculations
-		getMember<uint32_t>(this_ptr, 0x114c) = uVar1;
-		
-		uint8_t &byteRef = getMember<uint8_t>(this_ptr, 0x1184);
-		byteRef = byteRef & 0xFB;
-		
-		getMember<uint32_t>(this_ptr, 0x1128) = iVar3 * uVar1;
-		getMember<uint32_t>(this_ptr, 0x1144) = (iVar4 - uVar1) * iVar3;
-		getMember<uint32_t>(this_ptr, 0x1140) = iVar2 * uVar1;
-		
-		getMember<uint32_t>(this_ptr, 0x1168) = getMember<uint32_t>(this_ptr, 0x115c) << 4;
-		
-		result = true;
 		return result;
 	}
 
@@ -3183,7 +3114,8 @@ bool Gen11::start(void *that,void  *param_1)
 	// V53 proved that the TGL driver never enables GFX_MSTR_IRQ bit 31 on RPL.
 	// Without it, completion interrupts never reach the CPU and start() hangs
 	// for ~15s until our hangcheck accidentally re-enabled it.
-	if (!NGreen::callback->isRealTGL) {
+	// Option B: Run unconditionally — even real TGL with scheduler type 5 needs these.
+	{
 		// Enable Master IRQ (bit 31)
 		NGreen::callback->writeReg32(GEN11_GFX_MSTR_IRQ, GEN11_MASTER_IRQ);
 		IODelay(100);
@@ -3229,7 +3161,7 @@ bool Gen11::start(void *that,void  *param_1)
 	// V65: IMMEDIATELY after original start() returns, re-enable RCS0 interrupts.
 	// Apple's init code may have overwritten our pre-start settings.
 	// This is our earliest opportunity after ring activation.
-	if (!NGreen::callback->isRealTGL) {
+	{
 		uint32_t rcIntrPost = NGreen::callback->readReg32(GEN11_RENDER_COPY_INTR_ENABLE);
 		uint32_t wantBits = (1 << GEN11_RCS0) | (1 << GEN11_BCS);
 		uint32_t newEn = rcIntrPost | wantBits;
@@ -3554,13 +3486,14 @@ bool Gen11::start(void *that,void  *param_1)
 		SYSLOG("ngreen", "V45: post-registerService state=0x%llx (reg=%d match=%d)",
 			   (unsigned long long)svcState, !!(svcState & 0x02), !!(svcState & 0x04));
 		
-		// V110: V59 delayed child checks + V74 EMR enforcer run unconditionally for
-		// non-real TGL. Without V59, IGAccelDevice stays at state=0x0, WindowServer
+		// V110: V59 delayed child checks + V74 EMR enforcer run unconditionally.
+		// Option B: Also run on real TGL — scheduler type 5 still needs child rescue.
+		// Without V59, IGAccelDevice stays at state=0x0, WindowServer
 		// never opens IOAccelDisplayPipeUserClient2, and the display pipe never activates.
 		// V74 keeps EMR masked so Apple can't re-enable error interrupts behind our back.
 		// V60 health monitor (which contains V77 DisplayPipe killer) remains opt-in via
 		// -ngreenexp — without it, the display pipe is not terminated after opening.
-		if (!NGreen::callback->isRealTGL) {
+		{
 			// 8. V59: Schedule delayed child checks to rescue stuck IGAccelDevice children.
 			v45ScheduleDelayedCheck(that, 3000);
 			v45ScheduleDelayedCheck(that, 10000);
@@ -6085,6 +6018,18 @@ static bool evaluateTrackedEngineBootstrap(NGTglTrackedEngine engine, const char
 		}
 		state->smokePassed = true;
 		return true;
+	}
+
+	// V90: On real TGL with scheduler 5, initRingControl runs before initRingRegisters,
+	// so ring registers are still 0 when this smoke test first runs. Don't quarantine
+	// yet — defer so initRingRegisters can execute and program the ring registers.
+	// Subsequent evaluations at later stages (updateRingTail, submitToRing, etc.) will
+	// re-check and quarantine only if the registers are still 0 after full init.
+	if (NGreen::callback->runningOnRealTGL() && engine == NGTglTrackedEngine::RCS) {
+		SYSLOG("ngreen", "[NGSEQ] eng=%s event=smoke-defer stage=%s contextSeen=%d ringReady=%d controlReady=%d start=0x%x ctl=0x%x head=0x%x tail=0x%x lastTail=0x%x exec=0x%x ctxptr=0x%x",
+		       trackedEngineName(engine), stage ? stage : "<null>", state->contextSeen, state->ringReady, state->controlReady,
+		       ringStart, ringCtl, ringHead, ringTail, state->lastTail, execListStatus, contextStatusPtr);
+		return false;
 	}
 
 	state->quarantined = true;
